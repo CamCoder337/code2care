@@ -105,7 +105,9 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
       console.log("Envoi vers backend:", requestBody)
 
       // Envoyer la requête au backend
-      const response = await fetch("http://localhost:8000/chat-groq/", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+      const response = await fetch(`${API_URL}/chat-groq/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
