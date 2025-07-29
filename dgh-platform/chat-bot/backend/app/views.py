@@ -5,7 +5,7 @@ from rest_framework import status
 from .serializers import ChatRequestSerializer
 from .models import Conversation, ChatMessage
 from .services.rag_groq import ask_question_with_history, get_qdrant_status
-from .utils import qdrant, embed_model, openai_client, get_qdrant_info
+from .utils import qdrant, embed_model, get_qdrant_info
 
 
 class ChatAPIView(APIView):
