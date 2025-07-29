@@ -1,12 +1,13 @@
 # api-gateway/apps/gateway/views.py
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
 from django.core.cache import cache
 import httpx
 import asyncio
 from datetime import datetime
+from .swagger_schemas import departments_list_decorator
 
 
 @api_view(['GET'])
@@ -85,3 +86,57 @@ async def check_all_services():
                 }
 
     return services
+
+
+@departments_list_decorator
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def list_departments(request):
+    """
+    Proxy endpoint pour récupérer la liste des départements depuis le feedback-service
+    """
+    try:
+        feedback_service_url = settings.MICROSERVICES.get('FEEDBACK_SERVICE')
+        if not feedback_service_url:
+            return Response(
+                {'error': 'Feedback service non configuré'},
+                status=503
+            )
+        
+        # Construire l'URL avec les paramètres de recherche
+        url = f"{feedback_service_url}/api/v1/departments/"
+        params = {}
+        
+        # Ajouter le paramètre de recherche s'il existe
+        search = request.GET.get('search')
+        if search:
+            params['search'] = search
+        
+        # Appel au service de feedback
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        response = loop.run_until_complete(
+            call_feedback_service(url, params)
+        )
+        
+        if response.status_code == 200:
+            return Response(response.json(), status=200)
+        else:
+            return Response(
+                {'error': 'Erreur lors de la récupération des départements'},
+                status=response.status_code
+            )
+            
+    except Exception as e:
+        return Response(
+            {'error': 'Service temporairement indisponible'},
+            status=503
+        )
+
+
+async def call_feedback_service(url, params=None):
+    """Helper pour appeler le feedback service"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url, params=params)
+        return response

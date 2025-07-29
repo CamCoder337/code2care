@@ -331,3 +331,123 @@ test_feedback_decorator = swagger_auto_schema(
     },
     tags=['Feedback Patient - Test']
 )
+
+# Schéma pour les départements
+department_schema = {
+    "type": "object",
+    "properties": {
+        "department_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID unique du département",
+            "example": "87654321-4321-4321-4321-cba987654321"
+        },
+        "name": {
+            "type": "string",
+            "description": "Nom du département",
+            "example": "Cardiologie"
+        },
+        "description": {
+            "type": "string",
+            "description": "Description du département",
+            "example": "Service de cardiologie et maladies cardiovasculaires"
+        },
+        "is_active": {
+            "type": "boolean",
+            "description": "Indique si le département est actif",
+            "example": True
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date de création",
+            "example": "2025-07-23T10:30:00Z"
+        },
+        "updated_at": {
+            "type": "string",
+            "format": "date-time", 
+            "description": "Date de dernière modification",
+            "example": "2025-07-23T10:30:00Z"
+        }
+    }
+}
+
+departments_list_decorator = swagger_auto_schema(
+    methods=['GET'],
+    operation_id="list_departments",
+    operation_summary="Lister les départements",
+    operation_description="""
+    Récupère la liste de tous les départements actifs de l'hôpital.
+    
+    **Utilisation :**
+    - Pour afficher les départements disponibles lors de la création d'un feedback
+    - Pour permettre aux patients de sélectionner le bon département
+    - Seuls les départements actifs sont retournés
+    
+    **Filtres disponibles :**
+    - Recherche par nom ou description avec le paramètre `search`
+    """,
+    manual_parameters=[
+        openapi.Parameter(
+            'search',
+            openapi.IN_QUERY,
+            description="Rechercher dans le nom et la description des départements",
+            type=openapi.TYPE_STRING,
+            required=False,
+            example="cardio"
+        )
+    ],
+    responses={
+        200: openapi.Response(
+            description='Liste des départements',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(
+                        type=openapi.TYPE_INTEGER,
+                        description="Nombre total de départements"
+                    ),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'department_id': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_UUID,
+                                    description="ID unique du département"
+                                ),
+                                'name': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description="Nom du département",
+                                    example="Cardiologie"
+                                ),
+                                'description': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description="Description du département",
+                                    example="Service de cardiologie et maladies cardiovasculaires"
+                                ),
+                                'is_active': openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    description="Statut actif du département"
+                                ),
+                                'created_at': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_DATETIME,
+                                    description="Date de création"
+                                ),
+                                'updated_at': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_DATETIME,
+                                    description="Date de dernière modification"
+                                )
+                            }
+                        )
+                    )
+                }
+            )
+        ),
+        503: openapi.Response(description='Service temporairement indisponible')
+    },
+    tags=['Départements']
+)
