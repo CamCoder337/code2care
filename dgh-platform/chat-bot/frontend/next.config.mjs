@@ -38,9 +38,9 @@ const nextConfig = {
     } : false,
   },
 
-  // Optimisations du bundle
+  // Optimisations du bundle - REMOVED optimizeCss to fix critters error
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // REMOVED - this was causing the critters error
     scrollRestoration: true,
     optimizePackageImports: ['lucide-react', 'react-markdown'],
   },
@@ -95,10 +95,11 @@ const nextConfig = {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
 
-  // Configuration du serveur en développement
+  // FIXED: Updated devIndicators configuration
   devIndicators: {
-    buildActivity: true,
-    buildActivityPosition: 'bottom-right',
+    // buildActivity: true, // REMOVED - deprecated
+    // buildActivityPosition: 'bottom-right', // REMOVED - deprecated
+    position: 'bottom-right', // UPDATED - use new position property
   },
 
   // Configuration pour la production
@@ -163,15 +164,15 @@ const nextConfig = {
   generateEtags: true,
   compress: true,
 
-  // Configuration Turbo (si disponible)
-  turbo: {
-    rules: {
-      '*.svg': {
-        loaders: ['@svgr/webpack'],
-        as: '*.js',
-      },
-    },
-  },
+  // REMOVED: turbo configuration - this was causing the "Unrecognized key" warning
+  // turbo: {
+  //   rules: {
+  //     '*.svg': {
+  //       loaders: ['@svgr/webpack'],
+  //       as: '*.js',
+  //     },
+  //   },
+  // },
 }
 
 export default nextConfig
