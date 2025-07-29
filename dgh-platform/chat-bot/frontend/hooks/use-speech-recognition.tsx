@@ -2,70 +2,6 @@
 
 import { useState, useEffect, useRef } from "react"
 
-// Complete type declarations for Web Speech API
-interface SpeechRecognitionAlternative {
-  readonly transcript: string
-  readonly confidence: number
-}
-
-interface SpeechRecognitionResult {
-  readonly isFinal: boolean
-  readonly [index: number]: SpeechRecognitionAlternative
-  readonly length: number
-}
-
-interface SpeechRecognitionResultList {
-  readonly [index: number]: SpeechRecognitionResult
-  readonly length: number
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly resultIndex: number
-  readonly results: SpeechRecognitionResultList
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string
-  readonly message: string
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean
-  grammars: any
-  interimResults: boolean
-  lang: string
-  maxAlternatives: number
-  serviceURI: string
-
-  start(): void
-  stop(): void
-  abort(): void
-
-  onaudioend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onaudiostart: ((this: SpeechRecognition, ev: Event) => any) | null
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null
-  onnomatch: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null
-  onsoundend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onsoundstart: ((this: SpeechRecognition, ev: Event) => any) | null
-  onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onspeechstart: ((this: SpeechRecognition, ev: Event) => any) | null
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null
-}
-
-declare var SpeechRecognition: {
-  prototype: SpeechRecognition
-  new(): SpeechRecognition
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition
-    webkitSpeechRecognition: typeof SpeechRecognition
-  }
-}
-
 interface SpeechRecognitionHook {
   isListening: boolean
   transcript: string
@@ -79,11 +15,11 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState("")
   const [isSupported, setIsSupported] = useState(false)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition
+      const SpeechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       if (SpeechRecognitionConstructor) {
         setIsSupported(true)
         recognitionRef.current = new SpeechRecognitionConstructor()
@@ -91,7 +27,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         recognitionRef.current.interimResults = true
         recognitionRef.current.lang = "fr-FR"
 
-        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        recognitionRef.current.onresult = (event: any) => {
           let finalTranscript = ""
           for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
@@ -107,7 +43,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           setIsListening(false)
         }
 
-        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error)
           setIsListening(false)
         }
