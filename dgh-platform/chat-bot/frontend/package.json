@@ -4,15 +4,21 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
+    "build:production": "NODE_ENV=production next build",
     "dev": "next dev",
+    "dev:turbo": "next dev --turbo",
     "lint": "next lint",
-    "start": "next start",
     "lint:fix": "next lint --fix",
-    "type-check": "tsc --noEmit",
-    "build-analyze": "ANALYZE=true next build",
-    "preview": "next build && next start",
-    "clean": "rm -rf .next out dist",
-    "postinstall": "npm run type-check"
+    "start": "next start",
+    "type-check": "tsc --noEmit --incremental false",
+    "type-check:watch": "tsc --noEmit --watch",
+    "preview": "npm run build && npm run start",
+    "clean": "rm -rf .next out dist .turbo",
+    "clean:all": "rm -rf .next out dist .turbo node_modules package-lock.json",
+    "postinstall": "npm run type-check",
+    "check-updates": "npx npm-check-updates",
+    "security-audit": "npm audit --audit-level moderate"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -86,12 +92,17 @@
     "production": [
       ">0.2%",
       "not dead",
-      "not op_mini all"
+      "not op_mini all",
+      "not IE 11"
     ],
     "development": [
       "last 1 chrome version",
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "npm": ">=9.0.0"
   }
 }

@@ -43,7 +43,7 @@ interface Message {
   synced?: boolean
 }
 
-export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
+export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.Element {
   const {
     currentConversation,
     addMessageToCurrentConversation,
@@ -297,17 +297,17 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit(e as any)
+      handleSubmit(e as React.FormEvent)
     }
   }, [handleSubmit])
 
-  const getFileIcon = useCallback((type: string) => {
+  const getFileIcon = useCallback((type: string): React.JSX.Element => {
     if (type.startsWith("image/")) return <ImageIcon className="h-4 w-4" />
     if (type.includes("text") || type.includes("document")) return <FileText className="h-4 w-4" />
     return <File className="h-4 w-4" />
   }, [])
 
-  const formatFileSize = useCallback((bytes: number) => {
+  const formatFileSize = useCallback((bytes: number): string => {
     if (bytes === 0) return "0 Bytes"
     const k = 1024
     const sizes = ["Bytes", "KB", "MB", "GB"]
@@ -315,13 +315,13 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }, [])
 
-  const getSyncStatusIcon = useCallback((message: Message) => {
+  const getSyncStatusIcon = useCallback((message: Message): React.JSX.Element => {
     if (message.synced) {
-      return <CheckCircle className="h-3 w-3 text-green-500" title="Synchronisé" />
+      return <CheckCircle className="h-3 w-3 text-green-500" />
     } else if (isLoading || isSyncing) {
-      return <Clock className="h-3 w-3 text-yellow-500 animate-pulse" title="Synchronisation en cours" />
+      return <Clock className="h-3 w-3 text-yellow-500 animate-pulse" />
     } else {
-      return <AlertCircle className="h-3 w-3 text-yellow-500" title="En attente de synchronisation" />
+      return <AlertCircle className="h-3 w-3 text-yellow-500" />
     }
   }, [isLoading, isSyncing])
 
@@ -329,7 +329,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
   const conversationFiles = currentConversation ? getFilesByConversation(currentConversation.id) : []
 
   // Composant optimisé pour les messages
-  const MessageComponent = React.memo(({ message }: { message: Message }) => (
+  const MessageComponent = React.memo(({ message }: { message: Message }): React.JSX.Element => (
     <div
       className={`flex gap-4 ${
         message.role === "user" ? "justify-end" : "justify-start"
@@ -393,17 +393,17 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
             {/* Indicateurs de statut */}
             <div className="flex items-center gap-2">
               {isSyncing && (
-                <RefreshCw className="h-4 w-4 text-teal-500 animate-spin" title="Synchronisation en cours" />
+                <RefreshCw className="h-4 w-4 text-teal-500 animate-spin" />
               )}
 
               {currentConversation?.synced ? (
-                <CheckCircle className="h-4 w-4 text-green-500" title="Conversation synchronisée" />
+                <CheckCircle className="h-4 w-4 text-green-500" />
               ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-500" title="Synchronisation en attente" />
+                <AlertCircle className="h-4 w-4 text-yellow-500" />
               )}
 
               {lastSyncError && (
-                <AlertCircle className="h-4 w-4 text-red-500" title={`Erreur: ${lastSyncError}`} />
+                <AlertCircle className="h-4 w-4 text-red-500" />
               )}
             </div>
           </div>

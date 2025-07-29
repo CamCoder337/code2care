@@ -25,21 +25,19 @@ const LoginForm = dynamic(() => import("@/components/login-form").then(mod => ({
   ssr: false
 })
 
-interface ChatAppProps {}
-
-function ChatApp(): JSX.Element {
+function ChatApp(): React.JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false)
   const [showLogin, setShowLogin] = useState<boolean>(false)
 
-  const handleSidebarToggle = () => {
+  const handleSidebarToggle = (): void => {
     setSidebarOpen(prev => !prev)
   }
 
-  const handleShowLogin = () => {
+  const handleShowLogin = (): void => {
     setShowLogin(true)
   }
 
-  const handleCloseLogin = () => {
+  const handleCloseLogin = (): void => {
     setShowLogin(false)
   }
 
@@ -68,7 +66,7 @@ function ChatApp(): JSX.Element {
   )
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.JSX.Element {
   return (
     <ErrorBoundary>
       <ThemeProvider>
