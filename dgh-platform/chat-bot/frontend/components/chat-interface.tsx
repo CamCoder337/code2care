@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useConversations } from "@/lib/conversation-context"
 import { useFiles } from "@/lib/files-context"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
+import { getApiUrl, fetchWithTimeout } from '@/lib/api-config'
 import {
   Send,
   Bot,
@@ -155,31 +156,13 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
 
       console.log("Envoi vers backend:", requestBody)
 
-      // Configuration de la requête avec timeout et retry
-      const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 30000) => {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-        try {
-          const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-          })
-          clearTimeout(timeoutId)
-          return response
-        } catch (error) {
-          clearTimeout(timeoutId)
-          throw error
-        }
-      }
+      // ✅ Utiliser l'URL de production/développement automatiquement
+      const apiUrl = getApiUrl('/api/chat-groq/')
+      console.log("URL API utilisée:", apiUrl)
 
       // Envoyer la requête au backend avec gestion d'erreur améliorée
-      const response = await fetchWithTimeout("http://localhost:8000/api/chat-groq/", {
+      const response = await fetchWithTimeout(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
         body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       })

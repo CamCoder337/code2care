@@ -86,7 +86,9 @@ WSGI_APPLICATION = 'chatbot.wsgi.application'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://172.20.10.4:3000",  # Ajoute cette ligne !
+    "http://172.20.10.4:3000",
+    "https://high5-code2care-chatbot-claude-djiojps-projects.vercel.app",
+
 ]
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
