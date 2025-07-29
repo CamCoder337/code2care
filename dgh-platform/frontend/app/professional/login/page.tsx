@@ -1,19 +1,26 @@
+// Fichier : app/professional/login/page.tsx
+
 "use client"
 
-import { Login } from "@/components/login"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { Login } from "@/components/login"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function LoginPage() {
     const router = useRouter()
+    const { isAuthenticated, isLoading } = useAuth()
 
-    const handleLogin = (userData: any) => {
-        console.log("User logged in:", userData)
+    // Ce hook est la clé : il surveille l'état d'authentification.
+    // Dès que `isAuthenticated` devient `true`, il redirige.
+    useEffect(() => {
+        // On ne redirige que si l'authentification est réussie et que le chargement est terminé.
+        if (!isLoading && isAuthenticated) {
+            router.push("/professional/dashboard")
+        }
+    }, [isAuthenticated, isLoading, router])
 
-        // Ici, tu peux aussi stocker l'utilisateur dans un contexte global ou localStorage si besoin
-
-        // Rediriger vers le tableau de bord
-        router.push("/professional/dashboard")
-    }
-
-    return <Login onLogin={handleLogin} />
+    // Le composant Login n'a plus besoin de la prop `onLogin`.
+    // La page gère elle-même la redirection de manière réactive.
+    return <Login />
 }

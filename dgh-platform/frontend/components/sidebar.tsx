@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { useTheme } from "next-themes"
 import Image from "next/image"
+import Link from "next/link" // Utilisation de Link pour une navigation sémantique
+import { usePathname, useRouter } from "next/navigation" // Ajout de usePathname
 import {
   LayoutDashboard,
   Users,
@@ -21,11 +23,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useRouter } from "next/navigation"
+
+// Interface améliorée pour inclure le chemin de navigation (href)
 interface MenuItem {
   id: string
   label: string
   icon: React.ComponentType<{ className?: string }>
+  href: string
 }
 
 interface UserData {
@@ -36,70 +40,44 @@ interface UserData {
   avatarUrl?: string
 }
 
+// Props simplifiées car le composant gère maintenant sa propre logique d'état actif
 interface SidebarProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
   onLogout: () => void
   currentUser: UserData
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
 }
 
-// const MENU_ITEMS: MenuItem[] = [
-//   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-//   { id: "patients", label: "Patients", icon: Users },
-//   { id: "appointments", label: "Appointments", icon: Calendar },
-//   { id: "prescriptions", label: "Prescriptions", icon: FileText },
-//   { id: "feedback", label: "Patient Feedback", icon: MessageSquare },
-// ]
+// 1. Les liens sont maintenant la source de vérité pour la navigation.
+// Les 'href' correspondent exactement à la structure de vos dossiers.
 const MENU_ITEMS: MenuItem[] = [
-  { id: "", label: "Dashboard", icon: LayoutDashboard },
-  { id: "patient", label: "Patients", icon: Users },
-  { id: "appointment", label: "Appointments", icon: Calendar },
-  { id: "prescription", label: "Prescriptions", icon: FileText },
-
-  { id: "feedback", label: "PatientFeedback", icon: MessageSquare },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/professional/dashboard" },
+  { id: "patients", label: "Patients", icon: Users, href: "/professional/patients" },
+  { id: "appointments", label: "Appointments", icon: Calendar, href: "/professional/appointments" },
+  { id: "prescriptions", label: "Prescriptions", icon: FileText, href: "/professional/prescriptions" },
+  { id: "patientfeedback", label: "Patient Feedback", icon: MessageSquare, href: "/professional/patientfeedback" },
 ]
 
-
-export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collapsed, onCollapsedChange }: SidebarProps) {
+export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }: SidebarProps) {
   const { theme, setTheme } = useTheme()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const router = useRouter()
+  // 2. Le hook usePathname permet au composant de savoir quelle page est active.
+  const pathname = usePathname()
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark")
   const toggleCollapse = () => onCollapsedChange(!collapsed)
   const closeMobileMenu = () => setIsMobileMenuOpen(false)
 
-  // const handleTabChange = (tab: string) => {
-  //   onTabChange(tab)
-  //   closeMobileMenu()
-  // }
-
-  // const handleTabChange = (tab: string) => {
-  //   closeMobileMenu()
-  //   router.push(`/${tab}`)
-  // }
-  const handleTabChange = (tab: string) => {
-    closeMobileMenu()
-    router.push(`/professional/dashboard/${tab}`)
-  }
-
-
-
-  const router = useRouter()
-
   const handleLogout = () => {
     closeMobileMenu()
-    onLogout()           // logout côté Supabase ou autre
-    router.push("/professional/login")  // redirection
+    onLogout()
+    router.push("/professional/login")
   }
 
-  const userInitial = currentUser?.firstName?.[0]?.toUpperCase() ||
-      currentUser?.lastName?.[0]?.toUpperCase() ||
-      "U"
-
-  const userName = `${currentUser?.firstName || ''} ${currentUser?.lastName || ''}`.trim() || 'Utilisateur'
-  const userDepartment = currentUser?.department || 'Département inconnu'
+  const userInitial = currentUser?.firstName?.[0]?.toUpperCase() || currentUser?.lastName?.[0]?.toUpperCase() || "U"
+  const userName = `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim() || "Utilisateur"
+  const userDepartment = currentUser?.department || "Département inconnu"
 
   return (
       <>
@@ -118,11 +96,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
 
         {/* Mobile Overlay */}
         {isMobileMenuOpen && (
-            <div
-                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-                onClick={closeMobileMenu}
-                aria-hidden="true"
-            />
+            <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={closeMobileMenu} aria-hidden="true" />
         )}
 
         {/* Sidebar */}
@@ -139,14 +113,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
           <header className="p-4 lg:p-6 border-b border-border flex-shrink-0 relative">
             <div className="flex justify-center">
               <div className="relative flex-shrink-0">
-                <Image
-                    src="/logo.png"
-                    alt="HIGH5 Logo"
-                    width={40}
-                    height={40}
-                    className="rounded-lg"
-                    priority
-                />
+                <Image src="/logo.png" alt="HIGH5 Logo" width={40} height={40} className="rounded-lg" priority />
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-secondary-500 rounded-full animate-pulse-glow" />
               </div>
             </div>
@@ -170,9 +137,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
             <div className="flex items-center gap-3">
               <Avatar className="w-10 h-10 lg:w-12 lg:h-12 ring-2 ring-primary-500 ring-offset-2 ring-offset-background flex-shrink-0">
                 <AvatarImage src={currentUser.avatarUrl} />
-                <AvatarFallback className="bg-primary-500 text-white text-sm lg:text-base">
-                  {userInitial}
-                </AvatarFallback>
+                <AvatarFallback className="bg-primary-500 text-white text-sm lg:text-base">{userInitial}</AvatarFallback>
               </Avatar>
 
               {!collapsed && (
@@ -195,31 +160,32 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
           {/* Navigation */}
           <nav className="flex-1 p-3 lg:p-4 overflow-y-auto min-h-0" aria-label="Main navigation">
             <ul className="space-y-2">
-              {MENU_ITEMS.map((item, index) => (
-                  <li key={item.id}>
-                    <Button
-                        variant={activeTab === item.id ? "default" : "ghost"}
-                        className={`w-full justify-start gap-3 h-10 lg:h-12 transition-all duration-200 animate-fade-in text-sm lg:text-base ${
-                            activeTab === item.id
-                                ? "bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg"
-                                : "hover:bg-accent hover:scale-105"
-                        }`}
-                        style={{ animationDelay: `${index * 0.1}s` }}
-                        onClick={() => handleTabChange(item.id)}
-                        aria-current={activeTab === item.id ? "page" : undefined}
-                    >
-                      <item.icon
-                          className={`w-4 h-4 lg:w-5 lg:h-5 flex-shrink-0 ${activeTab === item.id ? "text-white" : ""}`}
-                          aria-hidden="true"
-                      />
-                      {!collapsed && (
-                          <span className="animate-slide-in truncate">
-                      {item.label}
-                    </span>
-                      )}
-                    </Button>
-                  </li>
-              ))}
+              {MENU_ITEMS.map((item, index) => {
+                // 3. Détermination de l'état actif en comparant le chemin actuel avec le href de l'item.
+                const isActive = pathname === item.href
+                return (
+                    <li key={item.id}>
+                      {/* 4. Utilisation du composant Link pour une navigation correcte */}
+                      <Link
+                          href={item.href}
+                          onClick={closeMobileMenu}
+                          className={`flex items-center w-full justify-start gap-3 h-10 lg:h-12 transition-all duration-200 animate-fade-in text-sm lg:text-base rounded-md px-3 ${
+                              isActive
+                                  ? "bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg"
+                                  : "hover:bg-accent hover:scale-105"
+                          }`}
+                          style={{ animationDelay: `${index * 0.1}s` }}
+                          aria-current={isActive ? "page" : undefined}
+                      >
+                        <item.icon
+                            className={`w-4 h-4 lg:w-5 lg:h-5 flex-shrink-0 ${isActive ? "text-white" : ""}`}
+                            aria-hidden="true"
+                        />
+                        {!collapsed && <span className="animate-slide-in truncate">{item.label}</span>}
+                      </Link>
+                    </li>
+                )
+              })}
             </ul>
           </nav>
 
@@ -233,25 +199,25 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
                   className="flex-1 gap-2 text-xs lg:text-sm h-8 lg:h-10"
                   aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
               >
-                {theme === "dark" ? (
-                    <Sun className="w-3 h-3 lg:w-4 lg:h-4" />
-                ) : (
-                    <Moon className="w-3 h-3 lg:w-4 lg:h-4" />
-                )}
+                {theme === "dark" ? <Sun className="w-3 h-3 lg:w-4 lg:h-4" /> : <Moon className="w-3 h-3 lg:w-4 lg:h-4" />}
                 {(!collapsed || isMobileMenuOpen) && (theme === "dark" ? "Light" : "Dark")}
               </Button>
 
               {(!collapsed || isMobileMenuOpen) && (
-                  <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-2 bg-transparent text-xs lg:text-sm h-8 lg:h-10"
-                      onClick={() => handleTabChange("settings")}
-                      aria-label="Settings"
-                  >
+                  <Link href="/professional/settings" passHref>
+                    <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-2 bg-transparent text-xs lg:text-sm h-8 lg:h-10"
+                        aria-label="Settings"
+                    >
+                  <span>
                     <Settings className="w-3 h-3 lg:w-4 lg:h-4" />
                     Settings
-                  </Button>
+                  </span>
+                    </Button>
+                  </Link>
               )}
             </div>
 
@@ -275,11 +241,7 @@ export function Sidebar({ activeTab, onTabChange, onLogout, currentUser, collaps
               onClick={toggleCollapse}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? (
-                <ChevronRight className="w-3 h-3" />
-            ) : (
-                <ChevronLeft className="w-3 h-3" />
-            )}
+            {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
           </Button>
         </aside>
       </>
