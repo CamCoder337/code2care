@@ -2,6 +2,14 @@
 
 import { useState, useEffect, useRef } from "react"
 
+// Type declarations for Speech Recognition API
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition
+    webkitSpeechRecognition: typeof SpeechRecognition
+  }
+}
+
 interface SpeechRecognitionHook {
   isListening: boolean
   transcript: string

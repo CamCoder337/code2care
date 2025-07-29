@@ -132,18 +132,20 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
     abortControllerRef.current = new AbortController()
 
     try {
-      let conversationToUse = currentConversation
-
       // Si pas de conversation courante, en créer une
-      if (!conversationToUse) {
-        conversationToUse = createNewConversation()
+      if (!currentConversation) {
+        createNewConversation()
         // Attendre un petit délai pour que la conversation soit bien créée
         await new Promise(resolve => setTimeout(resolve, 50))
+
+        // Vérifier que la conversation a bien été créée
+        if (!currentConversation) {
+          throw new Error("Impossible de créer une nouvelle conversation")
+        }
       }
 
       // Ajouter le message utilisateur immédiatement au frontend pour UX fluide
       addMessageToCurrentConversation(message, "user")
-
       // Préparer les données pour le backend
       const backendConvId = getCurrentConversationBackendId()
       const requestBody = {
