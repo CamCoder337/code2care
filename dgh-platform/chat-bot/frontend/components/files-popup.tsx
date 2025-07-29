@@ -18,7 +18,7 @@ export function FilesPopup({ isOpen, onClose }: FilesPopupProps) {
     const uploadedFiles = event.target.files
     if (uploadedFiles) {
       for (const file of Array.from(uploadedFiles)) {
-        await addFile(file)
+        await addFile(file, conversationId)
       }
     }
   }
@@ -83,7 +83,7 @@ export function FilesPopup({ isOpen, onClose }: FilesPopupProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatFileSize(file.size)} • {file.uploadDate.toLocaleDateString()}
+                        {formatFileSize(file.size)} • {file.uploadedAt.toLocaleDateString()}
                       </p>
                     </div>
                   </div>
