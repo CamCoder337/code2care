@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useConversations } from "@/lib/conversation-context"
@@ -24,10 +23,24 @@ import {
   Clock
 } from "lucide-react"
 import Image from "next/image"
-import ReactMarkdown from 'react-markdown'
+import dynamic from "next/dynamic"
+
+// Lazy load ReactMarkdown pour réduire le bundle
+const ReactMarkdown = dynamic(() => import('react-markdown'), {
+  loading: () => <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-full rounded" />,
+  ssr: false
+})
 
 interface ChatInterfaceProps {
   sidebarOpen: boolean
+}
+
+interface Message {
+  id: string
+  content: string
+  role: "user" | "assistant"
+  timestamp: Date
+  synced?: boolean
 }
 
 export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
@@ -44,21 +57,38 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
   const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
     useSpeechRecognition()
 
-  const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [showFileUpload, setShowFileUpload] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [input, setInput] = useState<string>("")
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [showFileUpload, setShowFileUpload] = useState<boolean>(false)
+  const [isSyncing, setIsSyncing] = useState<boolean>(false)
   const [lastSyncError, setLastSyncError] = useState<string | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  // Memoized suggestions pour éviter les re-créations
+  const suggestions = useMemo(() => [
+    "Quelles sont les idées de petit-déjeuner sain ?",
+    "Comment puis-je améliorer la qualité de mon sommeil ?",
+    "Quels exercices sont bons pour les maux de dos ?",
+    "Parlez-moi des techniques de gestion du stress",
+    "Comment maintenir une alimentation équilibrée ?",
+    "Quels sont les bienfaits de la méditation ?",
+  ], [])
+
+  // Scroll optimisé avec requestAnimationFrame
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      })
+    }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [currentConversation?.messages])
+  }, [currentConversation?.messages, scrollToBottom])
 
   useEffect(() => {
     if (transcript) {
@@ -69,18 +99,37 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
   // Focus sur l'input quand la conversation change
   useEffect(() => {
     if (inputRef.current && !isLoading) {
-      inputRef.current.focus()
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
     }
   }, [currentConversation, isLoading])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Cleanup des requêtes en cours
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!input.trim() || isLoading || contextLoading) return
 
     const message = input.trim()
     setInput("")
     setIsLoading(true)
     setLastSyncError(null)
+
+    // Annuler la requête précédente si elle existe
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    abortControllerRef.current = new AbortController()
 
     try {
       let conversationToUse = currentConversation
@@ -104,20 +153,38 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
 
       console.log("Envoi vers backend:", requestBody)
 
-      // Envoyer la requête au backend
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+      // Configuration de la requête avec timeout et retry
+      const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 30000) => {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), timeout)
 
-      const response = await fetch(`${API_URL}/chat-groq/`, {
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+          })
+          clearTimeout(timeoutId)
+          return response
+        } catch (error) {
+          clearTimeout(timeoutId)
+          throw error
+        }
+      }
+
+      // Envoyer la requête au backend avec gestion d'erreur améliorée
+      const response = await fetchWithTimeout("http://localhost:8000/api/chat-groq/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: abortControllerRef.current.signal
       })
 
       if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`)
+        const errorText = await response.text().catch(() => "Erreur inconnue")
+        throw new Error(`Erreur HTTP: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
@@ -131,7 +198,6 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
         try {
           // Synchroniser avec les données backend complètes
           syncConversationWithBackend(data.messages, data.conversationId.toString())
-
           console.log("Synchronisation réussie avec", data.messages.length, "messages")
         } catch (syncError) {
           console.error("Erreur de synchronisation:", syncError)
@@ -156,36 +222,48 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
         resetTranscript()
       }
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Erreur lors de l'envoi du message:", error)
 
-      setLastSyncError(error instanceof Error ? error.message : "Erreur inconnue")
+      // Gestion spécifique des erreurs d'abort
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log("Requête annulée")
+        return
+      }
+
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue"
+      setLastSyncError(errorMessage)
 
       // Ajouter un message d'erreur dans le chat
-      const errorMessage = error instanceof Error
+      const displayError = error instanceof Error
         ? `Erreur de connexion: ${error.message}`
         : "Erreur de connexion à l'API. Veuillez réessayer."
 
-      addMessageToCurrentConversation(errorMessage, "assistant")
+      addMessageToCurrentConversation(displayError, "assistant")
 
     } finally {
       setIsLoading(false)
+      abortControllerRef.current = null
 
       // Re-focus sur l'input après envoi
+      requestAnimationFrame(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      })
+    }
+  }, [input, isLoading, contextLoading, currentConversation, createNewConversation, addMessageToCurrentConversation, getCurrentConversationBackendId, syncConversationWithBackend, transcript, resetTranscript])
+
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    setInput(suggestion)
+    requestAnimationFrame(() => {
       if (inputRef.current) {
         inputRef.current.focus()
       }
-    }
-  }
+    })
+  }, [])
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInput(suggestion)
-    if (inputRef.current) {
-      inputRef.current.focus()
-    }
-  }
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (files && files.length > 0 && currentConversation) {
       setIsLoading(true)
@@ -201,41 +279,43 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
       } finally {
         setIsLoading(false)
         setShowFileUpload(false)
+        // Reset de l'input file
+        event.target.value = ""
       }
     }
-  }
+  }, [currentConversation, addFile, addMessageToCurrentConversation])
 
-  const handleVoiceToggle = () => {
+  const handleVoiceToggle = useCallback(() => {
     if (isListening) {
       stopListening()
     } else {
       startListening()
     }
-  }
+  }, [isListening, startListening, stopListening])
 
   // Fonction pour gérer les touches du clavier
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmit(e as any)
     }
-  }
+  }, [handleSubmit])
 
-  const getFileIcon = (type: string) => {
+  const getFileIcon = useCallback((type: string) => {
     if (type.startsWith("image/")) return <ImageIcon className="h-4 w-4" />
     if (type.includes("text") || type.includes("document")) return <FileText className="h-4 w-4" />
     return <File className="h-4 w-4" />
-  }
+  }, [])
 
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = useCallback((bytes: number) => {
     if (bytes === 0) return "0 Bytes"
     const k = 1024
     const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
+  }, [])
 
-  const getSyncStatusIcon = (message: any) => {
+  const getSyncStatusIcon = useCallback((message: Message) => {
     if (message.synced) {
       return <CheckCircle className="h-3 w-3 text-green-500" title="Synchronisé" />
     } else if (isLoading || isSyncing) {
@@ -243,19 +323,53 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
     } else {
       return <AlertCircle className="h-3 w-3 text-yellow-500" title="En attente de synchronisation" />
     }
-  }
+  }, [isLoading, isSyncing])
 
   const messages = currentConversation?.messages || []
   const conversationFiles = currentConversation ? getFilesByConversation(currentConversation.id) : []
 
-  const suggestions = [
-    "Quelles sont les idées de petit-déjeuner sain ?",
-    "Comment puis-je améliorer la qualité de mon sommeil ?",
-    "Quels exercices sont bons pour les maux de dos ?",
-    "Parlez-moi des techniques de gestion du stress",
-    "Comment maintenir une alimentation équilibrée ?",
-    "Quels sont les bienfaits de la méditation ?",
-  ]
+  // Composant optimisé pour les messages
+  const MessageComponent = React.memo(({ message }: { message: Message }) => (
+    <div
+      className={`flex gap-4 ${
+        message.role === "user" ? "justify-end" : "justify-start"
+      } animate-in slide-in-from-bottom-2 duration-300`}
+    >
+      {message.role === "assistant" && (
+        <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+      )}
+      <div
+        className={`max-w-[70%] p-4 rounded-lg relative ${
+          message.role === "user"
+            ? "bg-gradient-to-r from-teal-500 to-emerald-500 text-white"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+        }`}
+      >
+        <ReactMarkdown>{message.content}</ReactMarkdown>
+        <div className="flex items-center justify-between mt-2">
+          <p
+            className={`text-xs ${
+              message.role === "user" ? "text-teal-100" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            {message.timestamp.toLocaleTimeString()}
+          </p>
+          <div className="ml-2">
+            {getSyncStatusIcon(message)}
+          </div>
+        </div>
+      </div>
+      {message.role === "user" && (
+        <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
+          <User className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+        </div>
+      )}
+    </div>
+  ))
+
+  MessageComponent.displayName = "MessageComponent"
 
   return (
     <div className={`flex flex-col h-screen transition-all duration-300 ${sidebarOpen ? "ml-80" : "ml-12"}`}>
@@ -263,7 +377,15 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
       {messages.length > 0 && (
         <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-center gap-3">
-            <Image src="/logo.png" alt="Logo" width={24} height={24} />
+            <Image
+              src="/logo.png"
+              alt="Logo"
+              width={24}
+              height={24}
+              priority
+              placeholder="blur"
+              blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyLDSBIjjlQD2g"
+            />
             <h2 className="text-lg font-semibold bg-gradient-to-r from-teal-500 to-emerald-500 bg-clip-text text-transparent">
               {currentConversation?.title || "Assistant"}
             </h2>
@@ -312,6 +434,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
                     width={150}
                     height={150}
                     className="animate-pulse"
+                    priority
                   />
                 </div>
               </div>
@@ -343,7 +466,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
                             <Paperclip className="h-4 w-4" />
                           </Button>
                           {showFileUpload && (
-                            <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-48">
+                            <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-48 z-10">
                               <input
                                 type="file"
                                 multiple
@@ -442,45 +565,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
 
             {/* Messages */}
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-4 ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                } animate-in slide-in-from-bottom-2 duration-300`}
-              >
-                {message.role === "assistant" && (
-                  <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-4 w-4 text-white" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[70%] p-4 rounded-lg relative ${
-                    message.role === "user"
-                      ? "bg-gradient-to-r from-teal-500 to-emerald-500 text-white"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  }`}
-                >
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                  <div className="flex items-center justify-between mt-2">
-                    <p
-                      className={`text-xs ${
-                        message.role === "user" ? "text-teal-100" : "text-gray-500 dark:text-gray-400"
-                      }`}
-                    >
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
-                    {/* Indicateur de synchronisation du message */}
-                    <div className="ml-2">
-                      {getSyncStatusIcon(message)}
-                    </div>
-                  </div>
-                </div>
-                {message.role === "user" && (
-                  <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <User className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-                  </div>
-                )}
-              </div>
+              <MessageComponent key={message.id} message={message} />
             ))}
 
             {/* Indicateur de chargement */}
@@ -537,7 +622,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps) {
                       <Paperclip className="h-4 w-4" />
                     </Button>
                     {showFileUpload && (
-                      <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-48">
+                      <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-48 z-10">
                         <input
                           type="file"
                           multiple
