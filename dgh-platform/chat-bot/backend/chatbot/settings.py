@@ -34,10 +34,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-33to=5(q$d6gsy7=tv_qay*uxq9^uax%rjrvqd98^1r$qyd=y_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = ['chatbot.onrender.com', 'localhost', '127.0.0.1']
-
+ALLOWED_HOSTS = [
+    'high5-code2care.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '.onrender.com',
+]
 
 # Application definition
 

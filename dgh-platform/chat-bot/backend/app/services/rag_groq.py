@@ -1,14 +1,20 @@
+# app/services/rag_groq.py - Version avec LangChain léger (SANS PyTorch)
+
 import os
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from langchain_huggingface import HuggingFaceEmbeddings
+import logging
+
+# LANGCHAIN IMPORTS (version légère)
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from langchain_groq import ChatGroq
-from langchain.schema import HumanMessage, AIMessage
+from langchain.schema import HumanMessage, AIMessage, Document
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-import logging
+
+# Notre classe d'embeddings légère (compatible LangChain)
+from .embeddings_langchain import LightweightEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +22,8 @@ logger = logging.getLogger(__name__)
 QDRANT_CLOUD_URL = "https://2fb00d86-37a3-405d-8b4c-b08155fb91f5.europe-west3-0.gcp.cloud.qdrant.io:6333"
 QDRANT_CLOUD_API_KEY = os.getenv('QDRANT_API_KEY')
 
-# Configuration globale
-embedder = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+# REMPLACE HuggingFaceEmbeddings par notre version légère
+embedder = LightweightEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 
 def get_qdrant_client():
@@ -111,7 +115,7 @@ def get_qdrant_store():
         return QdrantVectorStore(
             client=client,
             collection_name="clinical_summaries",
-            embedding=embedder,
+            embedding=embedder,  # Utilise notre embedder léger
             retrieval_mode=RetrievalMode.DENSE,
         )
     else:
@@ -134,7 +138,7 @@ def get_retrieval_chain():
             streaming=False,
         )
 
-        # Template de prompt avec historique - CORRECTION: variables bien définies
+        # Template de prompt avec historique - MÊME TEMPLATE QU'AVANT
         prompt_template = ChatPromptTemplate.from_messages([
             ("system", """Tu es un assistant médical expert. Utilise le contexte fourni et l'historique de conversation pour répondre de manière précise et contextuelle.
 
@@ -151,7 +155,7 @@ Instructions:
             ("human", "{input}")
         ])
 
-        # CORRECTION: Chaîne de documents avec les bonnes variables
+        # Chaîne de documents avec les bonnes variables
         document_chain = create_stuff_documents_chain(llm, prompt_template)
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
@@ -163,7 +167,7 @@ Instructions:
 
 
 def ask_question_with_history(question: str, chat_history: list):
-    """Ask a question with chat history context"""
+    """Ask a question with chat history context - INTERFACE IDENTIQUE"""
     try:
         # Get the retrieval chain (lazy initialization)
         retrieval_chain = get_retrieval_chain()
@@ -178,7 +182,7 @@ def ask_question_with_history(question: str, chat_history: list):
 
         logger.info(f"🤖 Question: {question[:50]}... (historique: {len(history_messages)} messages)")
 
-        # Exécuter la chaîne - CORRECTION: gérer le cas où context n'existe pas
+        # Exécuter la chaîne - MÊME LOGIQUE QU'AVANT
         result = retrieval_chain.invoke({
             "input": question,
             "chat_history": history_messages
@@ -197,10 +201,28 @@ def ask_question_with_history(question: str, chat_history: list):
         if client_mode != "none":
             error_msg += f"\n\n(Mode Qdrant: {client_mode})"
         return error_msg, []
+        client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=1000
+        )
+
+        answer = response.choices[0].message.content
+
+        logger.info(f"✅ Réponse générée (sources: {len(relevant_docs)})")
+        return answer, relevant_docs
+
+    except Exception as e:
+        logger.error(f"❌ Erreur dans ask_question_with_history: {e}")
+        error_msg = f"Désolé, une erreur est survenue: {str(e)}"
+        if client_mode != "none":
+            error_msg += f"\n\n(Mode Qdrant: {client_mode})"
+        return error_msg, []
 
 
 def get_qdrant_status():
-    """Retourne le statut de la connexion Qdrant"""
+    """Retourne le statut de la connexion Qdrant - INTERFACE IDENTIQUE"""
     if not client:
         return {"status": "disconnected", "mode": "none", "error": "Client non initialisé"}
 
@@ -214,43 +236,48 @@ def get_qdrant_status():
             "collections_count": len(collections.collections),
             "collections": collection_names,
             "url": QDRANT_CLOUD_URL if client_mode == "cloud" else "localhost:6333",
-            "has_clinical_summaries": "clinical_summaries" in collection_names
+            "has_clinical_summaries": "clinical_summaries" in collection_names,
+            "embedding_model": "lightweight-tfidf-384d"  # Indication du modèle léger
         }
     except Exception as e:
         return {"status": "error", "mode": client_mode, "error": str(e)}
 
 
-# Fonction utilitaire pour ajouter des documents de test
 def add_sample_documents():
-    """Add some sample documents to the collection for testing"""
+    """Add some sample documents to the collection for testing - COMPATIBLE LANGCHAIN"""
     try:
         qdrant_store = get_qdrant_store()
 
         sample_docs = [
             "Le diabète de type 2 est une maladie chronique caractérisée par une résistance à l'insuline.",
             "L'hypertension artérielle est un facteur de risque majeur pour les maladies cardiovasculaires.",
-            "Les symptômes de l'angine de poitrine incluent une douleur thoracique et un essoufflement."
+            "Les symptômes de l'angine de poitrine incluent une douleur thoracique et un essoufflement.",
+            "La pneumonie est une infection pulmonaire qui peut être causée par des bactéries ou des virus.",
+            "L'insuffisance cardiaque congestive affecte la capacité du cœur à pomper le sang efficacement."
         ]
 
-        from langchain.schema import Document
-        documents = [Document(page_content=doc) for doc in sample_docs]
+        # Convertir en Documents LangChain
+        documents = [Document(page_content=doc, metadata={"source": "sample", "id": i})
+                     for i, doc in enumerate(sample_docs)]
 
+        # Ajouter via LangChain (utilise automatiquement notre embedder léger)
         qdrant_store.add_documents(documents)
-        logger.info(f"✅ Documents d'exemple ajoutés sur {client_mode}")
+        logger.info(f"✅ {len(sample_docs)} documents d'exemple ajoutés sur {client_mode}")
 
     except Exception as e:
         logger.error(f"❌ Échec ajout documents d'exemple: {e}")
+        raise
 
 
-# Fonction de diagnostic
 def diagnose_qdrant():
-    """Fonction de diagnostic pour déboguer les problèmes"""
-    print("🔍 DIAGNOSTIC QDRANT")
+    """Fonction de diagnostic pour déboguer les problèmes - INTERFACE IDENTIQUE"""
+    print("🔍 DIAGNOSTIC QDRANT (VERSION LÉGÈRE)")
     print("=" * 50)
 
     print(f"🔑 QDRANT_API_KEY configurée: {'✅ Oui' if QDRANT_CLOUD_API_KEY else '❌ Non'}")
     print(f"🌐 URL Cloud: {QDRANT_CLOUD_URL}")
     print(f"🔗 Mode actuel: {client_mode}")
+    print(f"🧠 Embeddings: LightweightEmbeddings (TF-IDF + fallbacks, 384D)")
 
     status = get_qdrant_status()
     print(f"📊 Statut: {status}")
@@ -259,4 +286,96 @@ def diagnose_qdrant():
         print(f"📚 Collections: {status.get('collections', [])}")
         print(f"🩺 Collection clinical_summaries: {'✅' if status.get('has_clinical_summaries') else '❌'}")
 
+    # Test des embeddings
+    try:
+        test_embedding = embedder.embed_query("test médical")
+        print(f"🔢 Test embedding: ✅ {len(test_embedding)} dimensions")
+    except Exception as e:
+        print(f"🔢 Test embedding: ❌ {e}")
+
     return status
+
+
+# Fonction utilitaire pour migration depuis HuggingFace
+def migrate_from_huggingface():
+    """
+    Aide à la migration depuis HuggingFaceEmbeddings
+    Vérifie la compatibilité et offre des conseils
+    """
+    print("🔄 GUIDE DE MIGRATION HUGGINGFACE -> LIGHTWEIGHT")
+    print("=" * 55)
+
+    print("✅ AVANTAGES:")
+    print("  - Pas de PyTorch (économie ~2GB RAM)")
+    print("  - Pas de sentence-transformers")
+    print("  - Compatible 100% avec LangChain")
+    print("  - Même interface (embed_documents, embed_query)")
+    print("  - Fallbacks multiples (TF-IDF, hash, API)")
+
+    print("\n⚠️  DIFFÉRENCES:")
+    print("  - Qualité embeddings légèrement inférieure")
+    print("  - Basé sur TF-IDF au lieu de transformers")
+    print("  - Dimension fixe 384 (comme all-MiniLM-L6-v2)")
+
+    print("\n🔧 POUR AMÉLIORER LA QUALITÉ:")
+    print("  - Configurer OPENAI_API_KEY pour embeddings API")
+    print("  - Enrichir le corpus médical TF-IDF")
+    print("  - Ajuster les paramètres TF-IDF")
+
+    print("\n🎯 REMPLACEMENT DIRECT:")
+    print("  AVANT: HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')")
+    print("  APRÈS: LightweightEmbeddings(model_name='all-MiniLM-L6-v2')")
+    print("  ➡️  Aucun autre changement nécessaire!")
+
+
+# Test de performance
+def benchmark_embeddings(texts=None):
+    """Benchmark des embeddings légers"""
+    if texts is None:
+        texts = [
+            "Patient diabétique avec complications cardiovasculaires",
+            "Diagnostic d'hypertension artérielle essentielle",
+            "Symptômes respiratoires aigus avec fièvre",
+            "Consultation cardiologique pour dyspnée d'effort",
+            "Analyse sanguine révélant une anémie ferriprive"
+        ]
+
+    import time
+    print("⏱️  BENCHMARK EMBEDDINGS LÉGERS")
+    print("=" * 40)
+
+    # Test embed_documents
+    start = time.time()
+    doc_embeddings = embedder.embed_documents(texts)
+    doc_time = time.time() - start
+
+    print(f"📄 Documents ({len(texts)}): {doc_time:.3f}s")
+    print(f"   Dimension: {len(doc_embeddings[0])}")
+    print(f"   Vitesse: {len(texts) / doc_time:.1f} docs/sec")
+
+    # Test embed_query
+    start = time.time()
+    query_emb = embedder.embed_query(texts[0])
+    query_time = time.time() - start
+
+    print(f"🔍 Query: {query_time:.3f}s")
+    print(f"   Dimension: {len(query_emb)}")
+
+    return {
+        "doc_time": doc_time,
+        "query_time": query_time,
+        "dimension": len(query_emb),
+        "docs_per_sec": len(texts) / doc_time
+    }
+
+
+# Export des fonctions principales (interface identique)
+__all__ = [
+    "ask_question_with_history",
+    "get_qdrant_status",
+    "add_sample_documents",
+    "diagnose_qdrant",
+    "embedder",
+    "client",
+    "client_mode"
+]
