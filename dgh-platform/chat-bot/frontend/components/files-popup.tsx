@@ -4,6 +4,7 @@ import type React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useFiles } from "@/lib/files-context"
+import { useConversations } from "@/lib/conversation-context"
 import { X, Upload, File, ImageIcon, FileText, Trash2, Download } from "lucide-react"
 
 interface FilesPopupProps {
@@ -13,6 +14,10 @@ interface FilesPopupProps {
 
 export function FilesPopup({ isOpen, onClose }: FilesPopupProps) {
   const { files, addFile, deleteFile, downloadFile } = useFiles()
+  const { currentConversation } = useConversations()
+
+  // Get the current conversation ID or use a default
+  const conversationId = currentConversation?.id || 'default'
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = event.target.files
@@ -83,7 +88,7 @@ export function FilesPopup({ isOpen, onClose }: FilesPopupProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatFileSize(file.size)} • {file.uploadedAt.toLocaleDateString()}
+                        {formatFileSize(file.size)} • {new Date(file.uploadedAt).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
