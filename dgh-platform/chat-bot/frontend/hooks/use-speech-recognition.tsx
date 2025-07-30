@@ -19,7 +19,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       if (SpeechRecognition) {
         setIsSupported(true)
         recognitionRef.current = new SpeechRecognition()

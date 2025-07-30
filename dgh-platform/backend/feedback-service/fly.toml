@@ -1,0 +1,41 @@
+app = "feedback-service-dgh"
+primary_region = "cdg"  # Paris
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DJANGO_SETTINGS_MODULE = "config.settings.production"
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health/"
+    interval = "30s"
+    timeout = "20s"
+    grace_period = "60s"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 2048  # 2GB pour votre modèle IA
+
+[[mounts]]
+  source = "model_cache"
+  destination = "/tmp"
+  initial_size = "1gb"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
+
+[[statics]]
+  guest_path = "/app/staticfiles"
+  url_prefix = "/static/"

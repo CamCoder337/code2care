@@ -2,10 +2,16 @@
 This directory contains the 03 tracks produced without the knowledge of the CODE2CARE datathon organized by the Douala General Hospital
 
 
-# Patient Feedback and Reminder System (TRACK 1_HIGH5)
+# DGH Platform
+### [Patient Feedback and Reminder System (TRACK 1)](dgh-platform/backend/feedback-service)
+### [Patient Assistant LLM and support Chatbot (TRACK 2)](dgh-platform/backend)
+### [Blood Analysis and management system (TRACK 3)](dgh-platform/backend)
+
 
 ## Overview
 This project aims to capture and act on patient feedback while providing automated reminders for appointments and medications. It supports multiple languages (French, English, Duala, Bassa, Ewondo, etc.) and is designed to function even in low-bandwidth conditions (e.g., 2G networks). The system includes a feedback analysis engine, a multilingual patient interface, and a real-time hospital performance dashboard.
+
+![Architecture](docs/architecture.jpg)
 
 ---
 
@@ -33,3 +39,6 @@ This project aims to capture and act on patient feedback while providing automat
 - **Filters**: Allows filtering by time period, language, and department.
 - **Reporting**: Supports report exports.
 - **Authentication**: Role-based access control.
+
+
+![Tools](docs/patient_feedback_tools1.JPG)

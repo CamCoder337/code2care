@@ -108,7 +108,7 @@ LOGIN_URL = '/api/v1/auth/login/'
 
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -121,8 +121,8 @@ SIMPLE_JWT = {
 # Microservices URLs
 MICROSERVICES = {
     'FEEDBACK_SERVICE': config('FEEDBACK_SERVICE_URL', 'http://localhost:8001'),
-    'CHAT_SERVICE': config('CHAT_SERVICE_URL', 'http://localhost:8002'),
-    'ANALYTICS_SERVICE': config('ANALYTICS_SERVICE_URL', 'http://localhost:8003'),
+    # 'CHAT_SERVICE': config('CHAT_SERVICE_URL', 'http://localhost:8002'),
+    # 'ANALYTICS_SERVICE': config('ANALYTICS_SERVICE_URL', 'http://localhost:8003'),
 }
 
 # CORS
@@ -205,7 +205,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

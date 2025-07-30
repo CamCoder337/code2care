@@ -2,6 +2,8 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
+import { generateUniqueId } from "./utils/id-generator"
+import { useHydrationSafe } from "@/hooks/use-hydration-safe"
 
 export interface UploadedFile {
   id: string
@@ -25,9 +27,11 @@ const FilesContext = createContext<FilesContextType | undefined>(undefined)
 
 export function FilesProvider({ children }: { children: React.ReactNode }) {
   const [files, setFiles] = useState<UploadedFile[]>([])
+  const isClient = useHydrationSafe()
 
   // Load files from localStorage on mount
   useEffect(() => {
+    if (!isClient) return
     const saved = localStorage.getItem("high5-files")
     if (saved) {
       const parsedFiles = JSON.parse(saved).map((file: any) => ({
@@ -36,21 +40,23 @@ export function FilesProvider({ children }: { children: React.ReactNode }) {
       }))
       setFiles(parsedFiles)
     }
-  }, [])
+  }, [isClient])
 
   // Save files to localStorage whenever they change
   useEffect(() => {
+    if (!isClient) return
+    
     if (files.length >= 0) {
       localStorage.setItem("high5-files", JSON.stringify(files))
     }
-  }, [files])
+  }, [files, isClient])
 
   const addFile = async (file: File, conversationId?: string): Promise<UploadedFile> => {
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => {
         const newFile: UploadedFile = {
-          id: Date.now().toString() + Math.random().toString(),
+          id: generateUniqueId(),
           name: file.name,
           type: file.type,
           size: file.size,

@@ -28,7 +28,7 @@ class User(AbstractUser):
 class Patient(models.Model):
     """Profil Patient selon le MCD"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
-    patient_id = models.CharField(max_length=50, unique=True, db_index=True, blank=True)
+    patient_id = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     date_of_birth = models.DateField()
@@ -51,8 +51,6 @@ class Patient(models.Model):
     ], default='sms')
     
     def save(self, *args, **kwargs):
-        if not self.patient_id:
-            self.patient_id = f"PAT{str(self.user.id)[:8]}"
         super().save(*args, **kwargs)
 
     class Meta:

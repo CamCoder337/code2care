@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
+/**  eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
@@ -9,6 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+     **/
+
 }
 
 export default nextConfig

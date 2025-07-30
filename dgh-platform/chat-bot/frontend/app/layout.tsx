@@ -16,7 +16,7 @@ export default function RootLayout({
       <head>
         {/* Ajoute ici tes propres styles ou polices si besoin */}
       </head>
-      <body>{children}</body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   )
 }

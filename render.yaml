@@ -1,0 +1,35 @@
+services:
+  # API Gateway Service
+  - type: web
+    name: api-gateway
+    runtime: docker
+    dockerfilePath: ./dgh-platform/backend/api-gateway/Dockerfile
+    dockerContext: ./dgh-platform/backend/api-gateway
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dgh-platform-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: dgh-platform-redis
+          property: connectionString
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+    healthCheckPath: /health/
+    
+  # Redis Cache
+  - type: redis
+    name: dgh-platform-redis
+    ipAllowList: []
+
+# PostgreSQL Database
+databases:
+  - name: dgh-platform-db
+    databaseName: dgh_platform
+    user: dgh_user

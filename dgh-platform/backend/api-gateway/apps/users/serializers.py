@@ -73,8 +73,8 @@ class RegisterPatientSerializer(serializers.ModelSerializer):
     user = UserRegistrationSerializer(write_only=True, help_text="Données utilisateur")
     patient_id = serializers.CharField(
         max_length=50, 
-        required=False, 
-        help_text="ID patient (généré automatiquement si vide)"
+        read_only=True,
+        help_text="ID patient (généré automatiquement)"
     )
     first_name = serializers.CharField(
         max_length=100,
@@ -137,8 +137,8 @@ class RegisterProfessionalSerializer(serializers.ModelSerializer):
     user = UserRegistrationSerializer(write_only=True, help_text="Données utilisateur")
     professional_id = serializers.CharField(
         max_length=50, 
-        required=False, 
-        help_text="ID professionnel (généré automatiquement si vide)"
+        read_only=True,
+        help_text="ID professionnel (généré automatiquement)"
     )
     first_name = serializers.CharField(
         max_length=100,
@@ -159,11 +159,6 @@ class RegisterProfessionalSerializer(serializers.ModelSerializer):
         help_text="Date de naissance (format: YYYY-MM-DD)",
         required=True
     )
-    department_id = serializers.CharField(
-        max_length=50,
-        required=False,
-        help_text="ID du département/service"
-    )
     specialization = serializers.CharField(
         max_length=100,
         required=False,
@@ -179,8 +174,7 @@ class RegisterProfessionalSerializer(serializers.ModelSerializer):
         model = Professional
         fields = [
             'user', 'professional_id', 'first_name', 'last_name',
-            'gender', 'date_of_birth', 'department_id',
-            'specialization', 'license_number'
+            'gender', 'date_of_birth', 'specialization', 'license_number'
         ]
 
     def validate_license_number(self, value):
