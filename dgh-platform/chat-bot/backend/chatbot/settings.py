@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
     'app',
 ]
@@ -92,7 +93,27 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://172.20.10.4:3000",
     "https://high5-code2care-chatbot-claude-djiojps-projects.vercel.app",
+]
 
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
