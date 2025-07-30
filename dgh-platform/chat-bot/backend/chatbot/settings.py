@@ -41,6 +41,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '.onrender.com',
+    'https://chat2care.vercel.app'
 ]
 
 # Application definition
@@ -58,8 +59,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -67,6 +67,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'chatbot.urls'
@@ -93,6 +94,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://172.20.10.4:3000",
     "https://high5-code2care-chatbot-claude-djiojps-projects.vercel.app",
+    "https://high-5-chat2care.vercel.app",
 ]
 
 CORS_ALLOW_HEADERS = [
