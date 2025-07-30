@@ -332,334 +332,122 @@ test_feedback_decorator = swagger_auto_schema(
     tags=['Feedback Patient - Test']
 )
 
-
-# ========== APPOINTMENT SCHEMAS ==========
-
-appointment_create_schema = {
+# Schéma pour les départements
+department_schema = {
     "type": "object",
     "properties": {
-        "scheduled": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Date et heure du rendez-vous",
-            "example": "2025-07-30T14:30:00Z"
-        },
-        "type": {
-            "type": "string",
-            "enum": ["consultation", "suivi", "examen"],
-            "description": "Type de rendez-vous",
-            "example": "consultation"
-        },
-        "patient_id": {
+        "department_id": {
             "type": "string",
             "format": "uuid",
-            "description": "ID du patient (auto-assigné si patient connecté)",
-            "example": "12345678-1234-1234-1234-123456789abc"
-        },
-        "professional_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "ID du professionnel (auto-assigné si professionnel connecté)",
+            "description": "ID unique du département",
             "example": "87654321-4321-4321-4321-cba987654321"
-        }
-    },
-    "required": ["scheduled", "type"]
-}
-
-appointment_response_schema = {
-    "type": "object",
-    "properties": {
-        "appointment_id": {
-            "type": "string",
-            "format": "uuid",
-            "example": "123e4567-e89b-12d3-a456-426614174000"
         },
-        "scheduled": {
+        "name": {
             "type": "string",
-            "format": "date-time",
-            "example": "2025-07-30T14:30:00Z"
+            "description": "Nom du département",
+            "example": "Cardiologie"
         },
-        "type": {
+        "description": {
             "type": "string",
-            "example": "consultation"
+            "description": "Description du département",
+            "example": "Service de cardiologie et maladies cardiovasculaires"
         },
-        "patient_id": {
-            "type": "string",
-            "format": "uuid"
-        },
-        "professional_id": {
-            "type": "string",
-            "format": "uuid"
+        "is_active": {
+            "type": "boolean",
+            "description": "Indique si le département est actif",
+            "example": True
         },
         "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Date de création",
+            "example": "2025-07-23T10:30:00Z"
         },
         "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time", 
+            "description": "Date de dernière modification",
+            "example": "2025-07-23T10:30:00Z"
         }
     }
 }
 
-# Décorateurs Swagger pour Appointments
-list_appointments_decorator = swagger_auto_schema(
+departments_list_decorator = swagger_auto_schema(
     methods=['GET'],
-    operation_id="list_appointments",
-    operation_summary="Lister les rendez-vous",
+    operation_id="list_departments",
+    operation_summary="Lister les départements",
     operation_description="""
-    Récupère la liste des rendez-vous selon le type d'utilisateur :
-    - **Patients** : Voir leurs propres rendez-vous
-    - **Professionnels** : Voir leurs rendez-vous assignés
+    Récupère la liste de tous les départements actifs de l'hôpital.
     
-    Supporte la pagination et le filtrage par dates.
+    **Utilisation :**
+    - Pour afficher les départements disponibles lors de la création d'un feedback
+    - Pour permettre aux patients de sélectionner le bon département
+    - Seuls les départements actifs sont retournés
+    
+    **Filtres disponibles :**
+    - Recherche par nom ou description avec le paramètre `search`
     """,
     manual_parameters=[
         openapi.Parameter(
-            'type',
+            'search',
             openapi.IN_QUERY,
-            description="Filtrer par type de rendez-vous",
+            description="Rechercher dans le nom et la description des départements",
             type=openapi.TYPE_STRING,
-            enum=['consultation', 'suivi', 'examen']
-        ),
-        openapi.Parameter(
-            'date_from',
-            openapi.IN_QUERY,
-            description="Date de début pour filtrer",
-            type=openapi.TYPE_STRING,
-            format=openapi.FORMAT_DATE
-        ),
-        openapi.Parameter(
-            'date_to',
-            openapi.IN_QUERY,
-            description="Date de fin pour filtrer",
-            type=openapi.TYPE_STRING,
-            format=openapi.FORMAT_DATE
+            required=False,
+            example="cardio"
         )
     ],
     responses={
         200: openapi.Response(
-            description='Liste des rendez-vous',
-            schema=openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                        'type': openapi.Schema(type=openapi.TYPE_STRING),
-                        'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'professional_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'created_at': openapi.Schema(type=openapi.TYPE_STRING)
-                    }
-                )
-            )
-        ),
-        403: openapi.Response(description='Type d\'utilisateur non supporté'),
-        404: openapi.Response(description='Profil utilisateur introuvable')
-    },
-    tags=['Appointments']
-)
-
-create_appointment_decorator = swagger_auto_schema(
-    methods=['POST'],
-    operation_id="create_appointment",
-    operation_summary="Créer un rendez-vous",
-    operation_description="""
-    Crée un nouveau rendez-vous.
-    
-    **Auto-assignation :**
-    - Si **patient connecté** : patient_id automatiquement assigné
-    - Si **professionnel connecté** : professional_id automatiquement assigné
-    
-    **Champs requis :** scheduled, type
-    """,
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        required=['scheduled', 'type'],
-        properties={
-            'scheduled': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_DATETIME,
-                description='Date et heure du rendez-vous',
-                example='2025-07-30T14:30:00Z'
-            ),
-            'type': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                enum=['consultation', 'suivi', 'examen'],
-                description='Type de rendez-vous',
-                example='consultation'
-            ),
-            'patient_id': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
-                description='ID du patient (optionnel si patient connecté)',
-                example='12345678-1234-1234-1234-123456789abc'
-            ),
-            'professional_id': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
-                description='ID du professionnel (optionnel si professionnel connecté)',
-                example='87654321-4321-4321-4321-cba987654321'
-            )
-        }
-    ),
-    responses={
-        201: openapi.Response(
-            description='Rendez-vous créé avec succès',
+            description='Liste des départements',
             schema=openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                    'type': openapi.Schema(type=openapi.TYPE_STRING),
-                    'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'professional_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'created_at': openapi.Schema(type=openapi.TYPE_STRING)
+                    'count': openapi.Schema(
+                        type=openapi.TYPE_INTEGER,
+                        description="Nombre total de départements"
+                    ),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'department_id': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_UUID,
+                                    description="ID unique du département"
+                                ),
+                                'name': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description="Nom du département",
+                                    example="Cardiologie"
+                                ),
+                                'description': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    description="Description du département",
+                                    example="Service de cardiologie et maladies cardiovasculaires"
+                                ),
+                                'is_active': openapi.Schema(
+                                    type=openapi.TYPE_BOOLEAN,
+                                    description="Statut actif du département"
+                                ),
+                                'created_at': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_DATETIME,
+                                    description="Date de création"
+                                ),
+                                'updated_at': openapi.Schema(
+                                    type=openapi.TYPE_STRING,
+                                    format=openapi.FORMAT_DATETIME,
+                                    description="Date de dernière modification"
+                                )
+                            }
+                        )
+                    )
                 }
             )
         ),
-        400: openapi.Response(description='Données invalides'),
-        403: openapi.Response(description='Type d\'utilisateur non supporté')
+        503: openapi.Response(description='Service temporairement indisponible')
     },
-    tags=['Appointments']
-)
-
-get_appointment_decorator = swagger_auto_schema(
-    methods=['GET'],
-    operation_id="get_appointment",
-    operation_summary="Récupérer un rendez-vous",
-    operation_description="Récupère les détails d'un rendez-vous spécifique",
-    responses={
-        200: openapi.Response(
-            description='Détails du rendez-vous',
-            schema=openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                    'type': openapi.Schema(type=openapi.TYPE_STRING),
-                    'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'professional_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'created_at': openapi.Schema(type=openapi.TYPE_STRING),
-                    'updated_at': openapi.Schema(type=openapi.TYPE_STRING)
-                }
-            )
-        ),
-        403: openapi.Response(description='Accès non autorisé'),
-        404: openapi.Response(description='Rendez-vous non trouvé')
-    },
-    tags=['Appointments']
-)
-
-update_appointment_decorator = swagger_auto_schema(
-    methods=['PUT', 'PATCH'],
-    operation_id="update_appointment",
-    operation_summary="Modifier un rendez-vous",
-    operation_description="""
-    Met à jour un rendez-vous existant.
-    
-    - **PUT** : Mise à jour complète
-    - **PATCH** : Mise à jour partielle
-    """,
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            'scheduled': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_DATETIME,
-                description='Nouvelle date/heure'
-            ),
-            'type': openapi.Schema(
-                type=openapi.TYPE_STRING,
-                enum=['consultation', 'suivi', 'examen'],
-                description='Nouveau type'
-            )
-        }
-    ),
-    responses={
-        200: openapi.Response(
-            description='Rendez-vous mis à jour',
-            schema=openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                    'type': openapi.Schema(type=openapi.TYPE_STRING),
-                    'updated_at': openapi.Schema(type=openapi.TYPE_STRING)
-                }
-            )
-        ),
-        400: openapi.Response(description='Données invalides'),
-        403: openapi.Response(description='Accès non autorisé'),
-        404: openapi.Response(description='Rendez-vous non trouvé')
-    },
-    tags=['Appointments']
-)
-
-delete_appointment_decorator = swagger_auto_schema(
-    methods=['DELETE'],
-    operation_id="delete_appointment",
-    operation_summary="Supprimer un rendez-vous",
-    operation_description="Supprime définitivement un rendez-vous",
-    responses={
-        204: openapi.Response(description='Rendez-vous supprimé avec succès'),
-        403: openapi.Response(description='Accès non autorisé'),
-        404: openapi.Response(description='Rendez-vous non trouvé')
-    },
-    tags=['Appointments']
-)
-
-upcoming_appointments_decorator = swagger_auto_schema(
-    methods=['GET'],
-    operation_id="upcoming_appointments",
-    operation_summary="Rendez-vous à venir",
-    operation_description="Récupère tous les rendez-vous programmés dans le futur",
-    responses={
-        200: openapi.Response(
-            description='Liste des rendez-vous à venir',
-            schema=openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                        'type': openapi.Schema(type=openapi.TYPE_STRING),
-                        'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'professional_id': openapi.Schema(type=openapi.TYPE_STRING)
-                    }
-                )
-            )
-        ),
-        403: openapi.Response(description='Accès non autorisé')
-    },
-    tags=['Appointments']
-)
-
-today_appointments_decorator = swagger_auto_schema(
-    methods=['GET'],
-    operation_id="today_appointments",
-    operation_summary="Rendez-vous du jour",
-    operation_description="Récupère tous les rendez-vous prévus aujourd'hui",
-    responses={
-        200: openapi.Response(
-            description='Liste des rendez-vous du jour',
-            schema=openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'scheduled': openapi.Schema(type=openapi.TYPE_STRING),
-                        'type': openapi.Schema(type=openapi.TYPE_STRING),
-                        'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'professional_id': openapi.Schema(type=openapi.TYPE_STRING)
-                    }
-                )
-            )
-        ),
-        403: openapi.Response(description='Accès non autorisé')
-    },
-    tags=['Appointments']
+    tags=['Départements']
 )

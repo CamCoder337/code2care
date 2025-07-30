@@ -1,11 +1,7 @@
 # api-gateway/apps/gateway/urls.py
 from django.urls import path
-from .views import health_check, service_status
-from .feedback_proxy import (
-    create_feedback, my_feedbacks, feedback_status, test_feedback,
-    list_appointments, create_appointment, get_appointment, 
-    update_appointment, delete_appointment, upcoming_appointments, today_appointments
-)
+from .views import health_check, service_status, list_departments
+from .feedback_proxy import create_feedback, my_feedbacks, feedback_status, test_feedback
 
 urlpatterns = [
     path('', health_check, name='health-check'),
@@ -17,12 +13,6 @@ urlpatterns = [
     path('api/v1/patient/feedback/<str:feedback_id>/status/', feedback_status, name='feedback-status'),
     path('api/v1/patient/feedback/test/', test_feedback, name='test-feedback'),
     
-    # Routes appointments pour patients et professionnels
-    path('api/v1/appointments/', list_appointments, name='list-appointments'),
-    path('api/v1/appointments/create/', create_appointment, name='create-appointment'),
-    path('api/v1/appointments/<str:appointment_id>/', get_appointment, name='get-appointment'),
-    path('api/v1/appointments/<str:appointment_id>/update/', update_appointment, name='update-appointment'),
-    path('api/v1/appointments/<str:appointment_id>/delete/', delete_appointment, name='delete-appointment'),
-    path('api/v1/appointments/upcoming/', upcoming_appointments, name='upcoming-appointments'),
-    path('api/v1/appointments/today/', today_appointments, name='today-appointments'),
+    # Routes départements
+    path('api/v1/departments/', list_departments, name='list-departments'),
 ]

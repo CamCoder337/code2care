@@ -191,17 +191,24 @@ def login_view(request):
     }
 )
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def logout_view(request):
     """Déconnexion avec blacklist du token"""
     try:
         refresh_token = request.data.get("refresh")
-        if refresh_token:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
+        if not refresh_token:
+            return Response(
+                {"error": "Refresh token is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        token = RefreshToken(refresh_token)
+        token.blacklist()
         return Response({"detail": "Successfully logged out"})
     except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
         return Response(
-            {"error": str(e)},
+            {"error": f"Invalid token: {str(e)}"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
