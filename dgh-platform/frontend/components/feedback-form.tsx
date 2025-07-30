@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -8,11 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Mic, Star, Send, Loader2, Type, Volume2, Languages, Building } from "lucide-react"
+import { Mic, StopCircle, Star, Send, Loader2, Type, Volume2, Languages, Building } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useLanguage } from "@/contexts/language-context"
+import { useLanguage } from "@/contexts/language-context";
+// This import must use curly braces to match the named export
+import { useDepartments } from "@/hooks/use-departments";
+import { apiService } from "@/lib/api-service";
 
-// Hook personnalisé pour "débattre" une valeur (attendre que l'utilisateur arrête de taper)
+
+// Le hook useDebounce reste inchangé
 function useDebounce(value: string, delay: number): string {
   const [debouncedValue, setDebouncedValue] = useState(value)
   useEffect(() => {
@@ -34,18 +38,23 @@ export function FeedbackForm() {
   const [department, setDepartment] = useState("")
   const [rating, setRating] = useState(0)
   const [originalText, setOriginalText] = useState("")
-  const [translatedText, setTranslatedText] = useState("") // Pour la traduction finale
+  const [translatedText, setTranslatedText] = useState("")
   const [activeTab, setActiveTab] = useState("text")
+
+  // --- Logique de récupération des données via notre hook personnalisé ---
+  const { departments, isLoading: isLoadingDepartments, error: departmentError } = useDepartments()
 
   // --- États de chargement et d'enregistrement ---
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isRecognizing, setIsRecognizing] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
 
-  // Utilise la valeur "débattue" pour ne pas traduire à chaque frappe
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const userStoppedRef = useRef(false)
+
   const debouncedOriginalText = useDebounce(originalText, 500)
 
-  // --- Logique de Traduction via notre API Backend ---
+  // --- Logique de traduction via notre API Route Next.js ---
   const handleTranslation = useCallback(
       async (textToTranslate: string) => {
         if (!textToTranslate.trim()) {
@@ -56,16 +65,10 @@ export function FeedbackForm() {
         try {
           const response = await fetch("/api/translate", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: textToTranslate }),
           })
-
-          if (!response.ok) {
-            throw new Error("La requête de traduction a échoué")
-          }
-
+          if (!response.ok) throw new Error("La requête de traduction a échoué")
           const data = await response.json()
           setTranslatedText(data.translatedText)
         } catch (error) {
@@ -82,15 +85,21 @@ export function FeedbackForm() {
       [toast],
   )
 
-  // --- Effet pour traduire le texte tapé ---
+  // Traduire le texte tapé (avec un délai)
   useEffect(() => {
-    if (activeTab === "text") {
+    if (activeTab === "text" && !isRecognizing) {
       handleTranslation(debouncedOriginalText)
     }
-  }, [debouncedOriginalText, handleTranslation, activeTab])
+  }, [debouncedOriginalText, handleTranslation, activeTab, isRecognizing])
 
   // --- Logique de Reconnaissance Vocale ---
-  const handleVoiceRecording = () => {
+  const handleToggleRecording = () => {
+    if (isRecognizing) {
+      userStoppedRef.current = true // L'utilisateur a cliqué sur "Stop"
+      recognitionRef.current?.stop()
+      return
+    }
+
     const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
       toast({
@@ -102,20 +111,28 @@ export function FeedbackForm() {
     }
 
     const recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.lang = "" // Détection automatique de la langue
+    recognitionRef.current = recognition
+
+    recognition.lang = ""
+    recognition.continuous = true
+    recognition.interimResults = true
 
     recognition.onstart = () => {
+      userStoppedRef.current = false
       setIsRecognizing(true)
       setOriginalText("")
       setTranslatedText("")
     }
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript
-      setOriginalText(transcript) // Affiche le texte reconnu
-      handleTranslation(transcript) // Et le traduit via notre API
+    recognition.onend = () => {
+      // Redémarre automatiquement si l'arrêt n'est pas manuel
+      if (!userStoppedRef.current) {
+        recognitionRef.current?.start()
+        return
+      }
+      setIsRecognizing(false)
+      // Traduire le texte final une fois l'enregistrement VRAIMENT terminé
+      handleTranslation(originalText)
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -128,8 +145,13 @@ export function FeedbackForm() {
       setIsRecognizing(false)
     }
 
-    recognition.onend = () => {
-      setIsRecognizing(false)
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // Reconstruit la transcription complète à chaque événement pour plus de robustesse
+      const transcript = Array.from(event.results)
+          .map((result) => result[0])
+          .map((result) => result.transcript)
+          .join("")
+      setOriginalText(transcript)
     }
 
     recognition.start()
@@ -137,25 +159,47 @@ export function FeedbackForm() {
 
   // --- Logique de Soumission ---
   const handleSubmit = async () => {
+    if (!department) {
+      toast({
+        title: "Formulaire incomplet",
+        description: "Veuillez sélectionner un département.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
-    const finalFeedback = translatedText // On envoie toujours le texte traduit
 
-    console.log("Submitting feedback:", { department, rating, feedback: finalFeedback })
+    const payload = {
+      departmentId: department,
+      rating: rating,
+      comment: translatedText,
+    }
 
-    // Simulation de la soumission
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      // Appel propre à notre service API
+      await apiService.submitFeedback(payload)
 
-    toast({
-      title: t("feedback.feedback_sent"),
-      description: t("feedback.thank_you"),
-    })
+      toast({
+        title: t("feedback.feedback_sent"),
+        description: t("feedback.thank_you"),
+      })
 
-    // Réinitialisation du formulaire
-    setDepartment("")
-    setRating(0)
-    setOriginalText("")
-    setTranslatedText("")
-    setIsSubmitting(false)
+      // Réinitialisation du formulaire en cas de succès
+      setDepartment("")
+      setRating(0)
+      setOriginalText("")
+      setTranslatedText("")
+    } catch (error) {
+      console.error("Submission error:", error)
+      toast({
+        title: "Erreur de soumission",
+        description: "Votre feedback n'a pas pu être envoyé. Veuillez réessayer.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -170,18 +214,33 @@ export function FeedbackForm() {
             <CardDescription>{t("feedback.department_select")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Select onValueChange={setDepartment} value={department}>
+            <Select
+                onValueChange={setDepartment}
+                value={department}
+                disabled={isLoadingDepartments || !!departmentError}
+            >
               <SelectTrigger className="bg-white/80 dark:bg-gray-900/80">
-                <SelectValue placeholder={t("feedback.department_placeholder")} />
+                <SelectValue
+                    placeholder={
+                      isLoadingDepartments
+                          ? "Chargement des départements..."
+                          : departmentError
+                              ? "Erreur de chargement"
+                              : t("feedback.department_placeholder")
+                    }
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cardiology">Cardiologie</SelectItem>
-                <SelectItem value="neurology">Neurologie</SelectItem>
-                <SelectItem value="orthopedics">Orthopédie</SelectItem>
-                <SelectItem value="pediatrics">Pédiatrie</SelectItem>
-                <SelectItem value="general">Médecine Générale</SelectItem>
+                {!isLoadingDepartments &&
+                    !departmentError &&
+                    departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                    ))}
               </SelectContent>
             </Select>
+            {departmentError && <p className="text-sm text-red-500 mt-2">{departmentError}</p>}
           </CardContent>
         </Card>
 
@@ -205,7 +264,9 @@ export function FeedbackForm() {
                       className="p-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-all hover:scale-110"
                   >
                     <Star
-                        className={`h-8 w-8 transition-all ${star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300 hover:text-yellow-300"}`}
+                        className={`h-8 w-8 transition-all ${
+                            star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300 hover:text-yellow-300"
+                        }`}
                     />
                   </Button>
               ))}
@@ -222,7 +283,7 @@ export function FeedbackForm() {
         </Card>
 
         {/* Section de saisie du feedback */}
-        <Tabs defaultValue="text" onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-white/60 dark:bg-gray-800/60">
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
@@ -234,58 +295,48 @@ export function FeedbackForm() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Onglet Texte */}
-          <TabsContent value="text" className="space-y-4">
-            <Card className="border-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-xl">{t("feedback.written_feedback")}</CardTitle>
-                <CardDescription>{t("feedback.describe_experience")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                    placeholder={t("feedback.placeholder")}
-                    value={originalText}
-                    onChange={(e) => setOriginalText(e.target.value)}
-                    className="min-h-[150px] bg-white/80 dark:bg-gray-900/80"
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Onglet Voix */}
-          <TabsContent value="voice" className="space-y-4">
-            <Card className="border-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-xl">{t("feedback.voice_feedback")}</CardTitle>
-                <CardDescription>{t("feedback.record_message")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-center">
-                  <Button onClick={handleVoiceRecording} disabled={isRecognizing} size="lg" className="gap-2 px-8 py-4 text-lg">
-                    <Mic className="h-6 w-6" />
-                    {isRecognizing ? t("feedback.recording_in_progress") : t("feedback.start_recording")}
-                  </Button>
-                </div>
-                {isRecognizing && (
-                    <div className="text-center flex flex-col items-center justify-center gap-3 p-4 bg-white/50 dark:bg-gray-900/50 rounded-lg">
-                      <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Reconnaissance en cours...
+          <Card className="mt-4 border-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-xl">
+                {activeTab === "text" ? t("feedback.written_feedback") : t("feedback.voice_feedback")}
+              </CardTitle>
+              <CardDescription>
+                {activeTab === "text" ? t("feedback.describe_experience") : t("feedback.record_message")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activeTab === "voice" && (
+                  <div className="flex flex-col items-center justify-center gap-6 mb-6">
+                    <Button
+                        onClick={handleToggleRecording}
+                        size="lg"
+                        className={`h-20 w-20 rounded-full transition-all duration-300 ${
+                            isRecognizing ? "bg-red-500 hover:bg-red-600" : "bg-blue-600 hover:bg-blue-700"
+                        }`}
+                    >
+                      <div className={isRecognizing ? "ripple-container" : ""}>
+                        {isRecognizing ? <StopCircle className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
                       </div>
-                    </div>
-                )}
-                {originalText && activeTab === "voice" && (
-                    <div className="p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg">
-                      <Label>Texte reconnu :</Label>
-                      <p className="text-gray-700 dark:text-gray-300 italic">"{originalText}"</p>
-                    </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                    </Button>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {isRecognizing ? "Appuyez pour arrêter l'enregistrement" : "Appuyez pour commencer à parler"}
+                    </p>
+                  </div>
+              )}
+              <Textarea
+                  placeholder={
+                    activeTab === "voice" ? "Votre message apparaîtra ici..." : t("feedback.placeholder")
+                  }
+                  value={originalText}
+                  onChange={(e) => setOriginalText(e.target.value)}
+                  className="min-h-[150px] bg-white/80 dark:bg-gray-900/80"
+                  readOnly={activeTab === "voice"}
+              />
+            </CardContent>
+          </Card>
         </Tabs>
 
-        {/* Zone de Traduction (commune) */}
+        {/* Zone de Traduction */}
         {(translatedText || isTranslating) && (
             <Card className="border-0 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20">
               <CardHeader>
@@ -313,14 +364,22 @@ export function FeedbackForm() {
         {/* Bouton de soumission */}
         <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || isTranslating || isRecognizing || !department || (rating === 0 && !translatedText)}
+            disabled={
+                isSubmitting || isTranslating || isRecognizing || !department || (rating === 0 && !translatedText)
+            }
             className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg py-6 text-lg font-medium"
             size="lg"
         >
           {isSubmitting ? (
-              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("feedback.sending")}</>
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                {t("feedback.sending")}
+              </>
           ) : (
-              <><Send className="h-5 w-5 mr-2" />{t("feedback.send_feedback")}</>
+              <>
+                <Send className="h-5 w-5 mr-2" />
+                {t("feedback.send_feedback")}
+              </>
           )}
         </Button>
       </div>

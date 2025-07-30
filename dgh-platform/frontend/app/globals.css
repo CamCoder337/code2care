@@ -71,6 +71,33 @@
 }
 
 @layer components {
+
+  .ripple-container {
+    @apply relative flex items-center justify-center;
+  }
+
+  .ripple-container::before,
+  .ripple-container::after {
+    content: '';
+    @apply absolute h-full w-full rounded-full bg-blue-500/50 dark:bg-blue-400/50;
+    animation: ripple 1.5s infinite;
+    opacity: 0;
+  }
+
+  .ripple-container::after {
+    animation-delay: 0.5s;
+  }
+  @keyframes ripple {
+    0% {
+      transform: scale(0.9);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1.4);
+      opacity: 0;
+    }}
+
+
   /* SYSTÈME DE RESPONSIVITÉ INTELLIGENT */
 
   /* === BOUTONS ADAPTATIFS === */
