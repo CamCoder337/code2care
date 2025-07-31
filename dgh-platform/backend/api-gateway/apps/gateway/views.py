@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
 from django.core.cache import cache
+from ..users.models import Patient
 import httpx
 import asyncio
 from datetime import datetime
@@ -140,3 +141,38 @@ async def call_feedback_service(url, params=None):
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url, params=params)
         return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  
+def simple_patient_profile(request, patient_id):
+    """
+    Endpoint simple pour récupérer le profil patient - SANS AUTHENTIFICATION
+    Route: GET /api/v1/patient-simple/{patient_id}/profile/
+    """
+    try:
+        # Recherche du patient par patient_id (UUID)
+        patient = Patient.objects.select_related('user').get(patient_id=patient_id)
+        
+        # Construction de la réponse avec toutes les infos nécessaires
+        profile_data = {
+            'patient_id': str(patient.patient_id),
+            'first_name': patient.first_name,
+            'last_name': patient.last_name,
+            'preferred_language': patient.preferred_language,
+            'preferred_contact_method': patient.preferred_contact_method,
+            'phone_number': patient.user.phone_number,
+        }
+        
+        return Response(profile_data, status=200)
+        
+    except Patient.DoesNotExist:
+        return Response(
+            {'error': f'Patient avec ID {patient_id} introuvable'}, 
+            status=404
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Erreur: {str(e)}'}, 
+            status=500
+        )

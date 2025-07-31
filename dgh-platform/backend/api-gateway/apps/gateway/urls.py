@@ -1,11 +1,11 @@
 # api-gateway/apps/gateway/urls.py
 from django.urls import path
-from .views import health_check, service_status, list_departments
+from .views import health_check, service_status, list_departments, simple_patient_profile
 from .feedback_proxy import (
     create_feedback, my_feedbacks, feedback_status, test_feedback,
     appointments_view, appointment_detail_view, upcoming_appointments, today_appointments,
     prescriptions_view, prescription_detail_view,
-    list_medications, get_medication
+    list_medications, get_medication, patient_profile
 )
 
 urlpatterns = [
@@ -17,6 +17,12 @@ urlpatterns = [
     path('api/v1/patient/feedbacks/', my_feedbacks, name='my-feedbacks'),
     path('api/v1/patient/feedback/<str:feedback_id>/status/', feedback_status, name='feedback-status'),
     path('api/v1/patient/feedback/test/', test_feedback, name='test-feedback'),
+    
+    # Route patient profile
+    path('api/v1/patient/<str:patient_id>/profile/', patient_profile, name='patient-profile'),
+    
+    # Route patient profile simple (sans auth)
+    path('api/v1/patient-simple/<str:patient_id>/profile/', simple_patient_profile, name='simple-patient-profile'),
     
     # Routes départements
     path('api/v1/departments/', list_departments, name='list-departments'),

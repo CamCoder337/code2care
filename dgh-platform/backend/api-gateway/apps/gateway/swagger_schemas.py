@@ -572,6 +572,222 @@ get_medication_decorator = swagger_auto_schema(
     tags=['Médicaments']
 )
 
+# ========== REMINDER SCHEMAS ==========
+
+# Schéma pour les rappels
+reminder_schema = {
+    "type": "object",
+    "properties": {
+        "reminder_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID unique du rappel",
+            "example": "12345678-1234-1234-1234-123456789012"
+        },
+        "channel": {
+            "type": "string",
+            "enum": ["sms", "voice"],
+            "description": "Canal de communication",
+            "example": "sms"
+        },
+        "scheduled_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date et heure programmées du rappel",
+            "example": "2025-08-01T14:30:00Z"
+        },
+        "send_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date et heure d'envoi réel",
+            "example": "2025-08-01T14:30:15Z"
+        },
+        "status": {
+            "type": "string",
+            "enum": ["pending", "sent", "delivered", "failed", "cancelled"],
+            "description": "Statut du rappel",
+            "example": "sent"
+        },
+        "message_content": {
+            "type": "string",
+            "description": "Contenu du message de rappel",
+            "example": "💊 RAPPEL: Paracétamol 500mg. À prendre après les repas - DGH"
+        },
+        "language": {
+            "type": "string",
+            "enum": ["fr", "en"],
+            "description": "Langue du rappel",
+            "example": "fr"
+        },
+        "prescription_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID de la prescription associée",
+            "example": "98765432-8765-4321-1234-567890abcdef"
+        },
+        "delivery_status": {
+            "type": "string",
+            "description": "Statut de livraison Twilio",
+            "example": "delivered"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date de création",
+            "example": "2025-07-30T10:00:00Z"
+        }
+    }
+}
+
+# Décorateur pour lister les rappels
+list_reminders_decorator = swagger_auto_schema(
+    methods=['GET'],
+    operation_id="list_patient_reminders",
+    operation_summary="Lister mes rappels",
+    operation_description="""
+    Récupère la liste des rappels médicamenteux du patient authentifié.
+    
+    **Filtres disponibles :**
+    - status : Filtrer par statut (pending, sent, delivered, failed, cancelled)
+    - prescription_id : Filtrer par prescription spécifique
+    - date_from : Rappels depuis une date
+    - date_to : Rappels jusqu'à une date
+    """,
+    manual_parameters=[
+        openapi.Parameter(
+            'status',
+            openapi.IN_QUERY,
+            description="Filtrer par statut",
+            type=openapi.TYPE_STRING,
+            enum=['pending', 'sent', 'delivered', 'failed', 'cancelled']
+        ),
+        openapi.Parameter(
+            'prescription_id',
+            openapi.IN_QUERY,
+            description="Filtrer par prescription",
+            type=openapi.TYPE_STRING,
+            format=openapi.FORMAT_UUID
+        ),
+        openapi.Parameter(
+            'date_from',
+            openapi.IN_QUERY,
+            description="Rappels depuis cette date",
+            type=openapi.TYPE_STRING,
+            format=openapi.FORMAT_DATE
+        ),
+        openapi.Parameter(
+            'date_to',
+            openapi.IN_QUERY,
+            description="Rappels jusqu'à cette date",
+            type=openapi.TYPE_STRING,
+            format=openapi.FORMAT_DATE
+        )
+    ],
+    responses={
+        200: openapi.Response(
+            description='Liste des rappels du patient',
+            schema=openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'reminder_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                        'channel': openapi.Schema(type=openapi.TYPE_STRING, enum=['sms', 'voice']),
+                        'scheduled_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                        'send_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, enum=['pending', 'sent', 'delivered', 'failed', 'cancelled']),
+                        'message_content': openapi.Schema(type=openapi.TYPE_STRING),
+                        'language': openapi.Schema(type=openapi.TYPE_STRING),
+                        'prescription_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                        'delivery_status': openapi.Schema(type=openapi.TYPE_STRING),
+                        'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                    }
+                )
+            )
+        ),
+        403: openapi.Response(description='Accès réservé aux patients')
+    },
+    tags=['Rappels Patient']
+)
+
+get_reminder_decorator = swagger_auto_schema(
+    methods=['GET'],
+    operation_id="get_reminder",
+    operation_summary="Récupérer un rappel",
+    operation_description="Récupère les détails d'un rappel spécifique",
+    responses={
+        200: openapi.Response(
+            description='Détails du rappel',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'reminder_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                    'channel': openapi.Schema(type=openapi.TYPE_STRING),
+                    'scheduled_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                    'send_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'message_content': openapi.Schema(type=openapi.TYPE_STRING),
+                    'language': openapi.Schema(type=openapi.TYPE_STRING),
+                    'prescription_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                    'delivery_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                }
+            )
+        ),
+        403: openapi.Response(description='Accès réservé aux patients'),
+        404: openapi.Response(description='Rappel non trouvé')
+    },
+    tags=['Rappels Patient']
+)
+
+update_reminder_decorator = swagger_auto_schema(
+    methods=['PATCH'],
+    operation_id="update_reminder_status",
+    operation_summary="Marquer un rappel comme pris",
+    operation_description="""
+    Permet au patient de marquer un rappel comme pris ou de l'ignorer.
+    
+    **Actions possibles :**
+    - Marquer comme pris (status: 'taken')
+    - Ignorer le rappel (status: 'ignored')
+    """,
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'action': openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=['taken', 'ignored'],
+                description='Action à effectuer sur le rappel',
+                example='taken'
+            ),
+            'notes': openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description='Notes optionnelles du patient',
+                example='Médicament pris avec le petit déjeuner'
+            )
+        },
+        required=['action']
+    ),
+    responses={
+        200: openapi.Response(
+            description='Rappel mis à jour avec succès',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, example='Rappel marqué comme pris'),
+                    'reminder_id': openapi.Schema(type=openapi.TYPE_STRING),
+                    'action': openapi.Schema(type=openapi.TYPE_STRING),
+                    'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                }
+            )
+        ),
+        400: openapi.Response(description='Action invalide'),
+        403: openapi.Response(description='Accès réservé aux patients'),
+        404: openapi.Response(description='Rappel non trouvé')
+    },
+    tags=['Rappels Patient']
+)
+
 # Schéma pour les appointments
 appointment_schema = {
     "type": "object",
