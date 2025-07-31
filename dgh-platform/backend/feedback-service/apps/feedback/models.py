@@ -140,16 +140,28 @@ class Reminder(models.Model):
     CHANNEL_CHOICES = [
         ('sms', 'SMS'),
         ('voice', 'Voice Call'),
-        ('whatsapp', 'WhatsApp'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'En attente'),
+        ('sent', 'Envoyé'),
+        ('delivered', 'Livré'),
+        ('failed', 'Échec'),
+        ('cancelled', 'Annulé'),
     ]
     
     reminder_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES)
     scheduled_time = models.DateTimeField()
     send_time = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     message_content = models.TextField()
     language = models.CharField(max_length=10, default='fr')
+    
+    # Champs Twilio
+    twilio_sid = models.CharField(max_length=50, null=True, blank=True, help_text="SID Twilio du message/appel")
+    delivery_status = models.CharField(max_length=20, null=True, blank=True, help_text="Statut de livraison Twilio")
+    error_message = models.TextField(null=True, blank=True, help_text="Message d'erreur en cas d'échec")
     
     # Relations
     patient_id = models.UUIDField()  # Reference vers Patient
@@ -176,8 +188,6 @@ class Reminder(models.Model):
 class Medication(models.Model):
     medication_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
-    dosage = models.CharField(max_length=50)
-    frequency = models.FloatField()  # Fréquence par jour
     
     class Meta:
         db_table = 'medications'
@@ -185,7 +195,7 @@ class Medication(models.Model):
         verbose_name_plural = 'Medications'
     
     def __str__(self):
-        return f"{self.name} - {self.dosage}"
+        return self.name
 
 
 class Prescription(models.Model):
@@ -213,10 +223,11 @@ class Prescription(models.Model):
 
 class PrescriptionMedication(models.Model):
     prescription_medication_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    frequency = models.FloatField()
+    dosage = models.CharField(max_length=50)  # Ex: "500mg", "2 comprimés"
+    frequency = models.FloatField()  # Nombre de prises par jour
     start_date = models.DateField()
     end_date = models.DateField()
-    instructions = models.TextField(blank=True)
+    instructions = models.TextField(blank=True)  # Instructions spécifiques du médecin
     
     # Relations locales
     prescription = models.ForeignKey(Prescription, on_delete=models.CASCADE, related_name='medications')
@@ -228,4 +239,4 @@ class PrescriptionMedication(models.Model):
         verbose_name_plural = 'Prescription Medications'
     
     def __str__(self):
-        return f"{self.prescription.prescription_id} - {self.medication.name}"
+        return f"{self.prescription.prescription_id} - {self.medication.name} ({self.dosage})"

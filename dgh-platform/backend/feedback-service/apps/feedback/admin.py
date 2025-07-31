@@ -71,9 +71,8 @@ class ReminderAdmin(admin.ModelAdmin):
 
 @admin.register(Medication)
 class MedicationAdmin(admin.ModelAdmin):
-    list_display = ('medication_id', 'name', 'dosage', 'frequency')
-    list_filter = ('frequency',)
-    search_fields = ('name', 'dosage')
+    list_display = ('medication_id', 'name')
+    search_fields = ('name',)
     readonly_fields = ('medication_id',)
 
 
@@ -87,7 +86,7 @@ class PrescriptionAdmin(admin.ModelAdmin):
 
 @admin.register(PrescriptionMedication)
 class PrescriptionMedicationAdmin(admin.ModelAdmin):
-    list_display = ('prescription_medication_id', 'prescription', 'medication', 'start_date', 'end_date')
-    list_filter = ('start_date', 'end_date')
-    search_fields = ('prescription__appointment__patient_id', 'medication__name')
+    list_display = ('prescription_medication_id', 'prescription', 'medication', 'dosage', 'frequency', 'start_date', 'end_date')
+    list_filter = ('frequency', 'start_date', 'end_date')
+    search_fields = ('prescription__appointment_id', 'medication__name', 'dosage')
     readonly_fields = ('prescription_medication_id',)
