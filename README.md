@@ -4,8 +4,8 @@ This directory contains the 03 tracks produced without the knowledge of the CODE
 
 # DGH Platform
 ### [Patient Feedback and Reminder System (TRACK 1)](dgh-platform/backend/feedback-service)
-### [Patient Assistant LLM and support Chatbot (TRACK 2)](dgh-platform/backend)
-### [Blood Analysis and management system (TRACK 3)](dgh-platform/backend)
+### [Patient Assistant LLM and support Chatbot (TRACK 2)](dgh-platform/chat-bot)
+### [Blood Analysis and management system (TRACK 3)](dgh-platform/bloodbank)
 
 
 ## Overview

@@ -4,9 +4,21 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
+    "build:production": "NODE_ENV=production next build",
     "dev": "next dev",
+    "dev:turbo": "next dev --turbo",
     "lint": "next lint",
-    "start": "next start"
+    "lint:fix": "next lint --fix",
+    "start": "next start",
+    "type-check": "tsc --noEmit --incremental false",
+    "type-check:watch": "tsc --noEmit --watch",
+    "preview": "npm run build && npm run start",
+    "clean": "rm -rf .next out dist .turbo",
+    "clean:all": "rm -rf .next out dist .turbo node_modules package-lock.json",
+    "postinstall": "npm run type-check",
+    "check-updates": "npx npm-check-updates",
+    "security-audit": "npm audit --audit-level moderate"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -64,10 +76,33 @@
   },
   "devDependencies": {
     "@types/node": "^22.16.5",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "autoprefixer": "^10.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all",
+      "not IE 11"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "npm": ">=9.0.0"
   }
 }

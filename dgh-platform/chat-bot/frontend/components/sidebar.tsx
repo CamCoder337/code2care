@@ -38,7 +38,10 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
   const { user, logout } = useAuth()
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
+  const toggleTheme = () => {
+  setTheme(theme === 'light' ? 'dark' : 'light')
+  }
   const {
     conversations,
     currentConversation,
