@@ -23,7 +23,8 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     '0.0.0.0',
     '.render.com',  # Pour Render deployment
-    '.onrender.com',  # Alternative Render domain
+    '.onrender.com',
+    'https://high5-code2care-sr7p.onrender.com',# Alternative Render domain
 ]
 
 # Add your custom domain here when you have one
@@ -36,6 +37,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://localhost:3000",
+    "https://high-5-blood2care.vercel.app/"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
