@@ -156,12 +156,14 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
 
       console.log("Envoi vers backend:", requestBody)
 
+
       // ✅ Utiliser l'URL de production/développement automatiquement
       const apiUrl = getApiUrl('/api/chat-groq/')
       console.log("URL API utilisée:", apiUrl)
 
       // Envoyer la requête au backend avec gestion d'erreur améliorée
       const response = await fetchWithTimeout(apiUrl, {
+
         method: "POST",
         body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
