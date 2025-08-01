@@ -37,7 +37,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://localhost:3000",
-    "https://high-5-blood2care.vercel.app/"
+    "https://high-5-blood2care.vercel.app"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
