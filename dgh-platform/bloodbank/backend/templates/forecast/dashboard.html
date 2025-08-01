@@ -1,0 +1,542 @@
+<!-- templates/forecast/dashboard.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Prévisions - Banque de Sang</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            font-weight: 400;
+        }
+
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .blood-type-card {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .blood-type-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(238, 90, 82, 0.3);
+        }
+
+        .blood-type-title {
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+
+        .forecast-value {
+            font-size: 2rem;
+            font-weight: 300;
+            margin-bottom: 5px;
+        }
+
+        .forecast-label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .risk-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 5px;
+        }
+
+        .risk-low { background: #2ecc71; }
+        .risk-medium { background: #f39c12; }
+        .risk-high { background: #e74c3c; }
+        .risk-critical { background: #c0392b; animation: pulse 2s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .recommendations-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .recommendations-table th,
+        .recommendations-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .recommendations-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .action-badge {
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .action-urgent { background: #ffebee; color: #c62828; }
+        .action-increase { background: #fff3e0; color: #ef6c00; }
+        .action-maintain { background: #e8f5e8; color: #2e7d32; }
+        .action-reduce { background: #e3f2fd; color: #1565c0; }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .forecast-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🩸 Dashboard Prévisions Banque de Sang</h1>
+            <p>Système intelligent de prévision de la demande sanguine</p>
+            <div class="status-badge {{ models_available|yesno:'status-success,status-warning' }}">
+                {{ models_available|yesno:'Modèles disponibles,Mode simulation' }}
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="refreshForecasts()">
+                <span id="refresh-icon">🔄</span> Actualiser les prévisions
+            </button>
+            <button class="btn" onclick="exportData()">
+                📊 Exporter les données
+            </button>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>📈 Prévisions par Groupe Sanguin</h2>
+                <div class="forecast-grid">
+                    {% for blood_type in blood_types %}
+                    <div class="blood-type-card" data-blood-type="{{ blood_type }}">
+                        <div class="blood-type-title">{{ blood_type }}</div>
+                        <div class="forecast-value">
+                            {% if forecasts|get_item:blood_type %}
+                                {{ forecasts|get_item:blood_type|first|get_item:'predicted_demand'|floatformat:1 }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </div>
+                        <div class="forecast-label">
+                            unités demain
+                            {% if forecasts|get_item:blood_type %}
+                                <span class="risk-indicator risk-{{ forecasts|get_item:blood_type|first|get_item:'risk_level' }}"></span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="forecastChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📋 Recommandations de Stock</h2>
+                {% if recommendations %}
+                <table class="recommendations-table">
+                    <thead>
+                        <tr>
+                            <th>Groupe</th>
+                            <th>Stock Actuel</th>
+                            <th>Demande Prévue</th>
+                            <th>Jours de Stock</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recommendations %}
+                        <tr>
+                            <td><strong>{{ rec.blood_type }}</strong></td>
+                            <td>{{ rec.current_stock }} unités</td>
+                            <td>{{ rec.predicted_14day_demand }} (14j)</td>
+                            <td>{{ rec.days_of_supply|floatformat:1 }} jours</td>
+                            <td>
+                                <span class="action-badge action-{{ rec.action_needed|lower|slice:':7' }}">
+                                    {{ rec.action_needed|capfirst }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>Aucune recommandation disponible pour le moment.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 Analyse Détaillée</h2>
+            <div id="detailed-analysis">
+                <p>Sélectionnez un groupe sanguin pour voir l'analyse détaillée.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration du graphique
+        const ctx = document.getElementById('forecastChart').getContext('2d');
+        const forecastChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: []
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Prévisions de Demande - 7 prochains jours'
+                    },
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Unités de sang'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Données des prévisions
+        const forecastsData = {{ forecasts|safe }};
+
+        // Initialiser le graphique
+        updateChart();
+
+        function updateChart() {
+            const colors = {
+                'A+': '#ff6b6b', 'A-': '#ee5a52',
+                'B+': '#4ecdc4', 'B-': '#45b7aa',
+                'AB+': '#45b7d1', 'AB-': '#3a9bc1',
+                'O+': '#96ceb4', 'O-': '#85c1a3'
+            };
+
+            const datasets = [];
+            const labels = [];
+
+            // Extraire les labels (dates) du premier groupe sanguin qui a des données
+            for (const bloodType in forecastsData) {
+                if (forecastsData[bloodType] && forecastsData[bloodType].length > 0) {
+                    labels.push(...forecastsData[bloodType].map(pred =>
+                        new Date(pred.date).toLocaleDateString('fr-FR', {month: 'short', day: 'numeric'})
+                    ));
+                    break;
+                }
+            }
+
+            // Créer un dataset pour chaque groupe sanguin
+            for (const bloodType in forecastsData) {
+                if (forecastsData[bloodType] && forecastsData[bloodType].length > 0) {
+                    datasets.push({
+                        label: bloodType,
+                        data: forecastsData[bloodType].map(pred => pred.predicted_demand),
+                        borderColor: colors[bloodType] || '#666',
+                        backgroundColor: colors[bloodType] + '20' || '#66620',
+                        tension: 0.4,
+                        fill: false
+                    });
+                }
+            }
+
+            forecastChart.data.labels = labels;
+            forecastChart.data.datasets = datasets;
+            forecastChart.update();
+        }
+
+        // Gestion des clics sur les cartes de groupes sanguins
+        document.querySelectorAll('.blood-type-card').forEach(card => {
+            card.addEventListener('click', function() {
+                const bloodType = this.dataset.bloodType;
+                showDetailedAnalysis(bloodType);
+
+                // Mettre en évidence la carte sélectionnée
+                document.querySelectorAll('.blood-type-card').forEach(c =>
+                    c.style.transform = 'scale(1)'
+                );
+                this.style.transform = 'scale(1.05)';
+            });
+        });
+
+        function showDetailedAnalysis(bloodType) {
+            const data = forecastsData[bloodType];
+            const analysisDiv = document.getElementById('detailed-analysis');
+
+            if (!data || data.length === 0) {
+                analysisDiv.innerHTML = `
+                    <h3>Analyse pour ${bloodType}</h3>
+                    <p>Aucune donnée disponible pour ce groupe sanguin.</p>
+                `;
+                return;
+            }
+
+            const totalDemand = data.reduce((sum, pred) => sum + pred.predicted_demand, 0);
+            const avgDemand = totalDemand / data.length;
+            const maxDemand = Math.max(...data.map(pred => pred.predicted_demand));
+            const criticalDays = data.filter(pred => pred.risk_level === 'critical').length;
+
+            analysisDiv.innerHTML = `
+                <h3>📊 Analyse Détaillée - ${bloodType}</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <h4>Demande Totale (7 jours)</h4>
+                        <div style="font-size: 2rem; color: #667eea;">${totalDemand.toFixed(1)} unités</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <h4>Demande Moyenne/Jour</h4>
+                        <div style="font-size: 2rem; color: #764ba2;">${avgDemand.toFixed(1)} unités</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <h4>Pic de Demande</h4>
+                        <div style="font-size: 2rem; color: #ff6b6b;">${maxDemand.toFixed(1)} unités</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <h4>Jours Critiques</h4>
+                        <div style="font-size: 2rem; color: #e74c3c;">${criticalDays} jours</div>
+                    </div>
+                </div>
+
+                <h4>Prévisions Détaillées:</h4>
+                <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                    ${data.map(pred => `
+                        <div style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee;">
+                            <span>${new Date(pred.date).toLocaleDateString('fr-FR', {weekday: 'short', month: 'short', day: 'numeric'})}</span>
+                            <span>${pred.predicted_demand.toFixed(1)} unités</span>
+                            <span>
+                                <span class="risk-indicator risk-${pred.risk_level}"></span>
+                                ${pred.risk_level}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function refreshForecasts() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            refreshIcon.innerHTML = '<div class="loading"></div>';
+
+            try {
+                const response = await fetch('/api/test-forecast/?action=full_pipeline');
+                const result = await response.json();
+
+                if (result.success) {
+                    // Recharger la page pour afficher les nouvelles données
+                    window.location.reload();
+                } else {
+                    alert('Erreur lors de l\'actualisation: ' + result.error);
+                }
+            } catch (error) {
+                alert('Erreur de connexion: ' + error.message);
+            } finally {
+                refreshIcon.innerHTML = '🔄';
+            }
+        }
+
+        function exportData() {
+            const data = {
+                forecasts: forecastsData,
+                recommendations: {{ recommendations|safe }},
+                timestamp: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `blood_forecasts_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Actualisation automatique toutes les 5 minutes
+        setInterval(() => {
+            console.log('Actualisation automatique...');
+            // Vous pouvez activer cette ligne pour une actualisation automatique
+            // refreshForecasts();
+        }, 5 * 60 * 1000);
+
+        // Animation au chargement
+        window.addEventListener('load', () => {
+            document.querySelectorAll('.blood-type-card').forEach((card, index) => {
+                setTimeout(() => {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateY(20px)';
+                    card.style.transition = 'all 0.5s ease';
+
+                    setTimeout(() => {
+                        card.style.opacity = '1';
+                        card.style.transform = 'translateY(0)';
+                    }, 100);
+                }, index * 100);
+            });
+        });
+    </script>
+</body>
+</html>
