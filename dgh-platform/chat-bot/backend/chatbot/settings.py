@@ -14,6 +14,9 @@ from pathlib import Path
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
+from decouple import config, Csv
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env.local")
@@ -31,10 +34,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-33to=5(q$d6gsy7=tv_qay*uxq9^uax%rjrvqd98^1r$qyd=y_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    'high5-code2care.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '.onrender.com',
+    'https://chat2care.vercel.app'
+]
 
 # Application definition
 
@@ -45,12 +53,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
     'app',
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -58,6 +67,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'chatbot.urls'
@@ -82,21 +92,56 @@ WSGI_APPLICATION = 'chatbot.wsgi.application'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://172.20.10.4:3000",  # Ajoute cette ligne !
+    "http://172.20.10.4:3000",
+    "https://high5-code2care-chatbot-claude-djiojps-projects.vercel.app",
+    "https://high-5-chat2care.vercel.app",
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'chat2care',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+# Configuration de base de données
+if 'DATABASE_URL' in os.environ:
+    # Configuration pour production (Render)
+    DATABASES = {
+        'default': dj_database_url.parse(
+            os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    # Configuration pour développement local
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': 'chat2care',
+            'USER': 'chat2care_user',
+            'PASSWORD': '97aDM9zUptGUJYiTVaFJUNkDxZQ4nRr7',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
 
 
 # Password validation
@@ -134,7 +179,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
