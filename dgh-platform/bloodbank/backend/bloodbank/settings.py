@@ -59,11 +59,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    # Add your local apps here
-    # 'bloodbank',
-    # 'inventory',
-    # 'donors',
-    # etc.
+    'app',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
