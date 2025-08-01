@@ -6,8 +6,10 @@ import { ThemeProvider } from "@/lib/theme-context"
 import { AuthProvider } from "@/lib/auth-context"
 import { ConversationProvider } from "@/lib/conversation-context"
 import { FilesProvider } from "@/lib/files-context"
+
 import { ErrorBoundary } from "@/components/error-boundary"
 import { LoadingSpinner } from "@/components/loading-spinner"
+
 
 // Lazy loading des composants pour réduire le bundle initial
 const Sidebar = dynamic(() => import("@/components/sidebar").then(mod => ({ default: mod.Sidebar })), {

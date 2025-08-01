@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Search, MessageSquare, Star, ThumbsUp, ThumbsDown, Globe, Calendar, Reply, Archive, Flag } from "lucide-react"
 
-export function PatientFeedback() {
+export default function PatientFeedback() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [themeFilter, setThemeFilter] = useState("all")

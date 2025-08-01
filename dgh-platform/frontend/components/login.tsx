@@ -3,38 +3,46 @@
 import React, { useState } from "react"
 import { useTheme } from "next-themes"
 import Image from "next/image"
+import Link from "next/link" // Importation de Link pour la navigation
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Eye, EyeOff, Lock, User, Sun, Moon, Stethoscope } from "lucide-react"
+// Ajout de l'icône ArrowLeft pour le bouton de retour
+import { Eye, EyeOff, Lock, User, Sun, Moon, Stethoscope, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import type { Professional } from "@/types/medical"
 
-interface LoginProps {
-  onLogin?: (userData: Professional) => void
-}
-
-export function Login({ onLogin }: LoginProps) {
+// La prop onLogin n'est plus nécessaire, ce qui rend le composant plus simple.
+export function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const { theme, setTheme } = useTheme()
-  const { login, isLoading, error, professional } = useAuth()
+  const { login, isLoading, error } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const success = await login(username, password)
-    if (success && onLogin && professional) {
-      onLogin(professional)
-    }
+    // La redirection est maintenant gérée par la page qui utilise ce composant.
+    await login(username, password)
   }
 
   return (
       <div className="min-h-screen flex items-center justify-center medical-gradient p-4">
         <div className="absolute inset-0 bg-black/20"></div>
+
+        {/* Bouton de retour vers la page d'accueil */}
+        <Button
+            variant="outline"
+            size="sm"
+            asChild // Permet au bouton de se comporter comme un lien
+            className="absolute top-4 left-4 z-10 glass-effect border-white/20 text-white hover:bg-white/10"
+        >
+          <Link href="/" aria-label="Retour à la page d'accueil">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+        </Button>
 
         {/* Theme Toggle */}
         <Button

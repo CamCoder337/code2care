@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 
-export function Appointments() {
+export default function Appointments() {
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedDate, setSelectedDate] = useState<Date>()
     const [statusFilter, setStatusFilter] = useState("all")

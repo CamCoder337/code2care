@@ -1,7 +1,9 @@
 // File: lib/files-context.tsx
 "use client"
 
+
 import React, { createContext, useContext, useState, useCallback } from "react"
+
 
 interface FileData {
   id: string
@@ -25,6 +27,7 @@ const FilesContext = createContext<FilesContextType | undefined>(undefined)
 
 export function FilesProvider({ children }: { children: React.ReactNode }) {
   const [files, setFiles] = useState<FileData[]>([])
+
 
   const addFile = useCallback(async (file: File, conversationId: string): Promise<FileData> => {
     return new Promise((resolve) => {
