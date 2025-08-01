@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -16,95 +17,91 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Users, Search, Filter, UserPlus, Phone, CalendarIcon, Droplets, Heart, Eye, Trash2, Edit, Loader2, AlertTriangle } from "lucide-react"
-import { useDonors, useCreateDonor, useUpdateDonor, useDeleteDonor } from "@/lib/hooks/useApi"
-import { toast } from "sonner"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Users, Search, Filter, UserPlus, Phone, CalendarIcon, Droplets, Heart, Eye, CalendarDays } from "lucide-react"
 
 export function Donors() {
-  // State management
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBloodType, setFilterBloodType] = useState("all")
   const [filterGender, setFilterGender] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [dateFrom, setDateFrom] = useState<Date>()
+  const [dateTo, setDateTo] = useState<Date>()
   const [showAddDonor, setShowAddDonor] = useState(false)
-  const [editingDonor, setEditingDonor] = useState(null)
-  const [deletingDonor, setDeletingDonor] = useState(null)
-  const [currentPage, setCurrentPage] = useState(1)
   const [newDonor, setNewDonor] = useState({
-    first_name: "",
-    last_name: "",
-    blood_type: "",
-    phone_number: "",
-    date_of_birth: "",
+    firstName: "",
+    lastName: "",
+    bloodType: "",
+    phone: "",
+    dateOfBirth: "",
     gender: "",
-    address: "",
   })
 
-  // API Hooks
-  const {
-    data: donorsData,
-    isLoading: loading,
-    error,
-    refetch
-  } = useDonors({
-    search: searchTerm || undefined,
-    blood_type: filterBloodType !== "all" ? filterBloodType : undefined,
-    gender: filterGender !== "all" ? filterGender : undefined,
-    page: currentPage,
-    page_size: 20,
-  })
+  const donors = [
+    {
+      id: "D001",
+      firstName: "John",
+      lastName: "Doe",
+      bloodType: "O+",
+      phone: "+1234567890",
+      dateOfBirth: "1985-03-15",
+      gender: "M",
+      lastDonation: "2024-01-15",
+      totalDonations: 12,
+      status: "Active",
+    },
+    {
+      id: "D002",
+      firstName: "Jane",
+      lastName: "Smith",
+      bloodType: "A+",
+      phone: "+1234567891",
+      dateOfBirth: "1990-07-22",
+      gender: "F",
+      lastDonation: "2024-01-10",
+      totalDonations: 8,
+      status: "Active",
+    },
+    {
+      id: "D003",
+      firstName: "Michael",
+      lastName: "Johnson",
+      bloodType: "B-",
+      phone: "+1234567892",
+      dateOfBirth: "1988-11-03",
+      gender: "M",
+      lastDonation: "2023-12-20",
+      totalDonations: 15,
+      status: "Active",
+    },
+    {
+      id: "D004",
+      firstName: "Sarah",
+      lastName: "Williams",
+      bloodType: "AB+",
+      phone: "+1234567893",
+      dateOfBirth: "1992-05-18",
+      gender: "F",
+      lastDonation: "2024-01-20",
+      totalDonations: 6,
+      status: "Active",
+    },
+    {
+      id: "D005",
+      firstName: "David",
+      lastName: "Brown",
+      bloodType: "O-",
+      phone: "+1234567894",
+      dateOfBirth: "1987-09-12",
+      gender: "M",
+      lastDonation: "2023-12-15",
+      totalDonations: 20,
+      status: "Inactive",
+    },
+  ]
 
-  const createDonorMutation = useCreateDonor({
-    onSuccess: () => {
-      setShowAddDonor(false)
-      setNewDonor({
-        first_name: "",
-        last_name: "",
-        blood_type: "",
-        phone_number: "",
-        date_of_birth: "",
-        gender: "",
-        address: "",
-      })
-      refetch()
-    }
-  })
-
-  const updateDonorMutation = useUpdateDonor({
-    onSuccess: () => {
-      setEditingDonor(null)
-      refetch()
-    }
-  })
-
-  const deleteDonorMutation = useDeleteDonor({
-    onSuccess: () => {
-      setDeletingDonor(null)
-      refetch()
-    }
-  })
-
-  // Extract data with fallbacks
-  const donors = donorsData?.results || []
-  const totalCount = donorsData?.count || 0
-  const totalPages = Math.ceil(totalCount / 20)
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, filterBloodType, filterGender, filterStatus])
-
-  const calculateAge = (dateOfBirth) => {
+  const calculateAge = (dateOfBirth: string) => {
     const today = new Date()
     const birthDate = new Date(dateOfBirth)
     let age = today.getFullYear() - birthDate.getFullYear()
@@ -115,114 +112,42 @@ export function Donors() {
     return age
   }
 
-  const getStatusBadge = (donorData) => {
-    const lastDonation = donorData.last_donation_date
-    if (!lastDonation) {
-      return <Badge className="bg-gray-100 text-gray-700 border-gray-200 font-medium">New</Badge>
-    }
-
-    const daysSinceLastDonation = Math.floor((new Date().getTime() - new Date(lastDonation).getTime()) / (1000 * 60 * 60 * 24))
-
-    if (daysSinceLastDonation <= 56) {
-      return <Badge className="bg-orange-100 text-orange-700 border-orange-200 font-medium">Waiting Period</Badge>
-    } else if (daysSinceLastDonation <= 180) {
-      return <Badge className="bg-green-100 text-green-700 border-green-200 font-medium">Active</Badge>
-    } else {
-      return <Badge className="bg-gray-100 text-gray-700 border-gray-200 font-medium">Inactive</Badge>
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "Active":
+        return <Badge className="bg-green-100 text-green-700 border-green-200 font-medium">Active</Badge>
+      case "Inactive":
+        return <Badge className="bg-gray-100 text-gray-700 border-gray-200 font-medium">Inactive</Badge>
+      default:
+        return <Badge>Unknown</Badge>
     }
   }
 
-  const getDonorLevel = (donations) => {
+  const getDonorLevel = (donations: number) => {
     if (donations >= 20) return { level: "Gold", color: "text-yellow-600", icon: "🏆" }
     if (donations >= 10) return { level: "Silver", color: "text-gray-600", icon: "🥈" }
     if (donations >= 5) return { level: "Bronze", color: "text-orange-600", icon: "🥉" }
     return { level: "New", color: "text-blue-600", icon: "⭐" }
   }
 
-  // Calculate stats from current data
   const donorStats = [
-    {
-      label: "Total Donors",
-      value: totalCount.toLocaleString(),
-      change: "+8%",
-      icon: Users,
-      color: "text-blue-600"
-    },
-    {
-      label: "Active Donors",
-      value: donors.filter(d => {
-        const lastDonation = d.last_donation_date
-        if (!lastDonation) return false
-        const daysSince = Math.floor((new Date().getTime() - new Date(lastDonation).getTime()) / (1000 * 60 * 60 * 24))
-        return daysSince > 56 && daysSince <= 180
-      }).length.toLocaleString(),
-      change: "+12%",
-      icon: Heart,
-      color: "text-green-600"
-    },
-    {
-      label: "New This Month",
-      value: donors.filter(d => {
-        if (!d.created_at) return false
-        const createdDate = new Date(d.created_at)
-        const thisMonth = new Date()
-        thisMonth.setDate(1)
-        return createdDate >= thisMonth
-      }).length.toLocaleString(),
-      change: "+24%",
-      icon: UserPlus,
-      color: "text-teal-600"
-    },
+    { label: "Total Donors", value: "3,456", change: "+8%", icon: Users, color: "text-blue-600" },
+    { label: "Active Donors", value: "2,890", change: "+12%", icon: Heart, color: "text-green-600" },
+    { label: "New This Month", value: "156", change: "+24%", icon: UserPlus, color: "text-teal-600" },
   ]
 
   const handleAddDonor = () => {
-    if (!newDonor.first_name || !newDonor.last_name || !newDonor.blood_type || !newDonor.date_of_birth) {
-      toast.error("Veuillez remplir tous les champs obligatoires")
-      return
-    }
-
-    createDonorMutation.mutate(newDonor)
-  }
-
-  const handleUpdateDonor = (donorData) => {
-    if (!donorData.first_name || !donorData.last_name || !donorData.blood_type) {
-      toast.error("Veuillez remplir tous les champs obligatoires")
-      return
-    }
-
-    updateDonorMutation.mutate({
-      donorId: donorData.donor_id,
-      donor: donorData
+    // Add donor logic here
+    console.log("Adding donor:", newDonor)
+    setShowAddDonor(false)
+    setNewDonor({
+      firstName: "",
+      lastName: "",
+      bloodType: "",
+      phone: "",
+      dateOfBirth: "",
+      gender: "",
     })
-  }
-
-  const handleDeleteDonor = () => {
-    if (deletingDonor) {
-      deleteDonorMutation.mutate(deletingDonor.donor_id)
-    }
-  }
-
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage)
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-        <div className="p-8 flex items-center justify-center">
-          <Card className="max-w-md">
-            <CardContent className="p-6 text-center">
-              <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              <p className="text-red-600 mb-4">Erreur lors du chargement des donneurs</p>
-              <p className="text-sm text-gray-600 mb-4">{error.message || error}</p>
-              <Button onClick={() => refetch()}>
-                Réessayer
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -251,49 +176,39 @@ export function Donors() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="first_name">First Name *</Label>
+                    <Label htmlFor="firstName">First Name</Label>
                     <Input
-                      id="first_name"
-                      value={newDonor.first_name}
-                      onChange={(e) => setNewDonor({ ...newDonor, first_name: e.target.value })}
+                      id="firstName"
+                      value={newDonor.firstName}
+                      onChange={(e) => setNewDonor({ ...newDonor, firstName: e.target.value })}
                       className="mt-1 rounded-xl"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="last_name">Last Name *</Label>
+                    <Label htmlFor="lastName">Last Name</Label>
                     <Input
-                      id="last_name"
-                      value={newDonor.last_name}
-                      onChange={(e) => setNewDonor({ ...newDonor, last_name: e.target.value })}
+                      id="lastName"
+                      value={newDonor.lastName}
+                      onChange={(e) => setNewDonor({ ...newDonor, lastName: e.target.value })}
                       className="mt-1 rounded-xl"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="phone_number">Phone Number</Label>
+                    <Label htmlFor="phone">Phone Number</Label>
                     <Input
-                      id="phone_number"
-                      value={newDonor.phone_number}
-                      onChange={(e) => setNewDonor({ ...newDonor, phone_number: e.target.value })}
-                      className="mt-1 rounded-xl"
-                      placeholder="+237..."
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={newDonor.address}
-                      onChange={(e) => setNewDonor({ ...newDonor, address: e.target.value })}
+                      id="phone"
+                      value={newDonor.phone}
+                      onChange={(e) => setNewDonor({ ...newDonor, phone: e.target.value })}
                       className="mt-1 rounded-xl"
                     />
                   </div>
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="blood_type">Blood Type *</Label>
+                    <Label htmlFor="bloodType">Blood Type</Label>
                     <Select
-                      value={newDonor.blood_type}
-                      onValueChange={(value) => setNewDonor({ ...newDonor, blood_type: value })}
+                      value={newDonor.bloodType}
+                      onValueChange={(value) => setNewDonor({ ...newDonor, bloodType: value })}
                     >
                       <SelectTrigger className="mt-1 rounded-xl">
                         <SelectValue placeholder="Select blood type" />
@@ -326,12 +241,12 @@ export function Donors() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="date_of_birth">Date of Birth *</Label>
+                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
                     <Input
-                      id="date_of_birth"
+                      id="dateOfBirth"
                       type="date"
-                      value={newDonor.date_of_birth}
-                      onChange={(e) => setNewDonor({ ...newDonor, date_of_birth: e.target.value })}
+                      value={newDonor.dateOfBirth}
+                      onChange={(e) => setNewDonor({ ...newDonor, dateOfBirth: e.target.value })}
                       className="mt-1 rounded-xl"
                     />
                   </div>
@@ -343,17 +258,9 @@ export function Donors() {
                 </Button>
                 <Button
                   onClick={handleAddDonor}
-                  disabled={createDonorMutation.isPending}
                   className="bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl"
                 >
-                  {createDonorMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    "Add Donor"
-                  )}
+                  Add Donor
                 </Button>
               </div>
             </DialogContent>
@@ -400,7 +307,7 @@ export function Donors() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               <div className="lg:col-span-2">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -446,9 +353,33 @@ export function Donors() {
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Inactive">Inactive</SelectItem>
-                  <SelectItem value="New">New</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="flex space-x-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-xl border-gray-200 dark:border-gray-700 flex-1 bg-transparent"
+                    >
+                      <CalendarDays className="w-4 h-4 mr-2" />
+                      Date Range
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium">From Date</Label>
+                        <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">To Date</Label>
+                        <Calendar mode="single" selected={dateTo} onSelect={setDateTo} />
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -461,165 +392,200 @@ export function Donors() {
               Donor Directory
             </CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              Complete list of registered donors ({totalCount} total)
+              Complete list of registered donors
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {loading ? (
-              <div className="p-8 text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-                <p>Loading donors...</p>
-              </div>
-            ) : donors.length === 0 ? (
-              <div className="p-8 text-center">
-                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">No donors found</p>
-                <p className="text-gray-400 text-sm mt-2">Try adjusting your search or filters</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <div className="min-w-full">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-10 gap-4 p-4 bg-gray-50 dark:bg-gray-800 font-semibold text-gray-700 dark:text-gray-300 border-b">
-                      <div>Donor</div>
-                      <div>Blood Type</div>
-                      <div>Age</div>
-                      <div>Contact</div>
-                      <div>Last Donation</div>
-                      <div>Total Donations</div>
-                      <div>Level</div>
-                      <div>Status</div>
-                      <div className="col-span-2">Actions</div>
-                    </div>
-
-                    {/* Table Body */}
-                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {donors.map((donor, index) => {
-                        const donorLevel = getDonorLevel(donor.total_donations || 0)
-                        return (
-                          <div
-                            key={donor.donor_id}
-                            className="grid grid-cols-10 gap-4 p-4 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors animate-slide-in-right"
-                            style={{ animationDelay: `${index * 100}ms` }}
-                          >
-                            <div className="flex items-center space-x-3">
-                              <Avatar className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 shadow-lg">
-                                <AvatarFallback className="text-white font-semibold text-lg">
-                                  {donor.first_name?.[0]}
-                                  {donor.last_name?.[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-semibold text-gray-800 dark:text-white">
-                                  {donor.first_name} {donor.last_name}
-                                </div>
-                                <div className="text-sm text-gray-500 dark:text-gray-400">{donor.donor_id}</div>
-                              </div>
-                            </div>
-
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-100 dark:border-gray-800">
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Donor</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Blood Type</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Age</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Contact</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Last Donation</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Total Donations</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Level</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Status</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {donors.map((donor, index) => {
+                    const donorLevel = getDonorLevel(donor.totalDonations)
+                    return (
+                      <TableRow
+                        key={donor.id}
+                        className="animate-slide-in-right hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-gray-100 dark:border-gray-800"
+                        style={{ animationDelay: `${index * 100}ms` }}
+                      >
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 shadow-lg">
+                              <AvatarFallback className="text-white font-semibold text-lg">
+                                {donor.firstName[0]}
+                                {donor.lastName[0]}
+                              </AvatarFallback>
+                            </Avatar>
                             <div>
-                              <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-medium">
-                                <Droplets className="w-3 h-3 mr-1" />
-                                {donor.blood_type}
-                              </Badge>
+                              <div className="font-semibold text-gray-800 dark:text-white">
+                                {donor.firstName} {donor.lastName}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{donor.id}</div>
                             </div>
-
-                            <div className="text-gray-700 dark:text-gray-300">
-                              {donor.age || calculateAge(donor.date_of_birth)} years
-                            </div>
-
-                            <div className="flex items-center space-x-1">
-                              <Phone className="w-3 h-3 text-gray-400" />
-                              <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {donor.phone_number || 'N/A'}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center space-x-1">
-                              <CalendarIcon className="w-3 h-3 text-gray-400" />
-                              <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {donor.last_donation_date ? new Date(donor.last_donation_date).toLocaleDateString() : 'Never'}
-                              </span>
-                            </div>
-
-                            <div className="text-center">
-                              <div className="font-bold text-blue-600 text-lg">{donor.total_donations || 0}</div>
-                              <div className="text-xs text-gray-500">donations</div>
-                            </div>
-
-                            <div className="flex items-center space-x-1">
-                              <span className="text-lg">{donorLevel.icon}</span>
-                              <span className={`text-sm font-semibold ${donorLevel.color}`}>{donorLevel.level}</span>
-                            </div>
-
-                            <div>{getStatusBadge(donor)}</div>
-
-                            <div className="col-span-2 flex items-center space-x-2">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3 py-1 font-medium transition-all duration-300"
-                                  >
-                                    <Eye className="w-4 h-4 mr-1" />
-                                    View
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-2xl">
-                                  <DialogHeader>
-                                    <DialogTitle className="text-2xl font-bold text-blue-700">Donor Profile</DialogTitle>
-                                    <DialogDescription>
-                                      Complete information about {donor.first_name} {donor.last_name}
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                    <div className="space-y-4">
-                                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                                        <h3 className="font-semibold text-blue-700 mb-3">Personal Information</h3>
-                                        <div className="space-y-2 text-sm">
-                                          <div className="flex justify-between">
-                                            <span className="text-gray-600">Full Name:</span>
-                                            <span className="font-semibold">
-                                              {donor.first_name} {donor.last_name}
-                                            </span>
-                                          </div>
-                                          <div className="flex justify-between">
-                                            <span className="text-gray-600">Donor ID:</span>
-                                            <span className="font-semibold">{donor.donor_id}</span>
-                                          </div>
-                                          <div className="flex justify-between">
-                                            <span className="text-gray-600">Age:</span>
-                                            <span className="font-semibold">
-                                              {donor.age || calculateAge(donor.date_of_birth)} years
-                                            </span>
-                                          </div>
-                                          <div className="flex justify-between">
-                                            <span className="text-gray-600">Gender:</span>
-                                            <span className="font-semibold">
-                                              {donor.gender === "M" ? "Male" : "Female"}
-                                            </span>
-                                          </div>
-                                          <div className="flex justify-between">
-                                            <span className="text-gray-600">Date of Birth:</span>
-                                            <span className="font-semibold">{donor.date_of_birth}</span>
-                                          </div>
-                                          {donor.address && (
-                                            <div className="flex justify-between">
-                                              <span className="text-gray-600">Address:</span>
-                                              <span className="font-semibold">{donor.address}</span>
-                                            </div>
-                                          )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-medium">
+                            <Droplets className="w-3 h-3 mr-1" />
+                            {donor.bloodType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-gray-700 dark:text-gray-300">
+                          {calculateAge(donor.dateOfBirth)} years
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Phone className="w-3 h-3 text-gray-400" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{donor.phone}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <CalendarIcon className="w-3 h-3 text-gray-400" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{donor.lastDonation}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-center">
+                            <div className="font-bold text-blue-600 text-lg">{donor.totalDonations}</div>
+                            <div className="text-xs text-gray-500">donations</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-lg">{donorLevel.icon}</span>
+                            <span className={`text-sm font-semibold ${donorLevel.color}`}>{donorLevel.level}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(donor.status)}</TableCell>
+                        <TableCell>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 font-medium transition-all duration-300 hover:scale-105"
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle className="text-2xl font-bold text-blue-700">Donor Profile</DialogTitle>
+                                <DialogDescription>
+                                  Complete information about {donor.firstName} {donor.lastName}
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                    <h3 className="font-semibold text-blue-700 mb-3">Personal Information</h3>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Full Name:</span>
+                                        <span className="font-semibold">
+                                          {donor.firstName} {donor.lastName}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Donor ID:</span>
+                                        <span className="font-semibold">{donor.id}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Age:</span>
+                                        <span className="font-semibold">{calculateAge(donor.dateOfBirth)} years</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Gender:</span>
+                                        <span className="font-semibold">
+                                          {donor.gender === "M" ? "Male" : "Female"}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Date of Birth:</span>
+                                        <span className="font-semibold">{donor.dateOfBirth}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                                    <h3 className="font-semibold text-green-700 mb-3">Contact Information</h3>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-gray-600">Phone:</span>
+                                        <div className="flex items-center space-x-1">
+                                          <Phone className="w-4 h-4 text-green-600" />
+                                          <span className="font-semibold">{donor.phone}</span>
                                         </div>
                                       </div>
-                                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
-                                        <h3 className="font-semibold text-green-700 mb-3">Contact Information</h3>
-                                        <div className="space-y-2 text-sm">
-                                          <div className="flex justify-between items-center">
-                                            <span className="text-gray-600">Phone:</span>
-                                            <div className="flex items-center space-x-1">
-                                              <Phone className="w-4 h-4 text-green-600" />
-                                              <span className="font-semibold">{donor.phone_number || 'N/A'}</span>
-                                            </div>
-                                          </div>
-                                        </div
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl">
+                                    <h3 className="font-semibold text-red-700 mb-3">Blood Information</h3>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-gray-600">Blood Type:</span>
+                                        <Badge className="bg-red-100 text-red-700 font-semibold">
+                                          <Droplets className="w-3 h-3 mr-1" />
+                                          {donor.bloodType}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Total Donations:</span>
+                                        <span className="font-bold text-red-600 text-lg">{donor.totalDonations}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-gray-600">Last Donation:</span>
+                                        <div className="flex items-center space-x-1">
+                                          <CalendarIcon className="w-4 h-4 text-red-600" />
+                                          <span className="font-semibold">{donor.lastDonation}</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-gray-600">Donor Level:</span>
+                                        <div className="flex items-center space-x-1">
+                                          <span className="text-lg">{donorLevel.icon}</span>
+                                          <span className={`font-semibold ${donorLevel.color}`}>
+                                            {donorLevel.level}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
+                                    <h3 className="font-semibold text-yellow-700 mb-3">Status</h3>
+                                    <div className="flex items-center justify-center">
+                                      <Heart className="w-5 h-5 text-yellow-600 mr-2" />
+                                      <span className="font-semibold text-lg">{donor.status}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
