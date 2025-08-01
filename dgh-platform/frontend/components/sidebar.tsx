@@ -32,9 +32,11 @@ interface MenuItem {
   href: string
 }
 
+// MODIFICATION 1: Ajout du champ 'username' à l'interface
 interface UserData {
   firstName: string
   lastName: string
+  username: string // Ajouté pour recevoir le nom d'utilisateur
   email?: string
   department: string
   avatarUrl?: string
@@ -76,7 +78,8 @@ export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }:
   }
 
   const userInitial = currentUser?.firstName?.[0]?.toUpperCase() || currentUser?.lastName?.[0]?.toUpperCase() || "U"
-  const userName = `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim() || "Utilisateur"
+  // MODIFICATION 2: Création du message d'accueil avec le nom d'utilisateur
+  const welcomeMessage = `Welcome, ${currentUser?.username || "Professional"}`
   const userDepartment = currentUser?.department || "Département inconnu"
 
   return (
@@ -142,8 +145,9 @@ export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }:
 
               {!collapsed && (
                   <div className="animate-fade-in min-w-0">
-                    <h3 className="font-semibold text-sm lg:text-base truncate" title={userName}>
-                      {userName}
+                    {/* MODIFICATION 3: Affichage du nouveau message d'accueil */}
+                    <h3 className="font-semibold text-sm lg:text-base truncate" title={welcomeMessage}>
+                      {welcomeMessage}
                     </h3>
                     <p
                         className="text-xs lg:text-sm text-muted-foreground flex items-center gap-1 truncate"

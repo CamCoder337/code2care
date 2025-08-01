@@ -123,10 +123,10 @@ export default function DashboardPage() {
             <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
                 <div className="min-w-0 flex-1">
                     <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
-                        {`Good morning, Dr. ${professional?.last_name || "Utilisateur"}`}
+                        {`Welcome, ${professional?.username || "Professional"}`}
                     </h1>
                     <p className="text-muted-foreground mt-1 sm:mt-2 text-xs sm:text-sm lg:text-base xl:text-lg">
-                        {"Here's what's happening today"}
+                        {"Voici ce qui se passe aujourd'hui"}
                     </p>
                 </div>
                 <Button className="btn-responsive bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 gap-1 sm:gap-2 w-full sm:w-auto">

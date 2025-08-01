@@ -52,10 +52,11 @@ function ProfessionalAuthGuard({ children }: { children: ReactNode }) {
         // le changement de `isAuthenticated`.
     }
 
-    // Prépare les données utilisateur pour la Sidebar.
+    // MODIFICATION: Ajout du 'username' à l'objet passé à la Sidebar.
     const currentUser = {
         firstName: professional?.first_name || "Dr.",
         lastName: professional?.last_name || "Utilisateur",
+        username: professional?.username || "professional", // Ajout crucial
         department: professional?.specialization || "Spécialité",
         avatarUrl: "", // Vous pouvez ajouter une URL d'avatar si elle est disponible.
     }

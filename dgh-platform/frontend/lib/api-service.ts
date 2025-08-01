@@ -1,64 +1,90 @@
 // Fichier : lib/api-service.ts
 
-// --- Configuration ---
 const API_BASE_URL = "https://high5-gateway.onrender.com/api/v1";
 
-// --- Interfaces (Types de données) ---
-// Décrit la structure d'un département reçu de l'API
 export interface Department {
     id: string;
     name: string;
 }
 
-// Décrit la structure des données à envoyer pour un feedback
 export interface FeedbackPayload {
-    departmentId: string;
+    department_id: string;
     rating: number;
-    comment: string; // Le commentaire final, déjà traduit en anglais
+    description: string;
+    language: 'fr' | 'en';
+    input_type: 'text' | 'voice';
+    patient_id: string;
 }
 
-// --- Fonctions du Service ---
-
-/**
- * Récupère la liste de tous les départements.
- * @returns Une promesse qui résout avec un tableau de départements.
- * @throws Une erreur si la requête échoue.
- */
 async function getDepartments(): Promise<Department[]> {
     const response = await fetch(`${API_BASE_URL}/departments/`);
     if (!response.ok) {
-        throw new Error(`Failed to fetch departments: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Failed to fetch departments: ${response.status} - ${response.statusText}`, errorText);
+        throw new Error(`Failed to fetch departments: ${response.statusText || 'Unknown error'}. Server response: ${errorText.substring(0, 200)}...`);
     }
-    return response.json();
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+        console.error("API did not return an array for departments:", data);
+        throw new Error("API response for departments was not an array.");
+    }
+
+    const seen = new Set<string>();
+    const validDepartments: Department[] = [];
+
+    data.forEach((item: any) => {
+        // --- CRITICAL CORRECTION HERE ---
+        // Access 'department_id' directly from the item, as per your DB example
+        const id = item.department_id;
+        const name = item.name;
+
+        // Keep checks for string type, non-empty, and uniqueness
+        if (typeof id === 'string' && id.length > 0 && typeof name === 'string' && name.length > 0 && !seen.has(id)) {
+            validDepartments.push({ id, name });
+            seen.add(id);
+        } else {
+            // This detailed log will still help you if other issues arise
+            console.warn(`Skipping department due to invalid data or duplicate ID:`, {
+                item,
+                isStringId: typeof id === 'string',
+                idLength: id?.length,
+                isStringName: typeof name === 'string',
+                nameLength: name?.length,
+                isDuplicate: seen.has(id),
+                resolvedId: id,
+                resolvedName: name
+            });
+        }
+    });
+
+    return validDepartments;
 }
 
-/**
- * Soumet un nouveau feedback.
- * @param payload Les données du feedback à envoyer.
- * @returns Une promesse qui résout avec la réponse de l'API (souvent un message de succès).
- * @throws Une erreur si la requête échoue.
- */
-async function submitFeedback(payload: FeedbackPayload): Promise<any> {
-    // Note : L'URL exacte peut varier selon votre API, par ex. /feedback
-    const response = await fetch(`${API_BASE_URL}/feedbacks/`, { // Adaptez l'URL si besoin
+async function submitFeedback(payload: FeedbackPayload, token: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/feedbacks/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-        // Tente de lire le message d'erreur du corps de la réponse
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`Failed to submit feedback: ${errorData.message || response.statusText}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+        } catch (e) {
+            errorMessage = `Request failed with status: ${response.statusText} (${response.status})`;
+        }
+        throw new Error(errorMessage);
     }
     return response.json();
 }
 
-
-// --- Export ---
-// On exporte un objet contenant toutes nos fonctions pour un import facile
 export const apiService = {
     getDepartments,
     submitFeedback,

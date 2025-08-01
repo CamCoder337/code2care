@@ -1,8 +1,9 @@
 "use client"
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 
+// --- Re-add getCookie helper function ---
 /**
  * Helper function to read a cookie from the browser.
  * This is necessary to get the CSRF token that Django sets.
@@ -30,21 +31,20 @@ function getCookie(name: string): string | null {
   return cookieValue
 }
 
-// L'interface pour les données du patient, nous ajouterons les tokens
+
+// Interface for user data (without tokens)
 interface PatientUser {
   patient_id: string
   first_name: string
   last_name: string
-  phone_number: string
-  preferred_language: "en" | "fr" | "duala" | "bassa" | "ewondo"
-  email?: string
   username: string
-  access_token: string
-  refresh_token: string
+  email?: string
 }
 
+// Interface for the context, with accessToken at the top level
 interface PatientAuthContextType {
   patient: PatientUser | null
+  accessToken: string | null // The required property, now directly accessible
   login: (username: string, password: string) => Promise<PatientUser | null>
   logout: () => void
   isAuthenticated: boolean
@@ -56,29 +56,35 @@ const PatientAuthContext = createContext<PatientAuthContextType | undefined>(und
 
 export function PatientAuthProvider({ children }: { children: React.ReactNode }) {
   const [patient, setPatient] = useState<PatientUser | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
+  // On component mount, check for an existing session in localStorage
   useEffect(() => {
     try {
       const savedPatient = localStorage.getItem("patient")
-      if (savedPatient) {
+      const savedToken = localStorage.getItem("accessToken")
+
+      if (savedPatient && savedToken) {
         setPatient(JSON.parse(savedPatient))
+        setAccessToken(savedToken)
       }
     } catch (e) {
-      console.error("Failed to parse patient data from localStorage", e)
-      localStorage.removeItem("patient")
+      console.error("Failed to parse data from localStorage", e)
+      // Clear storage in case of corrupted data
+      localStorage.clear()
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  const login = async (username: string, password: string): Promise<PatientUser | null> => {
+  const login = useCallback(async (username: string, password: string): Promise<PatientUser | null> => {
     setIsLoading(true)
     setError(null)
-
     try {
-      // 1. Récupérer le jeton CSRF depuis les cookies
+      // --- Re-add CSRF token handling ---
       const csrftoken = getCookie("csrftoken")
 
       const headers: HeadersInit = {
@@ -86,68 +92,77 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
         Accept: "application/json",
       }
 
-      // 2. Ajouter le jeton CSRF aux en-têtes s'il existe
       if (csrftoken) {
         headers["X-CSRFToken"] = csrftoken
       }
+      // ----------------------------------
 
       const response = await fetch("https://high5-gateway.onrender.com/api/v1/auth/login/", {
         method: "POST",
-        headers: headers, // Utiliser les en-têtes dynamiques
+        headers: headers, // <-- Use the headers with CSRF token
         body: JSON.stringify({ username, password }),
       })
 
       const data = await response.json()
 
-      // 3. Améliorer la gestion des erreurs
       if (!response.ok) {
-        // Fournir un message plus clair pour les erreurs 401
+        // More specific error handling for 401
         if (response.status === 401) {
           throw new Error("Nom d'utilisateur ou mot de passe incorrect.")
         }
-        // Pour les autres erreurs, utiliser le détail de l'API si disponible
-        throw new Error(data.detail || `Une erreur est survenue: ${response.statusText}`)
+        throw new Error(data.detail || `An error occurred: ${response.statusText}`)
       }
 
-      // 4. Mappage des données de l'API vers notre interface PatientUser
+      // Separate user data from tokens
+      const userPayload = data.user
+      const newAccessToken = data.access
+      const newRefreshToken = data.refresh
+
       const patientData: PatientUser = {
-        patient_id: data.user.id,
-        first_name: data.user.first_name,
-        last_name: data.user.last_name,
-        phone_number: data.user.phone,
-        preferred_language: data.user.preferred_language || "fr",
-        email: data.user.email,
-        username: data.user.username,
-        access_token: data.access,
-        refresh_token: data.refresh,
+        patient_id: userPayload.id,
+        first_name: userPayload.first_name,
+        last_name: userPayload.last_name,
+        username: userPayload.username,
+        email: userPayload.email,
       }
 
+      // Update states separately
       setPatient(patientData)
+      setAccessToken(newAccessToken)
+
+      // Save to localStorage using separate keys
       localStorage.setItem("patient", JSON.stringify(patientData))
+      localStorage.setItem("accessToken", newAccessToken)
+      localStorage.setItem("refreshToken", newRefreshToken)
 
       return patientData
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Une erreur inconnue est survenue."
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred."
       setError(errorMessage)
-      console.error("Patient login failed:", errorMessage)
+      console.error("Patient login failed:", errorMessage) // Add more specific logging
       return null
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setPatient(null)
+    setAccessToken(null)
     localStorage.removeItem("patient")
-  }
+    localStorage.removeItem("accessToken")
+    localStorage.removeItem("refreshToken")
+    router.push("/")
+  }, [router])
 
   return (
       <PatientAuthContext.Provider
           value={{
             patient,
+            accessToken, // The token is now available here
             login,
             logout,
-            isAuthenticated: !!patient,
+            isAuthenticated: !!accessToken, // Authentication depends on the token's presence
             isLoading,
             error,
           }}
@@ -157,6 +172,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   )
 }
 
+// Custom hook to use the context
 export function usePatientAuth() {
   const context = useContext(PatientAuthContext)
   if (context === undefined) {

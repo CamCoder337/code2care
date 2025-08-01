@@ -1,206 +1,240 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useReducer, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Mic, StopCircle, Star, Send, Loader2, Type, Volume2, Languages, Building } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useLanguage } from "@/contexts/language-context";
-// This import must use curly braces to match the named export
-import { useDepartments } from "@/hooks/use-departments";
-import { apiService } from "@/lib/api-service";
+import { useLanguage } from "@/contexts/language-context"
+import { useDepartments } from "@/hooks/use-departments"
+import { apiService, FeedbackPayload } from "@/lib/api-service"
+import { usePatientAuth } from "@/components/patient-auth-context"
 
 
-// Le hook useDebounce reste inchangé
-function useDebounce(value: string, delay: number): string {
-  const [debouncedValue, setDebouncedValue] = useState(value)
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value)
-    }, delay)
-    return () => {
-      clearTimeout(handler)
-    }
-  }, [value, delay])
-  return debouncedValue
+interface FormState {
+  department: string;
+  rating: number;
+  originalText: string;
+  translatedText: string;
+  activeTab: "text" | "voice";
+  isSubmitting: boolean;
+  isRecognizing: boolean;
+  isTranslating: boolean;
 }
 
+const initialState: FormState = {
+  department: "",
+  rating: 0,
+  originalText: "",
+  translatedText: "",
+  activeTab: "text",
+  isSubmitting: false,
+  isRecognizing: false,
+  isTranslating: false,
+};
+
+type FormAction =
+    | { type: 'SET_FIELD'; field: keyof FormState; payload: any }
+    | { type: 'START_SUBMIT' }
+    | { type: 'SUBMIT_SUCCESS' }
+    | { type: 'SUBMIT_ERROR' }
+    | { type: 'RESET_TEXTS' };
+
+function formReducer(state: FormState, action: FormAction): FormState {
+  switch (action.type) {
+    case 'SET_FIELD':
+      return { ...state, [action.field]: action.payload };
+    case 'START_SUBMIT':
+      return { ...state, isSubmitting: true };
+    case 'SUBMIT_SUCCESS':
+      return { ...initialState };
+    case 'SUBMIT_ERROR':
+      return { ...state, isSubmitting: false };
+    case 'RESET_TEXTS':
+      return { ...state, originalText: "", translatedText: "" };
+    default:
+      return state;
+  }
+}
+
+function useDebounce(value: string, delay: number): string {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+
 export function FeedbackForm() {
-  const { t } = useLanguage()
-  const { toast } = useToast()
+  const { t } = useLanguage();
+  const { toast } = useToast();
+  // Retrieve accessToken AND patient from the authentication context
+  const { accessToken, patient } = usePatientAuth(); // <-- UPDATED LINE
 
-  // --- États du formulaire ---
-  const [department, setDepartment] = useState("")
-  const [rating, setRating] = useState(0)
-  const [originalText, setOriginalText] = useState("")
-  const [translatedText, setTranslatedText] = useState("")
-  const [activeTab, setActiveTab] = useState("text")
+  const [state, dispatch] = useReducer(formReducer, initialState);
+  const {
+    department, rating, originalText, translatedText, activeTab,
+    isSubmitting, isRecognizing, isTranslating
+  } = state;
 
-  // --- Logique de récupération des données via notre hook personnalisé ---
-  const { departments, isLoading: isLoadingDepartments, error: departmentError } = useDepartments()
+  const { departments, isLoading: isLoadingDepartments, error: departmentError } = useDepartments();
 
-  // --- États de chargement et d'enregistrement ---
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isRecognizing, setIsRecognizing] = useState(false)
-  const [isTranslating, setIsTranslating] = useState(false)
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const userStoppedRef = useRef(false);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
-  const userStoppedRef = useRef(false)
+  const debouncedOriginalText = useDebounce(originalText, 500);
 
-  const debouncedOriginalText = useDebounce(originalText, 500)
-
-  // --- Logique de traduction via notre API Route Next.js ---
   const handleTranslation = useCallback(
       async (textToTranslate: string) => {
         if (!textToTranslate.trim()) {
-          setTranslatedText("")
-          return
+          dispatch({ type: 'SET_FIELD', field: 'translatedText', payload: "" });
+          return;
         }
-        setIsTranslating(true)
+        dispatch({ type: 'SET_FIELD', field: 'isTranslating', payload: true });
         try {
           const response = await fetch("/api/translate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: textToTranslate }),
-          })
-          if (!response.ok) throw new Error("La requête de traduction a échoué")
-          const data = await response.json()
-          setTranslatedText(data.translatedText)
+          });
+          if (!response.ok) throw new Error("La requête de traduction a échoué");
+          const data = await response.json();
+          dispatch({ type: 'SET_FIELD', field: 'translatedText', payload: data.translatedText });
         } catch (error) {
-          console.error("Translation error:", error)
+          console.error("Translation error:", error);
           toast({
             title: "Erreur de traduction",
             description: "Le service de traduction n'a pas pu être atteint.",
             variant: "destructive",
-          })
+          });
         } finally {
-          setIsTranslating(false)
+          dispatch({ type: 'SET_FIELD', field: 'isTranslating', payload: false });
         }
       },
       [toast],
-  )
+  );
 
-  // Traduire le texte tapé (avec un délai)
   useEffect(() => {
     if (activeTab === "text" && !isRecognizing) {
-      handleTranslation(debouncedOriginalText)
+      handleTranslation(debouncedOriginalText);
     }
-  }, [debouncedOriginalText, handleTranslation, activeTab, isRecognizing])
+  }, [debouncedOriginalText, handleTranslation, activeTab, isRecognizing]);
 
-  // --- Logique de Reconnaissance Vocale ---
   const handleToggleRecording = () => {
     if (isRecognizing) {
-      userStoppedRef.current = true // L'utilisateur a cliqué sur "Stop"
-      recognitionRef.current?.stop()
-      return
+      userStoppedRef.current = true;
+      recognitionRef.current?.stop();
+      return;
     }
-
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast({
-        title: "Navigateur non compatible",
-        description: "La reconnaissance vocale n'est pas supportée par votre navigateur.",
-        variant: "destructive",
-      })
-      return
+      toast({ title: "Navigateur non compatible", description: "La reconnaissance vocale n'est pas supportée par votre navigateur.", variant: "destructive" });
+      return;
     }
-
-    const recognition = new SpeechRecognition()
-    recognitionRef.current = recognition
-
-    recognition.lang = ""
-    recognition.continuous = true
-    recognition.interimResults = true
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "";
+    recognition.continuous = true;
+    recognition.interimResults = true;
 
     recognition.onstart = () => {
-      userStoppedRef.current = false
-      setIsRecognizing(true)
-      setOriginalText("")
-      setTranslatedText("")
-    }
+      userStoppedRef.current = false;
+      dispatch({ type: 'SET_FIELD', field: 'isRecognizing', payload: true });
+      dispatch({ type: 'RESET_TEXTS' });
+    };
 
     recognition.onend = () => {
-      // Redémarre automatiquement si l'arrêt n'est pas manuel
       if (!userStoppedRef.current) {
-        recognitionRef.current?.start()
-        return
+        recognitionRef.current?.start();
+        return;
       }
-      setIsRecognizing(false)
-      // Traduire le texte final une fois l'enregistrement VRAIMENT terminé
-      handleTranslation(originalText)
-    }
+      dispatch({ type: 'SET_FIELD', field: 'isRecognizing', payload: false });
+      handleTranslation(originalText);
+    };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Speech recognition error:", event.error)
-      toast({
-        title: "Erreur de reconnaissance",
-        description: `Une erreur est survenue: ${event.error}. Veuillez vérifier les permissions de votre microphone.`,
-        variant: "destructive",
-      })
-      setIsRecognizing(false)
-    }
+      console.error("Speech recognition error:", event.error);
+      toast({ title: "Erreur de reconnaissance", description: `Une erreur est survenue: ${event.error}. Veuillez vérifier les permissions de votre microphone.`, variant: "destructive" });
+      dispatch({ type: 'SET_FIELD', field: 'isRecognizing', payload: false });
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Reconstruit la transcription complète à chaque événement pour plus de robustesse
-      const transcript = Array.from(event.results)
-          .map((result) => result[0])
-          .map((result) => result.transcript)
-          .join("")
-      setOriginalText(transcript)
-    }
+      const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join('');
+      dispatch({ type: 'SET_FIELD', field: 'originalText', payload: transcript });
+    };
 
-    recognition.start()
-  }
+    recognition.start();
+  };
 
-  // --- Logique de Soumission ---
+  const detectLanguage = (text: string): 'fr' | 'en' => {
+    const frenchChars = /[àâçéèêëîïôûùüÿ]/i;
+    return frenchChars.test(text) ? 'fr' : 'en';
+  };
+
   const handleSubmit = async () => {
     if (!department) {
-      toast({
-        title: "Formulaire incomplet",
-        description: "Veuillez sélectionner un département.",
-        variant: "destructive",
-      })
-      return
+      toast({ title: "Formulaire incomplet", description: "Veuillez sélectionner un département.", variant: "destructive" });
+      return;
+    }
+    if (!accessToken) {
+      toast({ title: "Erreur d'authentification", description: "Session invalide. Veuillez vous reconnecter.", variant: "destructive" });
+      return;
+    }
+    // Ensure patient data and patient_id are available
+    if (!patient || !patient.patient_id) { // <-- ADDED CHECK
+      toast({ title: "Erreur patient", description: "Les informations du patient sont manquantes. Veuillez vous reconnecter.", variant: "destructive" });
+      return;
     }
 
-    setIsSubmitting(true)
+    dispatch({ type: 'START_SUBMIT' });
 
-    const payload = {
-      departmentId: department,
+    const payload: FeedbackPayload = {
+      department_id: department,
       rating: rating,
-      comment: translatedText,
-    }
+      description: originalText,
+      language: detectLanguage(originalText),
+      input_type: activeTab,
+      patient_id: patient.patient_id, // <-- ADDED patient_id to the payload
+    };
 
     try {
-      // Appel propre à notre service API
-      await apiService.submitFeedback(payload)
+      await apiService.submitFeedback(payload, accessToken);
 
       toast({
-        title: t("feedback.feedback_sent"),
-        description: t("feedback.thank_you"),
-      })
+        title: "Merci pour votre retour !",
+        description: "Votre avis a été envoyé avec succès.",
+        variant: "default",
+        className: "bg-green-100 dark:bg-green-900 border-green-400",
+      });
 
-      // Réinitialisation du formulaire en cas de succès
-      setDepartment("")
-      setRating(0)
-      setOriginalText("")
-      setTranslatedText("")
+      dispatch({ type: 'SUBMIT_SUCCESS' });
+
     } catch (error) {
-      console.error("Submission error:", error)
+      console.error("Submission error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
       toast({
         title: "Erreur de soumission",
-        description: "Votre feedback n'a pas pu être envoyé. Veuillez réessayer.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
+        description: `Votre feedback n'a pas pu être envoyé. (${errorMessage})`,
+        variant: "destructive"
+      });
+      dispatch({ type: 'SUBMIT_ERROR' });
     }
-  }
+  };
+
+  const isFormInvalid = useMemo(() => {
+    // Also consider if patient_id is missing for form validity
+    return isSubmitting || isTranslating || isRecognizing || !department || (rating === 0 && !originalText.trim()) || !patient?.patient_id;
+  }, [isSubmitting, isTranslating, isRecognizing, department, rating, originalText, patient?.patient_id]); // <-- UPDATED DEPENDENCIES
 
   return (
       <div className="space-y-8">
@@ -215,7 +249,7 @@ export function FeedbackForm() {
           </CardHeader>
           <CardContent>
             <Select
-                onValueChange={setDepartment}
+                onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'department', payload: value })}
                 value={department}
                 disabled={isLoadingDepartments || !!departmentError}
             >
@@ -260,7 +294,7 @@ export function FeedbackForm() {
                       key={star}
                       variant="ghost"
                       size="sm"
-                      onClick={() => setRating(star)}
+                      onClick={() => dispatch({ type: 'SET_FIELD', field: 'rating', payload: star })}
                       className="p-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-all hover:scale-110"
                   >
                     <Star
@@ -272,10 +306,7 @@ export function FeedbackForm() {
               ))}
             </div>
             {rating > 0 && (
-                <Badge
-                    variant="secondary"
-                    className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
-                >
+                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200">
                   {rating} {rating > 1 ? t("feedback.stars") : t("feedback.star")}
                 </Badge>
             )}
@@ -283,7 +314,7 @@ export function FeedbackForm() {
         </Card>
 
         {/* Section de saisie du feedback */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'activeTab', payload: value as "text" | "voice" })} className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-white/60 dark:bg-gray-800/60">
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
@@ -324,11 +355,9 @@ export function FeedbackForm() {
                   </div>
               )}
               <Textarea
-                  placeholder={
-                    activeTab === "voice" ? "Votre message apparaîtra ici..." : t("feedback.placeholder")
-                  }
+                  placeholder={activeTab === "voice" ? "Votre message apparaîtra ici..." : t("feedback.placeholder")}
                   value={originalText}
-                  onChange={(e) => setOriginalText(e.target.value)}
+                  onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'originalText', payload: e.target.value })}
                   className="min-h-[150px] bg-white/80 dark:bg-gray-900/80"
                   readOnly={activeTab === "voice"}
               />
@@ -364,9 +393,7 @@ export function FeedbackForm() {
         {/* Bouton de soumission */}
         <Button
             onClick={handleSubmit}
-            disabled={
-                isSubmitting || isTranslating || isRecognizing || !department || (rating === 0 && !translatedText)
-            }
+            disabled={isFormInvalid}
             className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg py-6 text-lg font-medium"
             size="lg"
         >
