@@ -57,7 +57,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: "patients", label: "Patients", icon: Users, href: "/professional/patients" },
   { id: "appointments", label: "Appointments", icon: Calendar, href: "/professional/appointments" },
   { id: "prescriptions", label: "Prescriptions", icon: FileText, href: "/professional/prescriptions" },
-  { id: "patientfeedback", label: "Patient Feedback", icon: MessageSquare, href: "/professional/patientfeedback" },
+  // { id: "patientfeedback", label: "Patient Feedback", icon: MessageSquare, href: "/professional/patientfeedback" },
 ]
 
 export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }: SidebarProps) {
@@ -79,9 +79,10 @@ export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }:
 
   const userInitial = currentUser?.firstName?.[0]?.toUpperCase() || currentUser?.lastName?.[0]?.toUpperCase() || "U"
   // MODIFICATION 2: Création du message d'accueil avec le nom d'utilisateur
-  const welcomeMessage = `Welcome, ${currentUser?.username || "Professional"}`
+  // const welcomeMessage = `Welcome, ${currentUser?.username || "Professional"}`
+  const welcomeMessage = `Welcome, ${currentUser?.firstName || "Professional"}`
   const userDepartment = currentUser?.department || "Département inconnu"
-
+  // specialization: data.user.specialization,
   return (
       <>
         {/* Mobile Menu Button */}
@@ -146,8 +147,8 @@ export function Sidebar({ onLogout, currentUser, collapsed, onCollapsedChange }:
               {!collapsed && (
                   <div className="animate-fade-in min-w-0">
                     {/* MODIFICATION 3: Affichage du nouveau message d'accueil */}
-                    <h3 className="font-semibold text-sm lg:text-base truncate" title={welcomeMessage}>
-                      {welcomeMessage}
+                    <h3 className="font-semibold text-sm lg:text-base truncate" title={`Welcome, ${currentUser.firstName} ${currentUser.lastName}`}>
+                    {welcomeMessage}
                     </h3>
                     <p
                         className="text-xs lg:text-sm text-muted-foreground flex items-center gap-1 truncate"

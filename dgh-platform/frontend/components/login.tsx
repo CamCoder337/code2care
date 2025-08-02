@@ -9,11 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-// Ajout de l'icône ArrowLeft pour le bouton de retour
 import { Eye, EyeOff, Lock, User, Sun, Moon, Stethoscope, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
-// La prop onLogin n'est plus nécessaire, ce qui rend le composant plus simple.
 export function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [username, setUsername] = useState("")
