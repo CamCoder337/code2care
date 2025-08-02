@@ -321,3 +321,9 @@ class BulkRequestFulfillmentSerializer(serializers.Serializer):
         except BloodRequest.DoesNotExist:
             raise serializers.ValidationError("Demande introuvable")
         return value
+# Serializers pour les détails manquants
+class BloodRequestDetailAPIView(serializers.ModelSerializer):
+    """Détail d'une demande de sang"""
+    class Meta:
+        model = BloodRequest
+        fields = '__all__'

@@ -35,3 +35,62 @@ class APINotFoundMiddleware:
             'config': ['/config/system/'],
             'health': ['/health/']
         }
+
+    class TimeoutMiddleware:
+        def __init__(self, get_response):
+            self.get_response = get_response
+
+        def __call__(self, request):
+            # Timeout plus élevé pour les endpoints de forecasting
+            if '/forecasting/' in request.path:
+                import signal
+
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Request timeout")
+
+                # Timeout de 4 minutes pour forecasting
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(240)
+
+                try:
+                    response = self.get_response(request)
+                    signal.alarm(0)  # Annuler le timeout
+                    return response
+                except TimeoutError:
+                    signal.alarm(0)
+                    return JsonResponse(
+                        {'error': 'Request timeout - try again later'},
+                        status=408
+                    )
+
+            return self.get_response(request)
+
+
+class TimeoutMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Timeout plus élevé pour les endpoints de forecasting
+        if '/forecasting/' in request.path:
+            import signal
+
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Request timeout")
+
+            # Timeout de 4 minutes pour forecasting
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(240)
+
+            try:
+                response = self.get_response(request)
+                signal.alarm(0)  # Annuler le timeout
+                return response
+            except TimeoutError:
+                signal.alarm(0)
+                return JsonResponse(
+                    {'error': 'Request timeout - try again later'},
+                    status=408
+                )
+
+        return self.get_response(request)
