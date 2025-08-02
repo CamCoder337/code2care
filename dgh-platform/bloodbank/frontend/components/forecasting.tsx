@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useDemandForecast, useOptimizationRecommendations } from '@/lib/hooks/useApi'
 import {
   TrendingUp,
   Brain,
@@ -90,29 +89,43 @@ export default function EnhancedForecasting() {
   const [bloodType, setBloodType] = useState("O+")
   const [method, setMethod] = useState("auto")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [selectedView, setSelectedView] = useState("overview")
-    // Utiliser les vrais hooks API
-  const { data: forecastData, isLoading: forecastLoading, refetch: refetchForecast } = useDemandForecast({
-    blood_type: bloodType,
-    days: parseInt(timeRange),
-    method: method
-  })
+  const [forecastData, setForecastData] = useState(mockForecastData)
+  const [optimizationData, setOptimizationData] = useState(mockOptimizationData)
+  const [error, setError] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const { data: optimizationData, isLoading: optimizationLoading } = useOptimizationRecommendations()
-
-  // Transform predictions for chart
-
-
+  // Simulate API call
   const handleGenerateForecast = async () => {
     setIsGenerating(true)
+    setError(null)
     try {
-      await refetchForecast()
-    } catch (error) {
-      console.error('Error generating forecast:', error)
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // Generate new mock data based on selections
+      const newPredictions = Array.from({ length: parseInt(timeRange) }, (_, i) => ({
+        date: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        predicted_demand: Math.floor(Math.random() * 20) + 5,
+        confidence: 0.8 + Math.random() * 0.15
+      }))
+
+      setForecastData({
+        ...mockForecastData,
+        blood_type: bloodType,
+        forecast_period_days: parseInt(timeRange),
+        method_used: method === "auto" ? "stl_arima" : method,
+        predictions: newPredictions,
+        generated_at: new Date().toISOString()
+      })
+    } catch (err) {
+      setError("Failed to generate forecast. Using mock data.")
+      console.error("Forecast generation error:", err)
     } finally {
       setIsGenerating(false)
     }
   }
+
+  // Transform predictions for chart with null checks
   const chartData = useMemo(() => {
     if (!forecastData?.predictions) return []
 
@@ -121,12 +134,12 @@ export default function EnhancedForecasting() {
         day: '2-digit',
         month: '2-digit'
       }),
-      demand: pred.predicted_demand,
-      confidence: Math.round(pred.confidence * 100),
-      lower: forecastData.confidence_intervals?.lower[index] || pred.predicted_demand * 0.8,
-      upper: forecastData.confidence_intervals?.upper[index] || pred.predicted_demand * 1.2,
+      demand: pred.predicted_demand || 0,
+      confidence: Math.round((pred.confidence || 0) * 100),
+      lower: forecastData.confidence_intervals?.lower?.[index] || pred.predicted_demand * 0.8,
+      upper: forecastData.confidence_intervals?.upper?.[index] || pred.predicted_demand * 1.2,
       trend: index > 0 ?
-        (pred.predicted_demand > forecastData.predictions[index - 1].predicted_demand ? 'up' : 'down') :
+        ((pred.predicted_demand || 0) > (forecastData.predictions[index - 1].predicted_demand || 0) ? 'up' : 'down') :
         'stable'
     }))
   }, [forecastData])
@@ -151,7 +164,7 @@ export default function EnhancedForecasting() {
     {
       label: "Confidence Score",
       value: forecastData?.predictions ?
-        `${Math.round(forecastData.predictions.reduce((acc, p) => acc + p.confidence, 0) / forecastData.predictions.length * 100)}%` :
+        `${Math.round(forecastData.predictions.reduce((acc, p) => acc + (p.confidence || 0), 0) / forecastData.predictions.length * 100)}%` :
         "N/A",
       icon: BarChart3,
       color: "text-teal-600",
@@ -168,32 +181,21 @@ export default function EnhancedForecasting() {
     }
   ]
 
-const criticalAlerts = useMemo(() => {
+  const criticalAlerts = useMemo(() => {
     if (!forecastData?.predictions) return []
 
     return forecastData.predictions
-      .filter(pred => pred.predicted_demand > 15)
+      .filter(pred => (pred.predicted_demand || 0) > 15)
       .slice(0, 3)
       .map(pred => ({
         ...pred,
-        severity: pred.predicted_demand > 18 ? 'critical' : 'high',
-        message: `High demand predicted: ${pred.predicted_demand} units`
+        severity: (pred.predicted_demand || 0) > 18 ? 'critical' : 'high',
+        message: `High demand predicted: ${pred.predicted_demand || 0} units`
       }))
   }, [forecastData])
 
-    if (forecastLoading || optimizationLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-        <div className="p-6 flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-lg text-muted-foreground">Loading forecasting data...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  const safeForecastData = forecastData || mockForecastData
+  const safeOptimizationData = optimizationData || mockOptimizationData
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -240,6 +242,17 @@ const criticalAlerts = useMemo(() => {
             </Button>
           </div>
         </div>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert className="border-l-4 border-l-orange-500 bg-orange-50/80 backdrop-blur-sm">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertDescription>
+              <p className="font-medium text-orange-800">⚠️ API Connection Issue</p>
+              <p className="text-sm text-orange-700">{error}</p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* AI Metrics Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -353,7 +366,7 @@ const criticalAlerts = useMemo(() => {
                 <p className="font-medium text-red-800">⚠️ Critical Demand Alerts Detected</p>
                 {criticalAlerts.map((alert, index) => (
                   <div key={index} className="text-sm text-red-700">
-                    • {new Date(alert.date).toLocaleDateString('fr-FR')} - {alert.message} (Confidence: {Math.round(alert.confidence * 100)}%)
+                    • {new Date(alert.date).toLocaleDateString('fr-FR')} - {alert.message} (Confidence: {Math.round((alert.confidence || 0) * 100)}%)
                   </div>
                 ))}
               </div>
@@ -372,7 +385,7 @@ const criticalAlerts = useMemo(() => {
                   Demand Forecast - {bloodType}
                 </div>
                 <Badge className="bg-blue-100 text-blue-800">
-                  {forecastData.method_used.toUpperCase()}
+                  {(safeForecastData.method_used || "UNKNOWN").toUpperCase()}
                 </Badge>
               </CardTitle>
               <CardDescription>
@@ -454,23 +467,28 @@ const criticalAlerts = useMemo(() => {
               <div className="p-4 bg-gradient-to-r from-blue-50 to-teal-50 rounded-lg">
                 <h4 className="font-semibold text-blue-800 mb-2">Peak Demand</h4>
                 <p className="text-sm text-blue-700">
-                  Highest demand expected on {new Date(forecastData.predictions.reduce((max, p) =>
-                    p.predicted_demand > max.predicted_demand ? p : max
-                  ).date).toLocaleDateString('fr-FR')} with {Math.max(...forecastData.predictions.map(p => p.predicted_demand))} units
+                  Highest demand expected on {safeForecastData.predictions && safeForecastData.predictions.length > 0 ?
+                    new Date(safeForecastData.predictions.reduce((max, p) =>
+                      (p.predicted_demand || 0) > (max.predicted_demand || 0) ? p : max
+                    ).date).toLocaleDateString('fr-FR') : 'N/A'} with {safeForecastData.predictions ?
+                    Math.max(...safeForecastData.predictions.map(p => p.predicted_demand || 0)) : 0} units
                 </p>
               </div>
 
               <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
                 <h4 className="font-semibold text-green-800 mb-2">Trend Analysis</h4>
                 <p className="text-sm text-green-700">
-                  Overall trend: {forecastData.predictions[forecastData.predictions.length - 1].predicted_demand > forecastData.predictions[0].predicted_demand ? 'Increasing' : 'Decreasing'} demand pattern detected
+                  Overall trend: {safeForecastData.predictions && safeForecastData.predictions.length > 1 ?
+                    ((safeForecastData.predictions[safeForecastData.predictions.length - 1].predicted_demand || 0) >
+                     (safeForecastData.predictions[0].predicted_demand || 0)) ? 'Increasing' : 'Decreasing' : 'Stable'} demand pattern detected
                 </p>
               </div>
 
               <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg">
                 <h4 className="font-semibold text-purple-800 mb-2">Model Confidence</h4>
                 <p className="text-sm text-purple-700">
-                  High confidence predictions ({Math.round(forecastData.predictions.filter(p => p.confidence > 0.85).length / forecastData.predictions.length * 100)}% above 85%)
+                  High confidence predictions ({safeForecastData.predictions ?
+                    Math.round(safeForecastData.predictions.filter(p => (p.confidence || 0) > 0.85).length / safeForecastData.predictions.length * 100) : 0}% above 85%)
                 </p>
               </div>
 
@@ -497,15 +515,15 @@ const criticalAlerts = useMemo(() => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {forecastData?.predictions?.map((prediction, index) => {
-                const demand = prediction.predicted_demand
-                const confidence = prediction.confidence
+              {safeForecastData?.predictions?.map((prediction, index) => {
+                const demand = prediction.predicted_demand || 0
+                const confidence = prediction.confidence || 0
                 const isHighDemand = demand > 15
                 const isMediumDemand = demand > 8 && demand <= 15
 
                 return (
                   <Card
-                    key={`${prediction.date}-${index}`} // Ajout de la key
+                    key={`${prediction.date}-${index}`}
                     className={`transition-all duration-200 hover:scale-105 ${
                       isHighDemand 
                         ? 'border-l-4 border-l-red-500 bg-red-50/50' 
@@ -576,6 +594,42 @@ const criticalAlerts = useMemo(() => {
           </CardContent>
         </Card>
 
+        {/* Footer Information */}
+        <Card className="bg-gradient-to-r from-slate-50 to-blue-50 border-0 shadow-lg">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-white rounded-full shadow-sm">
+                  <Brain className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">AI Forecasting System</h3>
+                  <p className="text-sm text-slate-600">
+                    Last updated: {safeForecastData?.generated_at ?
+                      new Date(safeForecastData.generated_at).toLocaleString('fr-FR') :
+                      'N/A'
+                    }
+                  </p>
+                  <div className="flex items-center mt-1">
+                    <Globe className="w-4 h-4 mr-2" />
+                    <span className="text-sm text-slate-600">
+                      Enhanced AI: {safeForecastData?.enhanced_forecasting_available ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  System Operational
+                </Badge>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  Mock Data Mode
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Optimization Recommendations */}
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
           <CardHeader>
@@ -593,9 +647,9 @@ const criticalAlerts = useMemo(() => {
                   <BarChart3 className="w-4 h-4 mr-2" />
                   Blood Type Analysis
                 </h4>
-                {optimizationData?.blood_type_recommendations?.slice(0, 3).map((rec, index) => (
+                {safeOptimizationData?.blood_type_recommendations?.slice(0, 3).map((rec, index) => (
                   <div
-                    key={`${rec.blood_type}-${index}`} // Ajout de la key
+                    key={`${rec.blood_type}-${index}`}
                     className={`p-4 rounded-lg border-l-4 ${
                       rec.priority === 'critical' ? 'border-l-red-500 bg-red-50' :
                       rec.priority === 'high' ? 'border-l-orange-500 bg-orange-50' :
@@ -624,7 +678,7 @@ const criticalAlerts = useMemo(() => {
                         <span className="font-medium ml-2">{rec.days_of_supply} days</span>
                       </div>
                     </div>
-                    {rec.actions.length > 0 && (
+                    {rec.actions && rec.actions.length > 0 && (
                       <div className="mt-3 p-2 bg-white/70 rounded">
                         <p className="text-sm font-medium text-slate-700">
                           {rec.actions[0].message}
@@ -641,9 +695,9 @@ const criticalAlerts = useMemo(() => {
                   <Lightbulb className="w-4 h-4 mr-2" />
                   System Recommendations
                 </h4>
-                {optimizationData?.general_recommendations?.map((rec, index) => (
+                {safeOptimizationData?.general_recommendations?.map((rec, index) => (
                   <div
-                    key={`${rec.type}-${index}`} // Ajout de la key
+                    key={`${rec.type}-${index}`}
                     className={`p-4 rounded-lg border-l-4 ${
                       rec.priority === 'critical' ? 'border-l-red-500 bg-red-50' :
                       rec.priority === 'high' ? 'border-l-orange-500 bg-orange-50' :
@@ -653,7 +707,7 @@ const criticalAlerts = useMemo(() => {
                   >
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-sm font-medium text-slate-600 capitalize">
-                        {rec.type.replace('_', ' ')}
+                        {rec.type?.replace('_', ' ') || 'General'}
                       </span>
                       <Badge variant="outline" className={`${
                         rec.priority === 'critical' ? 'border-red-300 text-red-700' :
@@ -690,7 +744,7 @@ const criticalAlerts = useMemo(() => {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-teal-600">Forecast Accuracy:</span>
-                      <span className="font-medium ml-1">94.2%</span>
+                      <span className="font-medium ml-1">{safeForecastData.model_accuracy?.accuracy || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-teal-600">Response Time:</span>
@@ -725,11 +779,11 @@ const criticalAlerts = useMemo(() => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Overall Accuracy</span>
-                  <span className="font-semibold text-green-600">{forecastData.model_accuracy.accuracy}</span>
+                  <span className="font-semibold text-green-600">{safeForecastData.model_accuracy?.accuracy || 'N/A'}</span>
                 </div>
                 <Progress value={94.2} className="h-3" />
                 <p className="text-xs text-muted-foreground">
-                  Based on {forecastData.model_accuracy.samples} historical predictions
+                  Based on {safeForecastData.model_accuracy?.samples || 0} historical predictions
                 </p>
               </div>
 
@@ -737,7 +791,10 @@ const criticalAlerts = useMemo(() => {
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Method Effectiveness</span>
                   <span className="font-semibold text-blue-600">
-                    {forecastData.method_used.charAt(0).toUpperCase() + forecastData.method_used.slice(1)}
+                    {safeForecastData.method_used ?
+                      safeForecastData.method_used.charAt(0).toUpperCase() + safeForecastData.method_used.slice(1) :
+                      'Unknown'
+                    }
                   </span>
                 </div>
                 <Progress value={91.8} className="h-3" />
@@ -750,7 +807,8 @@ const criticalAlerts = useMemo(() => {
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Prediction Confidence</span>
                   <span className="font-semibold text-teal-600">
-                    {Math.round(forecastData.predictions.reduce((acc, p) => acc + p.confidence, 0) / forecastData.predictions.length * 100)}%
+                    {safeForecastData.predictions && safeForecastData.predictions.length > 0 ?
+                      Math.round(safeForecastData.predictions.reduce((acc, p) => acc + (p.confidence || 0), 0) / safeForecastData.predictions.length * 100) : 0}%
                   </span>
                 </div>
                 <Progress value={89.5} className="h-3" />
@@ -763,7 +821,7 @@ const criticalAlerts = useMemo(() => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Enhanced AI:</span>
                   <Badge className="bg-green-100 text-green-800">
-                    {forecastData.enhanced_forecasting_available ? "Available" : "Basic Mode"}
+                    {safeForecastData.enhanced_forecasting_available ? "Available" : "Basic Mode"}
                   </Badge>
                 </div>
               </div>
@@ -780,15 +838,15 @@ const criticalAlerts = useMemo(() => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {forecastData?.predictions?.slice(0, 5).map((prediction, index) => {
+                {safeForecastData?.predictions?.slice(0, 5).map((prediction, index) => {
                   const labels = ["Tomorrow", "Day After", "This Weekend", "Next Week", "Week 2"]
-                  const demand = prediction.predicted_demand
+                  const demand = prediction.predicted_demand || 0
                   const demandLevel = demand > 15 ? "High" : demand > 8 ? "Medium" : "Low"
                   const colorClass = demandLevel === "High" ? "red" : demandLevel === "Medium" ? "yellow" : "green"
 
                   return (
                     <div
-                      key={`timeline-${prediction.date}-${index}`} // Ajout de la key
+                      key={`timeline-${prediction.date}-${index}`}
                       className={`flex items-start space-x-3 p-3 rounded-lg transition-all hover:scale-102 ${
                         colorClass === "red"
                           ? "bg-red-50 hover:bg-red-100 border border-red-200"
@@ -835,7 +893,7 @@ const criticalAlerts = useMemo(() => {
                             "border-green-300 text-green-700"
                           }`}
                         >
-                          {Math.round(prediction.confidence * 100)}%
+                          {Math.round((prediction.confidence || 0) * 100)}%
                         </Badge>
                       </div>
                     </div>
@@ -859,33 +917,6 @@ const criticalAlerts = useMemo(() => {
             </CardContent>
           </Card>
         </div>
-
-        {/* Footer Information */}
-        <Card className="bg-gradient-to-r from-slate-50 to-blue-50 border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-white rounded-full shadow-sm">
-                  <Brain className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-800">AI Forecasting System</h3>
-                  <p className="text-sm text-slate-600">
-                    Last updated: {forecastData?.generated_at ?
-                      new Date(forecastData.generated_at).toLocaleString('fr-FR') :
-                      'N/A'
-                    }
-                  </p>
-
-                  <div className="flex items-center">
-                    <Globe className="w-4 h-4 mr-2" />
-                    Enhanced AI: {forecastData?.enhanced_forecasting_available ? 'Active' : 'Inactive'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
