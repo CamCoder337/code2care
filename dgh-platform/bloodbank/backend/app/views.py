@@ -21,7 +21,8 @@ import json
 import csv
 import io
 import logging
-from django.db.models import Count, Sum, Q, Avg, Extract
+from django.db.models import Count, Sum, Q, Avg
+from django.db.models.functions import Extract
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDay
 from django.utils import timezone
 from datetime import datetime, timedelta, date
