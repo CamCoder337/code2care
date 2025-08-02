@@ -66,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(null)
 
         try {
-            // 1. Récupérer le jeton CSRF depuis les cookies
             const csrftoken = getCookie("csrftoken")
 
             const headers: HeadersInit = {
@@ -74,14 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 Accept: "application/json",
             }
 
-            // 2. Ajouter le jeton CSRF aux en-têtes s'il existe
             if (csrftoken) {
                 headers["X-CSRFToken"] = csrftoken
             }
 
             const response = await fetch("https://high5-gateway.onrender.com/api/v1/auth/login/", {
                 method: "POST",
-                headers: headers, // Utiliser les en-têtes dynamiques
+                headers: headers,
                 body: JSON.stringify({
                     username,
                     password,
@@ -90,7 +88,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const data = await response.json()
 
-            // 3. Améliorer la gestion des erreurs
             if (!response.ok) {
                 if (response.status === 401) {
                     throw new Error("Nom d'utilisateur ou mot de passe incorrect.")
@@ -98,19 +95,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(data.detail || `Une erreur est survenue: ${response.statusText}`)
             }
 
+            // --- LA CORRECTION CLÉ EST ICI ---
+            // On lit les données depuis les bons objets (`profile`, `user`, `tokens`)
+            // conformément à la structure de votre API.
             const professionalData: Professional = {
-                professional_id: data.user.id,
-                first_name: data.user.first_name,
-                last_name: data.user.last_name,
-                date_of_birth: data.user.date_of_birth,
-                gender: data.user.gender,
-                specialization: data.user.specialization,
-                department_id: data.user.department_id,
-                email: data.user.email,
-                phone: data.user.phone,
-                username: data.user.username,
-                access_token: data.access,
-                refresh_token: data.refresh,
+                professional_id: data.profile.professional_id,
+                first_name: data.profile.first_name,
+                last_name: data.profile.last_name,
+                date_of_birth: data.profile.date_of_birth,
+                gender: data.profile.gender,
+                specialization: data.profile.specialization,
+                department_id: data.profile.department_id,
+                email: data.user.username, // L'email est le username dans l'objet `user`
+                phone: data.user.phone_number, // Le téléphone est dans l'objet `user`
+                username: data.user.username, // Le username est dans l'objet `user`
+                access_token: data.tokens.access, // Le jeton est dans l'objet `tokens`
+                refresh_token: data.tokens.refresh, // Le jeton est dans l'objet `tokens`
             }
 
             setProfessional(professionalData)
@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "An unknown error occurred"
             setError(errorMessage)
-            console.error("Login failed:", errorMessage) // Ce console.error est la source du message dans votre console
+            console.error("Login failed:", errorMessage)
             return null
         } finally {
             setIsLoading(false)

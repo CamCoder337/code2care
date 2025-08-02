@@ -1,7 +1,6 @@
 // Fichier : app/professional/login/page.tsx
 
 "use client"
-
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Login } from "@/components/login"
@@ -20,7 +19,5 @@ export default function LoginPage() {
         }
     }, [isAuthenticated, isLoading, router])
 
-    // Le composant Login n'a plus besoin de la prop `onLogin`.
-    // La page gère elle-même la redirection de manière réactive.
     return <Login />
 }

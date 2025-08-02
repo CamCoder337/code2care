@@ -5,7 +5,6 @@
 import { FeedbackForm } from "@/components/feedback-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Sparkles } from "lucide-react"
-// 1. Importer useRouter de next/navigation au lieu de next/link
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/contexts/language-context"
@@ -15,7 +14,6 @@ export default function FeedbackPage() {
   // const { t } = useLanguage()
   // 2. Initialiser le routeur
   const router = useRouter()
-
   return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-blue-950 dark:to-indigo-950">
         {/* Header */}
