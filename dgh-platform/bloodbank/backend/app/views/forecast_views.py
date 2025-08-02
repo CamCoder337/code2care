@@ -1,3 +1,4 @@
+
 # app/views/forecast_views.py (minimal pour éviter les erreurs)
 from rest_framework.views import APIView
 from rest_framework.response import Response
