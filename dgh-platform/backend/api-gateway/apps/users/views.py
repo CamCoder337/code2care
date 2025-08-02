@@ -1,7 +1,7 @@
 # api-gateway/apps/users/views.py
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
@@ -210,5 +210,66 @@ def logout_view(request):
         return Response(
             {"error": f"Invalid token: {str(e)}"},
             status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_summary="Liste des patients",
+    operation_description="Récupère la liste de tous les patients enregistrés",
+    responses={
+        200: openapi.Response(
+            description="Liste des patients récupérée avec succès",
+            schema=openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'patient_id': openapi.Schema(type=openapi.TYPE_STRING),
+                        'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                        'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                        'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                        'gender': openapi.Schema(type=openapi.TYPE_STRING),
+                        'preferred_language': openapi.Schema(type=openapi.TYPE_STRING),
+                        'preferred_contact_method': openapi.Schema(type=openapi.TYPE_STRING),
+                        'age': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'user': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_STRING),
+                                'username': openapi.Schema(type=openapi.TYPE_STRING),
+                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                                'user_type': openapi.Schema(type=openapi.TYPE_STRING),
+                                'is_verified': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                            }
+                        )
+                    }
+                )
+            )
+        ),
+        401: "Non autorisé - Token d'authentification requis"
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_patients(request):
+    """Endpoint pour lister tous les patients"""
+    try:
+        patients = Patient.objects.select_related('user').all().order_by('-user__created_at')
+        serializer = PatientSerializer(patients, many=True)
+        
+        logger.info(f"Patient list requested by user {request.user.username}")
+        
+        return Response({
+            'count': patients.count(),
+            'patients': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error listing patients: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération des patients'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
