@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LanguageSelector } from "@/components/language-selector"
 import { useLanguage } from "@/lib/i18n"
+import { useTheme } from "next-themes"
+import Image from "next/image"
 import {
   LayoutDashboard,
   Droplets,
@@ -32,7 +34,8 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen }: SidebarProps) {
   const { t } = useLanguage()
-  const [darkMode, setDarkMode] = useState(false)
+  const { theme, setTheme } = useTheme()
+
 
   const menuItems = [
     {
@@ -216,11 +219,15 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
             {/* Mode Sombre Toggle */}
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 px-3 py-2 text-gray-300 hover:text-white hover:bg-slate-700/50"
-              onClick={() => setDarkMode(!darkMode)}
+              className="w-full justify-start gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-300 group"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-400" />}
-              <span className="font-medium">{darkMode ? "Mode Clair" : "Mode Sombre"}</span>
+              {theme === "dark" ? (
+                <Sun className="w-5 h-5 text-yellow-500 group-hover:text-yellow-600" />
+              ) : (
+                <Moon className="w-5 h-5 text-blue-500 group-hover:text-blue-600" />
+              )}
+              <span className="font-medium text-sm">{theme === "dark" ? "Mode Clair" : "Mode Sombre"}</span>
             </Button>
 
             {/* Déconnexion */}
