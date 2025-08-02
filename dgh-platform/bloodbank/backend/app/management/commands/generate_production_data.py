@@ -222,7 +222,6 @@ class Command(BaseCommand):
         ]
 
         batch_size = 1000
-        donors = []
 
         for i in range(0, count, batch_size):
             batch_donors = []
@@ -255,13 +254,14 @@ class Command(BaseCommand):
 
             # Insertion par lot
             Donor.objects.bulk_create(batch_donors, batch_size=1000)
-            donors.extend(batch_donors)
 
             if (i + batch_size) % 5000 == 0:
                 self.stdout.write(f'  💉 {i + batch_size:,} donneurs créés...')
 
-        self.stdout.write(f'  ✅ {len(donors):,} donneurs créés au total')
-        return Donor.objects.all()
+        # Return all donors from database (with IDs)
+        all_donors = list(Donor.objects.all())
+        self.stdout.write(f'  ✅ {len(all_donors):,} donneurs créés au total')
+        return all_donors
 
     def create_patients_batch(self, count):
         """Créer des patients par lots"""
@@ -274,7 +274,6 @@ class Command(BaseCommand):
         ]
 
         batch_size = 1000
-        patients = []
 
         for i in range(0, count, batch_size):
             batch_patients = []
@@ -298,18 +297,17 @@ class Command(BaseCommand):
                 ))
 
             Patient.objects.bulk_create(batch_patients, batch_size=1000)
-            patients.extend(batch_patients)
 
-        self.stdout.write(f'  ✅ {len(patients):,} patients créés')
-        return Patient.objects.all()
+        # Return all patients from database
+        all_patients = list(Patient.objects.all())
+        self.stdout.write(f'  ✅ {len(all_patients):,} patients créés')
+        return all_patients
 
     def create_blood_units_optimized(self, donors, sites, unit_count, days_history):
         """Créer les unités de sang de manière optimisée"""
-        blood_types = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
         start_date = date.today() - timedelta(days=days_history)
 
         batch_size = 500
-        all_donors = list(donors)
         all_sites = list(sites)
 
         records_created = 0
@@ -317,18 +315,15 @@ class Command(BaseCommand):
 
         for i in range(0, unit_count, batch_size):
             batch_records = []
-            batch_units = []
             current_batch_size = min(batch_size, unit_count - i)
 
             for j in range(current_batch_size):
-                unit_num = i + j + 1
-
                 # Date de collecte avec distribution réaliste
                 days_ago = int(np.random.exponential(30))
                 days_ago = min(days_ago, days_history)
                 collection_date = start_date + timedelta(days=random.randint(0, days_history - days_ago))
 
-                donor = random.choice(all_donors)
+                donor = random.choice(donors)
                 site = random.choice(all_sites)
 
                 # Créer le record
@@ -344,64 +339,54 @@ class Command(BaseCommand):
                 )
                 batch_records.append(record)
 
-                # Créer l'unité si valide
-                if screening_result == 'Valid':
-                    unit_id = f"UNIT{str(units_created + len(batch_units) + 1).zfill(8)}"
-                    volume_ml = random.randint(400, 500)
-                    hemoglobin = round(random.uniform(12.0, 18.0), 1)
-                    expiry_date = collection_date + timedelta(days=120)
-
-                    # Statut basé sur l'âge
-                    today = date.today()
-                    if expiry_date < today:
-                        status = 'Expired'
-                    elif collection_date < today - timedelta(days=90):
-                        status = random.choices(['Available', 'Used'], weights=[0.3, 0.7])[0]
-                    else:
-                        status = random.choices(['Available', 'Used'], weights=[0.8, 0.2])[0]
-
-                    # Note: Le donor et record seront liés après insertion
-                    unit = {
-                        'unit_id': unit_id,
-                        'donor_id': donor.id,
-                        'collection_date': collection_date,
-                        'volume_ml': volume_ml,
-                        'hemoglobin_g_dl': hemoglobin,
-                        'date_expiration': expiry_date,
-                        'status': status
-                    }
-                    batch_units.append(unit)
-
-            # Insertion par lots
+            # Insertion par lots des records
             BloodRecord.objects.bulk_create(batch_records, batch_size=500)
             records_created += len(batch_records)
 
-            # Lier les unités aux records créés
-            created_records = BloodRecord.objects.filter(
+            # Récupérer les records créés pour lier aux unités
+            created_records = list(BloodRecord.objects.filter(
                 record_id__in=[r.record_id for r in batch_records if r.screening_results == 'Valid']
-            )
+            ))
 
-            blood_units_to_create = []
-            for unit_data, record in zip(batch_units, created_records):
-                blood_units_to_create.append(BloodUnit(
-                    unit_id=unit_data['unit_id'],
-                    donor_id=unit_data['donor_id'],
+            # Créer les unités correspondantes
+            batch_units = []
+            for record in created_records:
+                # Trouver le donneur correspondant
+                donor = random.choice(donors)
+
+                unit_id = f"UNIT{str(units_created + len(batch_units) + 1).zfill(8)}"
+                volume_ml = random.randint(400, 500)
+                hemoglobin = round(random.uniform(12.0, 18.0), 1)
+                expiry_date = record.record_date + timedelta(days=120)
+
+                # Statut basé sur l'âge
+                today = date.today()
+                if expiry_date < today:
+                    status = 'Expired'
+                elif record.record_date < today - timedelta(days=90):
+                    status = random.choices(['Available', 'Used'], weights=[0.3, 0.7])[0]
+                else:
+                    status = random.choices(['Available', 'Used'], weights=[0.8, 0.2])[0]
+
+                batch_units.append(BloodUnit(
+                    unit_id=unit_id,
+                    donor=donor,
                     record=record,
-                    collection_date=unit_data['collection_date'],
-                    volume_ml=unit_data['volume_ml'],
-                    hemoglobin_g_dl=unit_data['hemoglobin_g_dl'],
-                    date_expiration=unit_data['date_expiration'],
-                    status=unit_data['status']
+                    collection_date=record.record_date,
+                    volume_ml=volume_ml,
+                    hemoglobin_g_dl=hemoglobin,
+                    date_expiration=expiry_date,
+                    status=status
                 ))
 
-            BloodUnit.objects.bulk_create(blood_units_to_create, batch_size=500)
-            units_created += len(blood_units_to_create)
+            BloodUnit.objects.bulk_create(batch_units, batch_size=500)
+            units_created += len(batch_units)
 
             if (i + batch_size) % 2500 == 0:
                 self.stdout.write(f'  🩸 {units_created:,} unités créées...')
 
         self.stdout.write(f'  ✅ {records_created:,} records et {units_created:,} unités créés')
-        return BloodUnit.objects.all()
+        return list(BloodUnit.objects.all())
 
     def create_historical_requests_optimized(self, departments, sites, blood_units, patients, days_history,
                                              requests_per_day):
@@ -425,7 +410,6 @@ class Command(BaseCommand):
             daily_requests = max(1, int(np.random.poisson(requests_per_day * day_factor)))
 
             batch_requests = []
-            batch_consumptions = []
 
             for _ in range(daily_requests):
                 department = random.choice(all_departments)
@@ -465,46 +449,49 @@ class Command(BaseCommand):
             requests_created += len(batch_requests)
 
             # Créer les consommations pour les demandes satisfaites
-            for request in batch_requests:
-                if request.status == 'Fulfilled':
-                    # Trouver des unités disponibles
-                    available_units = list(BloodUnit.objects.filter(
-                        donor__blood_type=request.blood_type,
-                        status='Available',
-                        collection_date__lte=current_date,
-                        date_expiration__gt=current_date
-                    )[:request.quantity])
+            batch_consumptions = []
+            created_requests = list(BloodRequest.objects.filter(
+                request_id__in=[r.request_id for r in batch_requests if r.status == 'Fulfilled']
+            ))
 
-                    for unit in available_units:
-                        patient = random.choice(all_patients)
-                        volume_transfused = random.randint(int(unit.volume_ml * 0.8), unit.volume_ml)
+            for request in created_requests:
+                # Trouver des unités disponibles
+                available_units = list(BloodUnit.objects.filter(
+                    donor__blood_type=request.blood_type,
+                    status='Available',
+                    collection_date__lte=current_date,
+                    date_expiration__gt=current_date
+                )[:request.quantity])
 
-                        consumption_date = current_date
-                        if random.random() < 0.3:
-                            consumption_date += timedelta(days=1)
+                for unit in available_units:
+                    patient = random.choice(all_patients)
+                    volume_transfused = random.randint(int(unit.volume_ml * 0.8), unit.volume_ml)
 
-                        batch_consumptions.append(BloodConsumption(
-                            request_id=request.request_id,  # Sera lié après insertion
-                            unit=unit,
-                            patient=patient,
-                            date=consumption_date,
-                            volume=volume_transfused
-                        ))
+                    consumption_date = current_date
+                    if random.random() < 0.3:
+                        consumption_date += timedelta(days=1)
 
-                        # Marquer l'unité comme utilisée
-                        unit.status = 'Used'
-                        unit.save()
+                    batch_consumptions.append(BloodConsumption(
+                        request=request,
+                        unit=unit,
+                        patient=patient,
+                        date=consumption_date,
+                        volume=volume_transfused
+                    ))
 
-            # Lier les consommations aux demandes créées
+                    # Marquer l'unité comme utilisée
+                    unit.status = 'Used'
+                    unit.save()
+
+            # Insertion des consommations
             if batch_consumptions:
-                # Cette partie nécessiterait une optimisation supplémentaire
-                # pour lier correctement les ForeignKeys
+                BloodConsumption.objects.bulk_create(batch_consumptions, batch_size=500)
                 consumptions_created += len(batch_consumptions)
 
             if day_offset % 30 == 0:
                 self.stdout.write(f'  📅 Jour {day_offset}/{days_history} - {requests_created:,} demandes créées')
 
-        self.stdout.write(f'  ✅ {requests_created:,} demandes créées')
+        self.stdout.write(f'  ✅ {requests_created:,} demandes et {consumptions_created:,} consommations créées')
 
     def create_advanced_forecasts(self):
         """Créer des prévisions avancées"""
