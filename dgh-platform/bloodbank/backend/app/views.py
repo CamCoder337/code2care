@@ -5,7 +5,6 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.core.cache import cache
 from django.core.paginator import Paginator
-
 from rest_framework.permissions import AllowAny
 from django.db.models import Count, Sum, Q, Avg
 from django.db import transaction
@@ -21,13 +20,14 @@ import json
 import csv
 import io
 import logging
+import time
 from django.db.models import Count, Sum, Q, Avg
 from django.db.models.functions import Extract
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDay
 from django.utils import timezone
 from datetime import datetime, timedelta, date
 from .decorators import global_allow_any
-
+from app.utils.cache_utils import safe_cache_get, safe_cache_set, cache_key_builder, cached_view
 # Imports conditionnels pour les bibliothèques ML
 try:
     import pandas as pd
@@ -150,139 +150,161 @@ class StandardResultsSetPagination(PageNumberPagination):
 @global_allow_any
 # ==================== DASHBOARD VIEWS ====================
 class DashboardOverviewAPIView(BaseAPIView):
-    """Vue principale du dashboard avec métriques temps réel - VERSION OPTIMISÉE"""
+    """Vue principale du dashboard avec métriques temps réel - VERSION OPTIMISÉE avec Redis"""
 
     def get(self, request):
-        cache_key = 'dashboard_overview'
-        data = cache.get(cache_key)
+        # Générer la clé de cache
+        cache_key = cache_key_builder('dashboard_overview')
 
-        if not data:
-            try:
-                # ==================== OPTIMISATION 1: Requêtes groupées ====================
-                # Une seule requête pour toutes les statistiques d'unités
-                unit_stats = BloodUnit.objects.aggregate(
-                    total=Count('unit_id'),
-                    available=Count('unit_id', filter=Q(status='Available')),
-                    expired=Count('unit_id', filter=Q(status='Expired')),
-                    used=Count('unit_id', filter=Q(status='Used')),
-                    expiring_soon=Count(
-                        'unit_id',
-                        filter=Q(
-                            status='Available',
-                            date_expiration__lte=timezone.now().date() + timedelta(days=7)
-                        )
+        # Tenter de récupérer depuis le cache
+        cached_result = safe_cache_get(cache_key)
+        if cached_result:
+            logger.info("Dashboard overview served from Redis cache")
+            return Response(cached_result)
+
+        try:
+            # Votre logique existante pour générer les données
+            start_time = time.time()
+
+            # ==================== OPTIMISATION 1: Requêtes groupées ====================
+            # Une seule requête pour toutes les statistiques d'unités
+            unit_stats = BloodUnit.objects.aggregate(
+                total=Count('unit_id'),
+                available=Count('unit_id', filter=Q(status='Available')),
+                expired=Count('unit_id', filter=Q(status='Expired')),
+                used=Count('unit_id', filter=Q(status='Used')),
+                expiring_soon=Count(
+                    'unit_id',
+                    filter=Q(
+                        status='Available',
+                        date_expiration__lte=timezone.now().date() + timedelta(days=7)
                     )
                 )
+            )
 
-                # ==================== OPTIMISATION 2: Stock par groupe sanguin optimisé ====================
-                stock_by_blood_type = list(
-                    BloodUnit.objects.filter(status='Available')
-                    .select_related('donor')  # Éviter les requêtes N+1
-                    .values('donor__blood_type')
-                    .annotate(
-                        count=Count('unit_id'),
-                        total_volume=Sum('volume_ml')
-                    )
-                    .order_by('donor__blood_type')
+            # ==================== OPTIMISATION 2: Stock par groupe sanguin optimisé ====================
+            stock_by_blood_type = list(
+                BloodUnit.objects.filter(status='Available')
+                .select_related('donor')  # Éviter les requêtes N+1
+                .values('donor__blood_type')
+                .annotate(
+                    count=Count('unit_id'),
+                    total_volume=Sum('volume_ml')
                 )
+                .order_by('donor__blood_type')
+            )
 
-                # ==================== OPTIMISATION 3: Requêtes de demandes groupées ====================
-                request_stats = BloodRequest.objects.aggregate(
-                    pending=Count('request_id', filter=Q(status='Pending')),
-                    urgent=Count('request_id', filter=Q(status='Pending', priority='Urgent'))
-                )
+            # ==================== OPTIMISATION 3: Requêtes de demandes groupées ====================
+            request_stats = BloodRequest.objects.aggregate(
+                pending=Count('request_id', filter=Q(status='Pending')),
+                urgent=Count('request_id', filter=Q(status='Pending', priority='Urgent'))
+            )
 
-                # ==================== OPTIMISATION 4: Transfusions aujourd'hui ====================
-                today_transfusions = BloodConsumption.objects.filter(
-                    date=timezone.now().date()
+            # ==================== OPTIMISATION 4: Transfusions aujourd'hui ====================
+            today_transfusions = BloodConsumption.objects.filter(
+                date=timezone.now().date()
+            ).count()
+
+            # ==================== OPTIMISATION 5: Évolution simplifiée (échantillonnage) ====================
+            # Au lieu de 30 jours, faire seulement 10 points pour réduire la charge
+            stock_evolution = []
+            today = timezone.now().date()
+
+            # Échantillonnage intelligent : 10 points sur 30 jours
+            for i in range(0, 30, 3):  # Tous les 3 jours
+                check_date = today - timedelta(days=29 - i)
+                # Requête optimisée avec un seul filtre
+                daily_stock = BloodUnit.objects.filter(
+                    collection_date__lte=check_date,
+                    date_expiration__gt=check_date,
+                    status__in=['Available', 'Used']  # Exclure les expirés
                 ).count()
 
-                # ==================== OPTIMISATION 5: Évolution simplifiée (échantillonnage) ====================
-                # Au lieu de 30 jours, faire seulement 10 points pour réduire la charge
-                stock_evolution = []
-                today = timezone.now().date()
+                stock_evolution.append({
+                    'date': check_date.isoformat(),
+                    'stock': daily_stock
+                })
 
-                # Échantillonnage intelligent : 10 points sur 30 jours
-                for i in range(0, 30, 3):  # Tous les 3 jours
-                    check_date = today - timedelta(days=29 - i)
-                    # Requête optimisée avec un seul filtre
-                    daily_stock = BloodUnit.objects.filter(
-                        collection_date__lte=check_date,
-                        date_expiration__gt=check_date,
-                        status__in=['Available', 'Used']  # Exclure les expirés
-                    ).count()
+            # ==================== CALCUL DU TAUX D'UTILISATION ====================
+            utilization_rate = 0
+            if unit_stats['total'] > 0:
+                utilization_rate = round((unit_stats['used'] / unit_stats['total'] * 100), 2)
 
-                    stock_evolution.append({
-                        'date': check_date.isoformat(),
-                        'stock': daily_stock
-                    })
-
-                # ==================== CALCUL DU TAUX D'UTILISATION ====================
-                utilization_rate = 0
-                if unit_stats['total'] > 0:
-                    utilization_rate = round((unit_stats['used'] / unit_stats['total'] * 100), 2)
-
-                # ==================== STRUCTURE DE RÉPONSE ====================
-                data = {
-                    'overview': {
-                        'total_units': unit_stats['total'],
-                        'available_units': unit_stats['available'],
-                        'expired_units': unit_stats['expired'],
-                        'used_units': unit_stats['used'],
-                        'utilization_rate': utilization_rate,
-                        'expiring_soon': unit_stats['expiring_soon'],
-                        'pending_requests': request_stats['pending'],
-                        'urgent_requests': request_stats['urgent'],
-                        'today_transfusions': today_transfusions
-                    },
-                    'stock_by_blood_type': stock_by_blood_type,
-                    'stock_evolution': stock_evolution,
-                    'last_updated': timezone.now().isoformat(),
-                    'cache_info': {
-                        'cached_at': timezone.now().isoformat(),
-                        'cache_duration': '5 minutes'
-                    }
+            # ==================== STRUCTURE DE RÉPONSE ====================
+            data = {
+                'overview': {
+                    'total_units': unit_stats['total'],
+                    'available_units': unit_stats['available'],
+                    'expired_units': unit_stats['expired'],
+                    'used_units': unit_stats['used'],
+                    'utilization_rate': utilization_rate,
+                    'expiring_soon': unit_stats['expiring_soon'],
+                    'pending_requests': request_stats['pending'],
+                    'urgent_requests': request_stats['urgent'],
+                    'today_transfusions': today_transfusions
+                },
+                'stock_by_blood_type': stock_by_blood_type,
+                'stock_evolution': stock_evolution,
+                'last_updated': timezone.now().isoformat(),
+                'cache_info': {
+                    'cached_at': timezone.now().isoformat(),
+                    'cache_duration': '10 minutes',
+                    'cache_backend': 'Redis Cloud'
                 }
+            }
 
-                # ==================== CACHE ÉTENDU ====================
-                # Cache plus long pour réduire la charge serveur
-                cache.set(cache_key, data, 600)  # 10 minutes au lieu de 5
+            execution_time = time.time() - start_time
+            logger.info(f"Dashboard overview generated in {execution_time:.2f}s")
 
-            except Exception as e:
-                logger.error(f"Dashboard error: {str(e)}", exc_info=True)
+            # ==================== CACHE REDIS ====================
+            # Cache avec Redis Cloud pour 10 minutes
+            safe_cache_set(cache_key, data, timeout=600)
 
-                # ==================== FALLBACK DATA ====================
-                # Retourner des données minimales en cas d'erreur
-                fallback_data = {
-                    'overview': {
-                        'total_units': 0,
-                        'available_units': 0,
-                        'expired_units': 0,
-                        'used_units': 0,
-                        'utilization_rate': 0,
-                        'expiring_soon': 0,
-                        'pending_requests': 0,
-                        'urgent_requests': 0,
-                        'today_transfusions': 0
-                    },
-                    'stock_by_blood_type': [],
-                    'stock_evolution': [],
-                    'error': 'Données temporairement indisponibles',
-                    'last_updated': timezone.now().isoformat()
-                }
+            return Response(data)
 
-                return Response(fallback_data, status=status.HTTP_206_PARTIAL_CONTENT)
+        except Exception as e:
+            logger.error(f"Dashboard error: {str(e)}", exc_info=True)
 
-        return Response(data)
+            # ==================== FALLBACK DATA ====================
+            # Retourner des données minimales en cas d'erreur
+            fallback_data = {
+                'overview': {
+                    'total_units': 0,
+                    'available_units': 0,
+                    'expired_units': 0,
+                    'used_units': 0,
+                    'utilization_rate': 0,
+                    'expiring_soon': 0,
+                    'pending_requests': 0,
+                    'urgent_requests': 0,
+                    'today_transfusions': 0
+                },
+                'stock_by_blood_type': [],
+                'stock_evolution': [],
+                'error': 'Données temporairement indisponibles',
+                'last_updated': timezone.now().isoformat()
+            }
+
+            return Response(fallback_data, status=status.HTTP_206_PARTIAL_CONTENT)
 
 @global_allow_any
 class AlertsAPIView(BaseAPIView):
-    """Alertes critiques pour le dashboard"""
+    """Alertes critiques pour le dashboard avec cache court"""
 
     def get(self, request):
+        # Cache court pour les alertes (5 minutes max)
+        cache_key = cache_key_builder('dashboard_alerts')
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            logger.info("Alerts served from Redis cache")
+            return Response(cached_result)
+
         alerts = []
 
         try:
+            start_time = time.time()
+
             # Alertes stock faible
             for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
                 stock_count = BloodUnit.objects.filter(
@@ -292,7 +314,7 @@ class AlertsAPIView(BaseAPIView):
 
                 if stock_count < 5:  # Seuil critique
                     alerts.append({
-                        'id': f'low_stock_{blood_type}',  # Ajout d'un ID unique
+                        'id': f'low_stock_{blood_type}',
                         'type': 'low_stock',
                         'severity': 'critical' if stock_count < 2 else 'warning',
                         'message': f'Stock critique pour {blood_type}: {stock_count} unités',
@@ -309,7 +331,7 @@ class AlertsAPIView(BaseAPIView):
             for unit in expiring_units:
                 days_left = (unit.date_expiration - timezone.now().date()).days
                 alerts.append({
-                    'id': f'expiring_{unit.unit_id}',  # ID unique
+                    'id': f'expiring_{unit.unit_id}',
                     'type': 'expiring',
                     'severity': 'critical' if days_left <= 1 else 'warning',
                     'message': f'Unité {unit.unit_id} expire dans {days_left} jour(s)',
@@ -326,7 +348,7 @@ class AlertsAPIView(BaseAPIView):
 
             for req in urgent_requests:
                 alerts.append({
-                    'id': f'urgent_{req.request_id}',  # ID unique
+                    'id': f'urgent_{req.request_id}',
                     'type': 'urgent_request',
                     'severity': 'critical',
                     'message': f'Demande urgente {req.request_id} non satisfaite',
@@ -335,6 +357,22 @@ class AlertsAPIView(BaseAPIView):
                     'department': req.department.name,
                     'quantity': req.quantity
                 })
+
+            execution_time = time.time() - start_time
+
+            result = {
+                'alerts': alerts,
+                'count': len(alerts),
+                'last_updated': timezone.now().isoformat(),
+                'execution_time_seconds': round(execution_time, 2),
+                'cache_backend': 'Redis Cloud'
+            }
+
+            # Cache court pour les alertes (5 minutes)
+            safe_cache_set(cache_key, result, timeout=300)
+            logger.info(f"Alerts generated and cached in {execution_time:.2f}s")
+
+            return Response(result)
 
         except Exception as e:
             logger.error(f"Alerts error: {str(e)}")
@@ -345,11 +383,11 @@ class AlertsAPIView(BaseAPIView):
                 'message': 'Erreur système lors du chargement des alertes'
             })
 
-        return Response({
-            'alerts': alerts,
-            'count': len(alerts),
-            'last_updated': timezone.now().isoformat()
-        })
+            return Response({
+                'alerts': alerts,
+                'count': len(alerts),
+                'last_updated': timezone.now().isoformat()
+            })
 
     def post(self, request):
         """Marquer toutes les alertes comme acquittées"""
@@ -386,14 +424,14 @@ class AlertsAPIView(BaseAPIView):
 @global_allow_any
 # ==================== FORECASTING AI VIEWS ====================
 class DemandForecastAPIView(APIView):
-    """Vue optimisée pour les prévisions de demande"""
+    """Vue optimisée pour les prévisions de demande avec Redis"""
 
     def __init__(self):
         super().__init__()
         self.lightweight_forecaster = ProductionLightweightForecaster()
 
     def get(self, request):
-        """Prévisions optimisées avec cache agressif"""
+        """Prévisions optimisées avec cache Redis agressif"""
 
         # Paramètres de la requête
         blood_type = request.query_params.get('blood_type', 'all')
@@ -402,18 +440,23 @@ class DemandForecastAPIView(APIView):
         # Limiter la durée pour éviter les timeouts
         days = min(days, 30)
 
-        # Cache par paramètres
-        cache_key = f'demand_forecast_{blood_type}_{days}'
-        cached_result = cache.get(cache_key)
+        # Cache par paramètres avec Redis
+        cache_key = cache_key_builder('demand_forecast', blood_type, days)
+        cached_result = safe_cache_get(cache_key)
 
         if cached_result:
+            logger.info(f"Forecast for {blood_type} served from Redis cache")
             return Response(cached_result)
 
         try:
+            start_time = time.time()
+
             if blood_type == 'all':
                 forecasts = self.get_all_forecasts_optimized(days)
             else:
                 forecasts = [self.get_single_forecast_optimized(blood_type, days)]
+
+            execution_time = time.time() - start_time
 
             result = {
                 'forecasts': forecasts,
@@ -425,12 +468,15 @@ class DemandForecastAPIView(APIView):
                 'metadata': {
                     'method': 'lightweight_optimized',
                     'confidence_level': 0.75,
-                    'cache_duration': '1 hour'
+                    'cache_duration': '1 hour',
+                    'cache_backend': 'Redis Cloud',
+                    'execution_time_seconds': round(execution_time, 2)
                 }
             }
 
-            # Cache long pour les prévisions
-            cache.set(cache_key, result, 3600)  # 1 heure
+            # Cache long pour les prévisions avec Redis
+            safe_cache_set(cache_key, result, timeout=3600)  # 1 heure
+            logger.info(f"Forecast generated and cached in {execution_time:.2f}s")
 
             return Response(result)
 
@@ -443,14 +489,23 @@ class DemandForecastAPIView(APIView):
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     def get_all_forecasts_optimized(self, days):
-        """Prévisions pour tous les groupes sanguins - Version rapide"""
+        """Prévisions pour tous les groupes sanguins - Version rapide avec cache individuel"""
         blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
         forecasts = []
 
         for bt in blood_types:
             try:
-                forecast = self.lightweight_forecaster.quick_predict_cached(bt, days)
-                forecasts.append(forecast)
+                # Cache individuel par groupe sanguin
+                individual_cache_key = cache_key_builder('forecast_individual', bt, days)
+                cached_forecast = safe_cache_get(individual_cache_key)
+
+                if cached_forecast:
+                    forecasts.append(cached_forecast)
+                else:
+                    forecast = self.lightweight_forecaster.quick_predict_cached(bt, days)
+                    safe_cache_set(individual_cache_key, forecast, timeout=1800)  # 30 minutes
+                    forecasts.append(forecast)
+
             except Exception as e:
                 logger.warning(f"Forecast failed for {bt}: {e}")
                 # Ajouter prévision minimale
@@ -464,9 +519,19 @@ class DemandForecastAPIView(APIView):
         return forecasts
 
     def get_single_forecast_optimized(self, blood_type, days):
-        """Prévision pour un seul groupe sanguin"""
+        """Prévision pour un seul groupe sanguin avec cache"""
         try:
-            return self.lightweight_forecaster.quick_predict_cached(blood_type, days)
+            # Cache spécifique au groupe sanguin
+            individual_cache_key = cache_key_builder('forecast_single', blood_type, days)
+            cached_forecast = safe_cache_get(individual_cache_key)
+
+            if cached_forecast:
+                return cached_forecast
+
+            forecast = self.lightweight_forecaster.quick_predict_cached(blood_type, days)
+            safe_cache_set(individual_cache_key, forecast, timeout=1800)  # 30 minutes
+            return forecast
+
         except Exception as e:
             logger.error(f"Single forecast failed for {blood_type}: {e}")
             return {
@@ -480,7 +545,7 @@ class DemandForecastAPIView(APIView):
 @global_allow_any
 # ==================== OPTIMIZATION VIEWS ====================
 class OptimizationRecommendationsAPIView(APIView):
-    """Vue optimisée pour les recommandations - Compatible avec votre système existant"""
+    """Vue optimisée pour les recommandations avec Redis Cache"""
 
     def __init__(self):
         super().__init__()
@@ -488,24 +553,20 @@ class OptimizationRecommendationsAPIView(APIView):
         self.lightweight_forecaster = ProductionLightweightForecaster()
 
     def get(self, request):
-        """Recommandations optimisées avec fallback intelligent"""
+        """Recommandations optimisées avec cache Redis intelligent"""
         start_time = time.time()
 
-        # ==================== CACHE PRINCIPAL ====================
-        cache_key = 'optimization_recommendations_v2'
-        cached_data = cache.get(cache_key)
+        # ==================== CACHE REDIS PRINCIPAL ====================
+        cache_key = cache_key_builder('optimization_recommendations_v2')
+        cached_data = safe_cache_get(cache_key)
 
         if cached_data:
-            logger.info("Using cached recommendations")
+            logger.info("Using cached recommendations from Redis")
             return Response(cached_data)
 
         try:
-            # ==================== STRATÉGIE PROGRESSIVE ====================
-            # 1. Essayer la méthode complète si temps disponible
-            # 2. Fallback vers méthode légère si timeout
-            # 3. Fallback vers données statiques si erreur
-
-            recommendations = self.generate_progressive_recommendations()
+            # ==================== STRATÉGIE PROGRESSIVE AVEC CACHE ====================
+            recommendations = self.generate_progressive_recommendations_cached()
 
             execution_time = time.time() - start_time
 
@@ -514,14 +575,17 @@ class OptimizationRecommendationsAPIView(APIView):
                 'generated_at': timezone.now().isoformat(),
                 'execution_time_seconds': round(execution_time, 2),
                 'cache_duration': '30 minutes',
+                'cache_backend': 'Redis Cloud',
                 'status': 'success'
             }
 
-            # ==================== CACHE ADAPTATIF ====================
+            # ==================== CACHE ADAPTATIF REDIS ====================
             # Cache plus long si génération rapide (données stables)
             # Cache plus court si génération lente (données dynamiques)
             cache_duration = 1800 if execution_time < 30 else 900  # 30min ou 15min
-            cache.set(cache_key, data, cache_duration)
+            safe_cache_set(cache_key, data, timeout=cache_duration)
+
+            logger.info(f"Recommendations generated and cached in {execution_time:.2f}s")
 
             return Response(data)
 
@@ -529,11 +593,10 @@ class OptimizationRecommendationsAPIView(APIView):
             logger.error(f"Recommendations generation failed: {str(e)}", exc_info=True)
             return self.get_emergency_fallback()
 
-    def generate_progressive_recommendations(self):
-        """Génération progressive avec fallback automatique"""
+    def generate_progressive_recommendations_cached(self):
+        """Génération progressive avec cache par étapes"""
 
         try:
-            # ==================== PHASE 1: DONNÉES RAPIDES ====================
             recommendations = {
                 'blood_type_specific': [],
                 'general': [],
@@ -543,13 +606,24 @@ class OptimizationRecommendationsAPIView(APIView):
             blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
             successful_forecasts = 0
 
-            # ==================== PHASE 2: ANALYSE PAR GROUPE SANGUIN ====================
+            # ==================== CACHE PAR GROUPE SANGUIN ====================
             for blood_type in blood_types:
                 try:
+                    # Cache individuel pour chaque analyse
+                    blood_type_cache_key = cache_key_builder('recommendation_blood_type', blood_type)
+                    cached_recommendation = safe_cache_get(blood_type_cache_key)
+
+                    if cached_recommendation:
+                        recommendations['blood_type_specific'].append(cached_recommendation)
+                        successful_forecasts += 1
+                        continue
+
                     # Timeout individuel par groupe sanguin (15 secondes max)
                     recommendation = self.analyze_blood_type_optimized(blood_type, timeout=15)
 
                     if recommendation:
+                        # Cache la recommandation individuelle pour 15 minutes
+                        safe_cache_set(blood_type_cache_key, recommendation, timeout=900)
                         recommendations['blood_type_specific'].append(recommendation)
                         successful_forecasts += 1
 
@@ -569,10 +643,18 @@ class OptimizationRecommendationsAPIView(APIView):
                         self.get_basic_recommendation(blood_type)
                     )
 
-            # ==================== PHASE 3: RECOMMANDATIONS GÉNÉRALES ====================
-            recommendations['general'] = self.generate_general_recommendations_fast()
+            # ==================== CACHE RECOMMANDATIONS GÉNÉRALES ====================
+            general_cache_key = cache_key_builder('recommendations_general')
+            cached_general = safe_cache_get(general_cache_key)
 
-            # ==================== PHASE 4: RÉSUMÉ ====================
+            if cached_general:
+                recommendations['general'] = cached_general
+            else:
+                general_recs = self.generate_general_recommendations_fast()
+                safe_cache_set(general_cache_key, general_recs, timeout=600)  # 10 minutes
+                recommendations['general'] = general_recs
+
+            # ==================== RÉSUMÉ ====================
             recommendations['summary'] = self.generate_summary_optimized(
                 recommendations['blood_type_specific']
             )
@@ -582,6 +664,7 @@ class OptimizationRecommendationsAPIView(APIView):
         except Exception as e:
             logger.error(f"Progressive recommendations failed: {e}")
             return self.get_static_recommendations()
+
 
     def analyze_blood_type_optimized(self, blood_type, timeout=15):
         """Analyse optimisée d'un groupe sanguin avec timeout"""
@@ -1243,39 +1326,59 @@ class BloodConsumptionListCreateAPIView(generics.ListCreateAPIView):
 @global_allow_any
 # ==================== ANALYTICS VIEWS ====================
 class InventoryAnalyticsAPIView(BaseAPIView):
-    """Analytics avancés des stocks - Version corrigée pour PostgreSQL"""
+    """Analytics avancés des stocks avec cache Redis"""
 
     def get(self, request):
         period = request.GET.get('period', '30')  # jours
 
         try:
             days = int(period)
+
+            # Cache spécifique à la période
+            cache_key = cache_key_builder('inventory_analytics', period)
+            cached_result = safe_cache_get(cache_key)
+
+            if cached_result:
+                logger.info(f"Analytics for {period} days served from Redis cache")
+                return Response(cached_result)
+
+            start_time = time.time()
             start_date = timezone.now().date() - timedelta(days=days)
 
             # Évolution des stocks par groupe sanguin
-            stock_evolution = self.get_stock_evolution(start_date, days)
+            stock_evolution = self.get_stock_evolution_cached(start_date, days)
 
             # Taux d'utilisation
-            utilization_rates = self.get_utilization_rates(start_date)
+            utilization_rates = self.get_utilization_rates_cached(start_date)
 
             # Analyse des pertes - Version PostgreSQL
-            waste_analysis = self.get_waste_analysis_postgresql(start_date)
+            waste_analysis = self.get_waste_analysis_cached(start_date)
 
             # Tendances de demande - Version PostgreSQL
-            demand_trends = self.get_demand_trends_postgresql(start_date)
+            demand_trends = self.get_demand_trends_cached(start_date)
 
             # Métriques de performance
-            performance_metrics = self.get_performance_metrics(start_date)
+            performance_metrics = self.get_performance_metrics_cached(start_date)
 
-            return Response({
+            execution_time = time.time() - start_time
+
+            result = {
                 'period_days': days,
                 'stock_evolution': stock_evolution,
                 'utilization_rates': utilization_rates,
                 'waste_analysis': waste_analysis,
                 'demand_trends': demand_trends,
                 'performance_metrics': performance_metrics,
-                'generated_at': timezone.now().isoformat()
-            })
+                'generated_at': timezone.now().isoformat(),
+                'execution_time_seconds': round(execution_time, 2),
+                'cache_backend': 'Redis Cloud'
+            }
+
+            # Cache pour 1 heure
+            safe_cache_set(cache_key, result, timeout=3600)
+            logger.info(f"Analytics generated and cached in {execution_time:.2f}s")
+
+            return Response(result)
 
         except Exception as e:
             logger.error(f"Analytics error: {str(e)}")
@@ -1283,6 +1386,66 @@ class InventoryAnalyticsAPIView(BaseAPIView):
                 {'error': 'Erreur lors de la génération des analytics'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def get_stock_evolution_cached(self, start_date, days):
+        """Évolution des stocks avec cache par tranches"""
+        cache_key = cache_key_builder('stock_evolution', start_date.isoformat(), days)
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        evolution = self.get_stock_evolution(start_date, days)
+        safe_cache_set(cache_key, evolution, timeout=1800)  # 30 minutes
+        return evolution
+
+    def get_utilization_rates_cached(self, start_date):
+        """Taux d'utilisation avec cache"""
+        cache_key = cache_key_builder('utilization_rates', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        rates = self.get_utilization_rates(start_date)
+        safe_cache_set(cache_key, rates, timeout=1800)  # 30 minutes
+        return rates
+
+    def get_waste_analysis_cached(self, start_date):
+        """Analyse des pertes avec cache"""
+        cache_key = cache_key_builder('waste_analysis', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        analysis = self.get_waste_analysis_postgresql(start_date)
+        safe_cache_set(cache_key, analysis, timeout=1800)  # 30 minutes
+        return analysis
+
+    def get_demand_trends_cached(self, start_date):
+        """Tendances de demande avec cache"""
+        cache_key = cache_key_builder('demand_trends', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        trends = self.get_demand_trends_postgresql(start_date)
+        safe_cache_set(cache_key, trends, timeout=1800)  # 30 minutes
+        return trends
+
+    def get_performance_metrics_cached(self, start_date):
+        """Métriques de performance avec cache"""
+        cache_key = cache_key_builder('performance_metrics', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        metrics = self.get_performance_metrics(start_date)
+        safe_cache_set(cache_key, metrics, timeout=1800)  # 30 minutes
+        return metrics
 
     def get_stock_evolution(self, start_date, days):
         """Évolution des stocks sur la période"""

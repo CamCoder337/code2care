@@ -121,20 +121,80 @@ DATABASE_URL = config('DATABASE_URL', default=None)
 if DATABASE_URL:
     DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
 
-# Cache configuration (Redis)
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://localhost:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+# Configuration Redis Cloud
+REDIS_URL = os.environ.get('REDIS_URL')
+
+if REDIS_URL:
+    # Configuration pour Redis Cloud
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'CONNECTION_POOL_KWARGS': {
+                    'ssl_cert_reqs': None,
+                    'ssl_check_hostname': False,
+                    'ssl_ca_certs': None,
+                    'retry_on_timeout': True,
+                    'health_check_interval': 30,
+                    'socket_connect_timeout': 5,
+                    'socket_timeout': 5,
+                },
+                'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+                'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+                'IGNORE_EXCEPTIONS': True,  # Important pour éviter les crashes
+            },
+            'TIMEOUT': 1800,  # 30 minutes
+            'KEY_PREFIX': 'bloodbank',
+            'VERSION': 1,
         }
     }
-}
+
+    # Configuration des sessions Redis
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+    SESSION_COOKIE_AGE = 1800  # 30 minutes
+
+    print("✅ Redis Cloud configuré")
+
+else:
+    # Fallback vers cache mémoire local
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'bloodbank-local-cache',
+            'TIMEOUT': 1800,
+            'OPTIONS': {
+                'MAX_ENTRIES': 1000,
+                'CULL_FREQUENCY': 3,
+            }
+        }
+    }
+
+    SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+    print("⚠️ Cache mémoire local utilisé")
+
+# Configuration globale cache
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+
+# Test de connexion Redis au démarrage (optionnel)
+if REDIS_URL:
+    try:
+        from django.core.cache import cache
+
+        cache.set('test_connection', 'ok', 60)
+        if cache.get('test_connection') == 'ok':
+            print("🎯 Connexion Redis Cloud validée")
+        else:
+            print("⚠️ Test Redis Cloud échoué")
+    except Exception as e:
+        print(f"⚠️ Erreur test Redis: {e}")
 
 # Celery configuration for background tasks
-CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_BROKER_URL = config('REDIS_URL')
+CELERY_RESULT_BACKEND = config('REDIS_URL')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
