@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LanguageSelector } from "@/components/language-selector"
 import { useLanguage } from "@/lib/i18n"
+import { useTheme } from "next-themes"
+import Image from "next/image"
 import {
   LayoutDashboard,
   Droplets,
@@ -32,7 +34,8 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen }: SidebarProps) {
   const { t } = useLanguage()
-  const [darkMode, setDarkMode] = useState(false)
+  const { theme, setTheme } = useTheme()
+
 
   const menuItems = [
     {
@@ -133,11 +136,17 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
       >
         <div className="flex flex-col h-full">
           {/* Header avec Logo HIGH5 */}
-          <div className="p-6 border-b border-slate-700">
-            <div className="flex items-center gap-4 mb-4">
+          <div className="p-4 border-b border-gray-200/50 dark:border-gray-700/50">
+            <div className="flex items-center space-x-3 mb-4">
               <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-teal-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Heart className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-teal-500 to-green-500 rounded-xl shadow-lg flex items-center justify-center transform hover:scale-105 transition-all duration-300">
+                  <Image
+                    src="/high5-logo.png"
+                    alt="HIGH5 Logo"
+                    width={32}
+                    height={32}
+                    className="w-8 h-8 object-contain filter brightness-0 invert"
+                  />
                 </div>
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse" />
               </div>
@@ -210,11 +219,15 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
             {/* Mode Sombre Toggle */}
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 px-3 py-2 text-gray-300 hover:text-white hover:bg-slate-700/50"
-              onClick={() => setDarkMode(!darkMode)}
+              className="w-full justify-start gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-300 group"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-400" />}
-              <span className="font-medium">{darkMode ? "Mode Clair" : "Mode Sombre"}</span>
+              {theme === "dark" ? (
+                <Sun className="w-5 h-5 text-yellow-500 group-hover:text-yellow-600" />
+              ) : (
+                <Moon className="w-5 h-5 text-blue-500 group-hover:text-blue-600" />
+              )}
+              <span className="font-medium text-sm">{theme === "dark" ? "Mode Clair" : "Mode Sombre"}</span>
             </Button>
 
             {/* Déconnexion */}
