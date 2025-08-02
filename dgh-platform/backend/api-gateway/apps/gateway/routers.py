@@ -14,6 +14,7 @@ class ServiceRouter:
     # Mapping des routes vers les services
     ROUTE_MAPPING = {
         '/api/v1/feedback': 'FEEDBACK_SERVICE',
+        '/api/v1/departments': 'FEEDBACK_SERVICE',
         '/api/v1/appointments': 'FEEDBACK_SERVICE',
         '/api/v1/reminders': 'FEEDBACK_SERVICE',
         '/api/v1/prescriptions': 'FEEDBACK_SERVICE',

@@ -41,8 +41,33 @@ services:
       - DATABASE_URL=postgres://dgh_user:dgh_password@db:5432/dgh_platform
       - REDIS_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - FEEDBACK_SERVICE_URL=http://feedback-service:8001
     volumes:
       - ./api-gateway:/app
+    restart: unless-stopped
+
+  # Feedback Service
+  feedback-service:
+    build: ./feedback-service
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgres://dgh_user:dgh_password@db:5432/dgh_platform
+      - REDIS_URL=redis://redis:6379/0
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - PORT=8001
+      # Variables Twilio (à configurer selon vos credentials)
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+    volumes:
+      - ./feedback-service:/app
     restart: unless-stopped
 
 volumes:

@@ -67,28 +67,72 @@ class FeedbackCreateSerializer(serializers.ModelSerializer):
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
-    department_name = serializers.CharField(source='department.name', read_only=True)
+    """Serializer pour les rendez-vous - Version simplifiée"""
+    type_display = serializers.CharField(source='get_type_display', read_only=True)
     
     class Meta:
         model = Appointment
-        fields = '__all__'
+        fields = ['appointment_id', 'scheduled', 'type', 'type_display', 'patient_id', 'professional_id', 'created_at', 'updated_at']
         read_only_fields = ('appointment_id', 'created_at', 'updated_at')
     
-    def validate(self, data):
-        # Validation logique métier
-        from datetime import date, time, datetime
-        
-        scheduled_date = data.get('scheduled_date')
-        scheduled_time = data.get('time')
-        
-        if scheduled_date and scheduled_time:
-            scheduled_datetime = datetime.combine(scheduled_date, scheduled_time)
-            if scheduled_datetime <= datetime.now():
-                raise serializers.ValidationError(
-                    "L'appointment ne peut pas être programmé dans le passé"
-                )
-        
-        return data
+    def validate_scheduled(self, value):
+        """Validation que le rendez-vous n'est pas dans le passé"""
+        from datetime import datetime
+        if value <= datetime.now():
+            raise serializers.ValidationError(
+                "Le rendez-vous ne peut pas être programmé dans le passé"
+            )
+        return value
+    
+    def validate_patient_id(self, value):
+        """Validation UUID patient"""
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Patient ID doit être un UUID valide")
+    
+    def validate_professional_id(self, value):
+        """Validation UUID professional"""
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Professional ID doit être un UUID valide")
+
+
+class AppointmentCreateSerializer(serializers.ModelSerializer):
+    """Serializer spécifique pour la création de rendez-vous"""
+    
+    class Meta:
+        model = Appointment
+        fields = ['scheduled', 'type', 'patient_id', 'professional_id']
+    
+    def validate_scheduled(self, value):
+        from datetime import datetime
+        if value <= datetime.now():
+            raise serializers.ValidationError(
+                "Le rendez-vous ne peut pas être programmé dans le passé"
+            )
+        return value
+    
+    def validate_patient_id(self, value):
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Patient ID doit être un UUID valide")
+    
+    def validate_professional_id(self, value):
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Professional ID doit être un UUID valide")
 
 
 class ReminderSerializer(serializers.ModelSerializer):

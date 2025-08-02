@@ -130,12 +130,29 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Douala'
 CELERY_ENABLE_UTC = True
 
+# Configuration des tâches périodiques Celery Beat
+CELERY_BEAT_SCHEDULE = {
+    'process-pending-reminders': {
+        'task': 'apps.feedback.tasks.process_pending_reminders',
+        'schedule': 300.0,  # Toutes les 5 minutes
+    },
+    'update-twilio-statuses': {
+        'task': 'apps.feedback.tasks.update_twilio_statuses',
+        'schedule': 3600.0,  # Toutes les heures
+    },
+}
+
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', '')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', '')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', '')
 
 # Configuration Groq API pour analyse de sentiment
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
+
+# Configuration des microservices
+MICROSERVICES = {
+    'API_GATEWAY': config('API_GATEWAY_URL', default='http://localhost:8000'),
+}
 
 TEMPLATES = [
     {
