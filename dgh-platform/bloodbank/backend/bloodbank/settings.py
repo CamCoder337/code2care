@@ -24,7 +24,8 @@ ALLOWED_HOSTS = [
     '0.0.0.0',
     '.render.com',  # Pour Render deployment
     '.onrender.com',
-    'https://high5-code2care-sr7p.onrender.com',# Alternative Render domain
+    'https://high5-code2care-sr7p.onrender.com',
+    "https://high-5-blood2care.vercel.app"# Alternative Render domain
 ]
 
 # Add your custom domain here when you have one

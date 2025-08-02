@@ -21,17 +21,65 @@ import json
 import csv
 import io
 import logging
-
+from django.db.models import Count, Sum, Q, Avg, Extract
+from django.db.models.functions import TruncMonth, TruncWeek, TruncDay
+from django.utils import timezone
+from datetime import datetime, timedelta, date
 from .decorators import global_allow_any
 
 # Imports conditionnels pour les bibliothèques ML
 try:
     import pandas as pd
     import numpy as np
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
-    print("Warning: pandas not available")
+
+
+    # Créer des alternatives pour numpy si pas disponible
+    class FakeNumpy:
+        @staticmethod
+        def random():
+            import random
+            class RandomModule:
+                @staticmethod
+                def poisson(lam, size=None):
+                    if size is None:
+                        return random.randint(max(1, int(lam * 0.7)), int(lam * 1.3))
+                    return [random.randint(max(1, int(lam * 0.7)), int(lam * 1.3)) for _ in range(size)]
+
+                @staticmethod
+                def uniform(low, high, size=None):
+                    if size is None:
+                        return random.uniform(low, high)
+                    return [random.uniform(low, high) for _ in range(size)]
+
+            return RandomModule()
+
+        @staticmethod
+        def array(data):
+            return data
+
+        @staticmethod
+        def std(data):
+            if not data:
+                return 0
+            mean_val = sum(data) / len(data)
+            return (sum((x - mean_val) ** 2 for x in data) / len(data)) ** 0.5
+
+        @staticmethod
+        def mean(data):
+            return sum(data) / len(data) if data else 0
+
+        @staticmethod
+        def maximum(a, b):
+            if isinstance(a, list) and isinstance(b, (int, float)):
+                return [max(x, b) for x in a]
+            return max(a, b)
+
+
+    np = FakeNumpy()
 
 try:
     from sklearn.ensemble import RandomForestRegressor
@@ -1013,6 +1061,28 @@ class BloodRequestListCreateAPIView(generics.ListCreateAPIView):
             queryset = queryset.filter(department__name__icontains=department)
 
         return queryset.order_by('-request_date', 'priority')
+
+
+
+
+
+
+@global_allow_any
+class BloodRequestDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """Détail, mise à jour et suppression d'une demande de sang"""
+    queryset = BloodRequest.objects.select_related('department', 'site').all()
+    serializer_class = BloodRequestSerializer
+    lookup_field = 'request_id'
+
+    def get_object(self):
+        """Récupérer l'objet avec gestion d'erreur"""
+        try:
+            return super().get_object()
+        except BloodRequest.DoesNotExist:
+            from django.http import Http404
+            raise Http404("Demande de sang non trouvée")
+
+
 @global_allow_any
 class BloodConsumptionListCreateAPIView(generics.ListCreateAPIView):
     """Liste et création des consommations de sang"""
@@ -1153,10 +1223,11 @@ class InventoryAnalyticsAPIView(BaseAPIView):
 
         return rates
 
+    # Correction de la méthode get_waste_analysis_postgresql
     def get_waste_analysis_postgresql(self, start_date):
-        """Analyse des pertes - Version PostgreSQL"""
+        """Analyse des pertes - Version corrigée"""
         try:
-            # Unités expirées par mois - Version PostgreSQL
+            # Utiliser TruncMonth correctement importé
             expired_units = BloodUnit.objects.filter(
                 status='Expired',
                 date_expiration__gte=start_date
@@ -1167,7 +1238,7 @@ class InventoryAnalyticsAPIView(BaseAPIView):
                 total_volume=Sum('volume_ml')
             ).order_by('month')
 
-            # Convertir en format lisible
+            # Conversion en format lisible
             monthly_waste = []
             for item in expired_units:
                 month_str = item['month'].strftime('%Y-%m') if item['month'] else 'Unknown'
@@ -1178,7 +1249,7 @@ class InventoryAnalyticsAPIView(BaseAPIView):
                     'total_volume': item['total_volume'] or 0
                 })
 
-            # Coût estimé des pertes (approximation)
+            # Coût estimé des pertes
             total_expired = sum(item['count'] for item in monthly_waste)
             estimated_cost = total_expired * 50000  # 50000 FCFA par unité
 
@@ -1202,9 +1273,9 @@ class InventoryAnalyticsAPIView(BaseAPIView):
             }
 
     def get_demand_trends_postgresql(self, start_date):
-        """Tendances de demande - Version PostgreSQL"""
+        """Tendances de demande - Version corrigée"""
         try:
-            # Demandes par semaine - Version PostgreSQL
+            # Utiliser TruncWeek correctement importé
             weekly_demands = BloodRequest.objects.filter(
                 request_date__gte=start_date
             ).annotate(
@@ -1215,10 +1286,11 @@ class InventoryAnalyticsAPIView(BaseAPIView):
                 total_quantity=Sum('quantity')
             ).order_by('week')
 
-            # Convertir en format lisible
+            # Conversion en format lisible
             weekly_trends = []
             for item in weekly_demands:
-                week_str = f"{item['year']}-W{item['week_number']:02d}" if item['year'] and item['week_number'] else 'Unknown'
+                week_str = f"{item['year']}-W{item['week_number']:02d}" if item['year'] and item[
+                    'week_number'] else 'Unknown'
                 weekly_trends.append({
                     'week': week_str,
                     'blood_type': item['blood_type'],

@@ -45,6 +45,7 @@ urlpatterns = [
 
     # ==================== BLOOD REQUESTS ====================
     path('requests/', views.BloodRequestListCreateAPIView.as_view(), name='blood_requests_list_create'),
+    path('requests/<str:request_id>/', views.BloodRequestDetailAPIView.as_view(), name='blood_request_detail'),
 
     # ==================== BLOOD CONSUMPTION ====================
     path('consumption/', views.BloodConsumptionListCreateAPIView.as_view(), name='blood_consumption_list_create'),
@@ -52,4 +53,10 @@ urlpatterns = [
     # ==================== CONFIGURATION ====================
     path('config/system/', views.SystemConfigAPIView.as_view(), name='system_config'),
     path('config/compatibility/', views.blood_compatibility, name='blood_compatibility'),
+
+    # ==================== REPORTS - CORRECTION CRITIQUE ====================
+    path('reports/export/', views.ReportExportAPIView.as_view(), name='report_export'),
+
+    # ==================== UTILITIES ====================
+    path('utils/blood-compatibility/', views.blood_compatibility, name='blood_compatibility'),
 ]
