@@ -560,15 +560,10 @@ else:
 # ==================== PERFORMANCE OPTIMIZATIONS ====================
 # Database and performance settings
 
-# FIXED: Removed invalid PostgreSQL connection options
-# Database connection pooling (if using PostgreSQL)
+# FIXED: Simplified database configuration for maximum compatibility
 if 'postgresql' in DATABASES['default']['ENGINE']:
-    # Use proper PostgreSQL connection pooling options
+    # Use connection reuse but avoid custom PostgreSQL options that might cause issues
     DATABASES['default']['CONN_MAX_AGE'] = 60  # Reuse connections for 60 seconds
-    DATABASES['default']['OPTIONS'] = {
-        'connect_timeout': 10,
-        'options': '-c default_transaction_isolation=read committed'
-    }
 
 # Session optimization - FIXED: Avoid potential Redis dependency issues
 SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
