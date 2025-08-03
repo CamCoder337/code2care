@@ -79,7 +79,7 @@ urlpatterns = [
 
     # ==================== DIRECT HEALTH CHECK (Backup) ====================
     # FIXED: Import the actual view function instead of using string
-    path('health/', include('app.urls')),  # This will handle /health/ through app.urls
+    path('health/', health_check, name='direct-health-check'),  # This will handle /health/ through app.urls
 ]
 
 # ==================== DEVELOPMENT CONFIGURATION ====================
