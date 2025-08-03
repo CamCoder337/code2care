@@ -24,8 +24,8 @@ ALLOWED_HOSTS = [
     '0.0.0.0',
     '.render.com',  # Pour Render deployment
     '.onrender.com',
-    'https://high5-code2care-sr7p.onrender.com',
-    "https://high-5-blood2care.vercel.app"# Alternative Render domain
+    'high5-code2care-sr7p.onrender.com',
+    "high-5-blood2care.vercel.app"# Alternative Render domain
 ]
 
 # Add your custom domain here when you have one
@@ -42,6 +42,33 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# ✅ AJOUT CRITIQUE : Autoriser les en-têtes personnalisés
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-use-ai-system',  # 🔥 OBLIGATOIRE pour votre système IA
+]
+
+# ✅ AJOUT : Autoriser toutes les méthodes HTTP nécessaires
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# ✅ AJOUT : Pour les requêtes avec préflight (OPTIONS)
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 heures
 
 # Application definition
 DJANGO_APPS = [
@@ -265,6 +292,7 @@ if not DEBUG:
     DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@bloodbank.com')
 
 # Logging configuration
+# Configuration de logging fusionnée
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -290,6 +318,12 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'verbose',
         },
+        'ai_forecasting_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'ai_forecasting.log',  # Déplacé dans le dossier logs
+            'formatter': 'verbose',  # Utilise le même formateur
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -301,14 +335,18 @@ LOGGING = {
             'level': config('DJANGO_LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
-        'bloodbank': {  # Adjust to your app name
+        'bloodbank': {  # Ajustez selon le nom de votre app
             'handlers': ['console', 'file'] if not DEBUG else ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
+        'forecasting.blood_demand_forecasting': {
+            'handlers': ['ai_forecasting_file', 'console'],  # Ajoute aussi la console
+            'level': 'INFO',
+            'propagate': False,  # Changé à False pour éviter la duplication
+        },
     },
 }
-
 # Create logs directory if it doesn't exist
 log_dir = BASE_DIR / 'logs'
 if not log_dir.exists():

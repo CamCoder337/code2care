@@ -102,10 +102,7 @@ from .serializers import (
 )
 
 try:
-    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster,RealDataBloodDemandForecaster,
-    generate_forecast_api,
-    health_check,
-    get_available_methods
+    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster,RealDataBloodDemandForecaster,generate_forecast_api,health_check,get_available_methods
     ENHANCED_FORECASTING_AVAILABLE = True
 except ImportError:
     ENHANCED_FORECASTING_AVAILABLE = False
