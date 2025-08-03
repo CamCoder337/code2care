@@ -52,3 +52,13 @@ urlpatterns = [
     path('config/system/', views.SystemConfigAPIView.as_view(), name='system_config'),
     path('config/compatibility/', views.blood_compatibility, name='blood_compatibility'),
 ]
+
+# Dans urls.py - Ajouter ces routes de debug
+debug_patterns = [
+    path('debug/ai-health/', AISystemHealthView.as_view(), name='ai_system_health'),
+    path('debug/ai-methods/', AIMethodsView.as_view(), name='ai_methods_test'),
+    path('debug/forecast-test/', AIMethodsView.as_view(), name='forecast_test'),
+]
+
+# Ajouter à vos urlpatterns existants
+urlpatterns.extend(debug_patterns)

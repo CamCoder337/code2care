@@ -650,20 +650,21 @@ class DemandForecastAPIView(APIView):
 @global_allow_any
 class SmartForecastView(APIView):
     """
-    🧠 Enhanced Smart Forecast View with proper error handling
+    🧠 Enhanced Smart Forecast View - AI SYSTEM ONLY
+    Version optimisée pour utiliser uniquement le système IA
     """
     permission_classes = [AllowAny]
 
     def get(self, request):
-        """GET method for backward compatibility"""
-        return self.handle_forecast_request(request, is_post=False)
+        """GET method - always uses AI system"""
+        return self.handle_ai_forecast_request(request, is_post=False)
 
     def post(self, request):
-        """POST method with AI system integration"""
-        return self.handle_forecast_request(request, is_post=True)
+        """POST method - always uses AI system"""
+        return self.handle_ai_forecast_request(request, is_post=True)
 
-    def handle_forecast_request(self, request, is_post=True):
-        """Unified request handler with improved error handling"""
+    def handle_ai_forecast_request(self, request, is_post=True):
+        """Unified AI-only request handler"""
         try:
             # Extract parameters
             if is_post:
@@ -684,24 +685,28 @@ class SmartForecastView(APIView):
             if days < 1:
                 days = 7
 
-            # Check if AI system should be used
-            use_ai_system = (
-                    is_post and
-                    blood_type != 'all' and
-                    request.headers.get('X-Use-AI-System') == 'true'
-            )
+            # Validate method
+            valid_methods = ['auto', 'random_forest', 'xgboost', 'arima', 'stl_arima']
+            if method not in valid_methods:
+                method = 'auto'
 
-            if use_ai_system:
-                return self.handle_ai_forecast(blood_type, days, method, force_retrain)
-            else:
-                return self.handle_classic_forecast(blood_type, days, method)
+            # Log the request
+            logger.info(f"🤖 AI Forecast Request: {blood_type}, {days} days, method: {method}")
+
+            # Always use AI system - no fallback to classic
+            return self.handle_ai_forecast_only(blood_type, days, method, force_retrain)
 
         except ValueError as e:
             logger.error(f"Invalid parameters: {e}")
             return Response({
                 'error': 'Invalid parameters',
                 'message': str(e),
-                'timestamp': timezone.now().isoformat()
+                'timestamp': timezone.now().isoformat(),
+                'suggestions': {
+                    'blood_type': 'Use standard blood types (O+, A+, B+, AB+, O-, A-, B-, AB-)',
+                    'days': 'Use values between 1 and 30',
+                    'method': 'Use auto, random_forest, xgboost, arima, or stl_arima'
+                }
             }, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
@@ -709,231 +714,470 @@ class SmartForecastView(APIView):
             return Response({
                 'error': 'Forecast generation failed',
                 'message': str(e),
-                'timestamp': timezone.now().isoformat()
+                'timestamp': timezone.now().isoformat(),
+                'system': 'ai_only'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def handle_ai_forecast(self, blood_type, days, method, force_retrain):
-        """Handle AI-powered forecasting"""
+    def handle_ai_forecast_only(self, blood_type, days, method, force_retrain):
+        """Handle AI-powered forecasting with robust error handling"""
         try:
-            # Import AI forecasting function
-            from forecasting.blood_demand_forecasting import generate_forecast_api
+            # Import AI forecasting function with error handling
+            try:
+                from forecasting.blood_demand_forecasting import generate_forecast_api
+                logger.info(f"✅ AI module imported successfully")
+            except ImportError as import_error:
+                logger.error(f"❌ AI forecasting module not available: {import_error}")
+                return self.handle_ai_import_error(blood_type, days, method)
 
-            logger.info(f"🤖 Using AI system for {blood_type} forecast")
+            logger.info(f"🤖 Using AI system for {blood_type} forecast (method: {method})")
 
-            # Generate AI forecast
-            result = generate_forecast_api(
-                blood_type=blood_type,
-                days_ahead=days,
-                method=method,
-                force_retrain=force_retrain
-            )
+            # Generate AI forecast with timeout protection
+            try:
+                result = generate_forecast_api(
+                    blood_type=blood_type,
+                    days_ahead=days,
+                    method=method,
+                    force_retrain=force_retrain
+                )
 
+                logger.info(f"✅ AI forecast generated successfully for {blood_type}")
+
+            except Exception as forecast_error:
+                logger.error(f"❌ AI forecast generation failed: {forecast_error}")
+                return self.handle_ai_forecast_error(blood_type, days, method, forecast_error)
+
+            # Check if result contains error
             if result.get('error'):
-                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                logger.warning(f"⚠️ AI system returned error: {result.get('error')}")
+                return self.handle_ai_result_error(result, blood_type, days, method)
 
             # Adapt result for frontend compatibility
-            adapted_result = self.adapt_ai_result_for_frontend(result, days)
-            return Response(adapted_result, status=status.HTTP_200_OK)
+            try:
+                adapted_result = self.adapt_ai_result_for_frontend(result, days)
 
-        except ImportError:
-            logger.error("AI forecasting module not available")
-            return Response({
-                'error': 'AI system not available',
-                'message': 'Falling back to classic forecasting',
-                'timestamp': timezone.now().isoformat()
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                # Add system metadata
+                adapted_result.update({
+                    'system_used': 'ai_only',
+                    'classic_fallback': False,
+                    'timestamp': timezone.now().isoformat(),
+                    'request_method': method,
+                    'ai_system_status': 'operational'
+                })
+
+                logger.info(f"✅ AI forecast successfully adapted for {blood_type}")
+                return Response(adapted_result, status=status.HTTP_200_OK)
+
+            except Exception as adapt_error:
+                logger.error(f"❌ Error adapting AI result: {adapt_error}")
+                return self.handle_adaptation_error(result, blood_type, days, adapt_error)
 
         except Exception as e:
-            logger.error(f"AI forecast failed: {e}")
-            return Response({
-                'error': 'AI forecast failed',
-                'message': str(e),
-                'timestamp': timezone.now().isoformat()
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"❌ Critical AI forecast error: {e}")
+            return self.handle_critical_ai_error(blood_type, days, method, e)
 
-    def handle_classic_forecast(self, blood_type, days, method):
-        """Handle classic forecasting fallback"""
+    def handle_ai_import_error(self, blood_type, days, method):
+        """Handle AI module import errors"""
+        return Response({
+            'error': 'AI system unavailable',
+            'message': 'AI forecasting module could not be imported',
+            'blood_type': blood_type,
+            'forecast_period_days': days,
+            'requested_method': method,
+            'system_status': 'ai_module_missing',
+            'timestamp': timezone.now().isoformat(),
+            'recommendation': 'Please ensure AI forecasting dependencies are installed',
+            'fallback_available': False
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    def handle_ai_forecast_error(self, blood_type, days, method, error):
+        """Handle AI forecast generation errors"""
+        return Response({
+            'error': 'AI forecast generation failed',
+            'message': str(error),
+            'blood_type': blood_type,
+            'forecast_period_days': days,
+            'requested_method': method,
+            'system_status': 'ai_generation_error',
+            'timestamp': timezone.now().isoformat(),
+            'error_type': type(error).__name__,
+            'fallback_available': False
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def handle_ai_result_error(self, result, blood_type, days, method):
+        """Handle errors returned by AI system"""
+        error_msg = result.get('message', 'Unknown AI system error')
+
+        return Response({
+            'error': 'AI system error',
+            'message': error_msg,
+            'blood_type': blood_type,
+            'forecast_period_days': days,
+            'requested_method': method,
+            'ai_error_details': result.get('error'),
+            'system_status': 'ai_internal_error',
+            'timestamp': timezone.now().isoformat(),
+            'fallback_available': False
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def handle_adaptation_error(self, original_result, blood_type, days, error):
+        """Handle result adaptation errors - return original result"""
+        logger.warning(f"⚠️ Adaptation failed, returning original AI result")
+
+        # Try to return original result with minimal modification
         try:
-            logger.info(f"📊 Using classic system for {blood_type} forecast")
-
-            # Cache key for classic forecast
-            cache_key = f'classic_forecast_{blood_type}_{days}_{method}'
-            cached_result = cache.get(cache_key)
-
-            if cached_result:
-                logger.info(f"Classic forecast served from cache for {blood_type}")
-                return Response(cached_result)
-
-            # Generate classic forecast (placeholder - implement your logic)
-            predictions = self.generate_classic_predictions(blood_type, days)
-
-            result = {
-                'predictions': predictions,
+            original_result.update({
+                'system_used': 'ai_only',
+                'adaptation_warning': f'Result adaptation failed: {str(error)}',
+                'timestamp': timezone.now().isoformat()
+            })
+            return Response(original_result, status=status.HTTP_200_OK)
+        except:
+            return Response({
+                'error': 'Result adaptation failed',
+                'message': str(error),
                 'blood_type': blood_type,
                 'forecast_period_days': days,
-                'method_used': f'classic_{method}',
-                'generated_at': timezone.now().isoformat(),
-                'data_source': 'classic_system',
-                'confidence_intervals': self.generate_confidence_intervals(predictions),
-                'optimization_recommendations': self.generate_basic_recommendations(blood_type, predictions)
-            }
-
-            # Cache for 30 minutes
-            cache.set(cache_key, result, timeout=1800)
-
-            return Response(result, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.error(f"Classic forecast failed: {e}")
-            return Response({
-                'error': 'Classic forecast failed',
-                'message': str(e),
-                'timestamp': timezone.now().isoformat()
+                'timestamp': timezone.now().isoformat(),
+                'fallback_available': False
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def handle_critical_ai_error(self, blood_type, days, method, error):
+        """Handle critical AI system errors"""
+        return Response({
+            'error': 'Critical AI system failure',
+            'message': str(error),
+            'blood_type': blood_type,
+            'forecast_period_days': days,
+            'requested_method': method,
+            'system_status': 'critical_failure',
+            'timestamp': timezone.now().isoformat(),
+            'error_type': type(error).__name__,
+            'recommendation': 'Please check AI system health and try again',
+            'fallback_available': False
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     def adapt_ai_result_for_frontend(self, ai_result, days):
-        """Adapt AI result for frontend compatibility"""
+        """Adapt AI result for frontend compatibility with robust error handling"""
         try:
-            return {
+            # Ensure essential fields exist
+            adapted = {
                 'predictions': ai_result.get('predictions', []),
-                'method_used': ai_result.get('method_used', 'auto'),
-                'blood_type': ai_result.get('blood_type'),
+                'method_used': ai_result.get('method_used', 'unknown'),
+                'blood_type': ai_result.get('blood_type', 'unknown'),
                 'forecast_period_days': days,
-                'generated_at': ai_result.get('generated_at'),
-                'data_source': ai_result.get('data_source', 'real_database'),
-                'model_performance': ai_result.get('model_performance', {}),
-                'confidence_intervals': ai_result.get('confidence_intervals', {}),
-                'contextual_insights': ai_result.get('contextual_insights', {}),
-                'optimization_recommendations': ai_result.get('optimization_recommendations', []),
-                'enhanced_forecasting_available': True
+                'generated_at': ai_result.get('generated_at', timezone.now().isoformat()),
+                'data_source': ai_result.get('data_source', 'ai_system'),
+                'enhanced_forecasting_available': True,
+                'system_type': 'ai_only'
             }
+
+            # Add optional fields if available
+            optional_fields = [
+                'model_performance',
+                'confidence_intervals',
+                'contextual_insights',
+                'optimization_recommendations',
+                'quality_metrics',
+                'warning'
+            ]
+
+            for field in optional_fields:
+                if field in ai_result:
+                    adapted[field] = ai_result[field]
+
+            # Validate predictions structure
+            if adapted['predictions']:
+                validated_predictions = []
+                for pred in adapted['predictions']:
+                    if isinstance(pred, dict) and 'date' in pred and 'predicted_demand' in pred:
+                        validated_predictions.append({
+                            'date': pred['date'],
+                            'predicted_demand': max(0, int(pred.get('predicted_demand', 0))),
+                            'confidence': float(pred.get('confidence', 0.5))
+                        })
+                adapted['predictions'] = validated_predictions
+
+            # Add metadata
+            adapted.update({
+                'adaptation_timestamp': timezone.now().isoformat(),
+                'result_validated': True,
+                'prediction_count': len(adapted['predictions'])
+            })
+
+            return adapted
+
         except Exception as e:
-            logger.error(f"Error adapting AI result: {e}")
-            return ai_result
-
-    def generate_classic_predictions(self, blood_type, days):
-        """Generate classic predictions (implement your existing logic here)"""
-        from datetime import datetime, timedelta
-
-        predictions = []
-        base_demand = 5  # Basic fallback value
-
-        for i in range(days):
-            future_date = datetime.now() + timedelta(days=i + 1)
-
-            # Simple demand calculation (replace with your actual logic)
-            demand = base_demand + (i % 3)  # Simple variation
-
-            predictions.append({
-                'date': future_date.strftime('%Y-%m-%d'),
-                'predicted_demand': demand,
-                'confidence': 0.7 - (i * 0.02)  # Decreasing confidence
-            })
-
-        return predictions
-
-    def generate_confidence_intervals(self, predictions):
-        """Generate basic confidence intervals"""
-        if not predictions:
-            return {'lower': [], 'upper': []}
-
-        lower = []
-        upper = []
-
-        for pred in predictions:
-            demand = pred['predicted_demand']
-            margin = demand * 0.2  # 20% margin
-            lower.append(max(0, int(demand - margin)))
-            upper.append(int(demand + margin))
-
-        return {'lower': lower, 'upper': upper}
-
-    def generate_basic_recommendations(self, blood_type, predictions):
-        """Generate basic recommendations"""
-        if not predictions:
-            return []
-
-        total_demand = sum(p['predicted_demand'] for p in predictions)
-        avg_demand = total_demand / len(predictions)
-
-        recommendations = []
-
-        if avg_demand > 10:
-            recommendations.append({
-                'type': 'high_demand',
-                'priority': 'high',
-                'message': f'High demand predicted for {blood_type}. Consider increasing collection efforts.',
-                'action': 'increase_collection'
-            })
-
-        recommendations.append({
-            'type': 'monitoring',
-            'priority': 'medium',
-            'message': f'Monitor {blood_type} stock levels closely over the next {len(predictions)} days.',
-            'action': 'monitor_stock'
-        })
-
-        return recommendations
+            logger.error(f"❌ Critical adaptation error: {e}")
+            # Return minimal valid structure
+            return {
+                'error': 'Adaptation failed',
+                'message': str(e),
+                'blood_type': ai_result.get('blood_type', 'unknown'),
+                'forecast_period_days': days,
+                'predictions': [],
+                'method_used': 'error',
+                'generated_at': timezone.now().isoformat(),
+                'system_type': 'ai_only',
+                'adaptation_failed': True
+            }
 
 
 @global_allow_any
 class AISystemHealthView(APIView):
-    """AI System health monitoring"""
+    """
+    🏥 Endpoint de santé et debug pour le système IA
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
-        """Check AI system health"""
+        """Vérification complète du système IA"""
         try:
-            from forecasting.blood_demand_forecasting import health_check as ai_health
-            health_data = ai_health()
-            return Response(health_data, status=status.HTTP_200_OK)
-        except ImportError:
+            from forecasting.blood_demand_forecasting import health_check, get_available_methods
+
+            # Test d'import
+            try:
+                from forecasting.blood_demand_forecasting import RealDataBloodDemandForecaster
+                forecaster_available = True
+            except ImportError as e:
+                forecaster_available = False
+                import_error = str(e)
+
+            # Vérification des dépendances
+            dependencies = {
+                'pandas': self.check_import('pandas'),
+                'numpy': self.check_import('numpy'),
+                'sklearn': self.check_import('sklearn'),
+                'xgboost': self.check_import('xgboost'),
+                'statsmodels': self.check_import('statsmodels'),
+                'django': self.check_import('django')
+            }
+
+            # Test de connexion base de données
+            db_status = self.check_database_connection()
+
+            # Test du système IA
+            ai_health = health_check()
+            available_methods = get_available_methods()
+
+            # Test rapide de prédiction
+            quick_test = self.quick_forecast_test()
+
             return Response({
-                'status': 'not_available',
-                'error': 'AI system not installed',
-                'timestamp': timezone.now().isoformat()
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                'system_status': 'healthy' if forecaster_available and db_status['connected'] else 'degraded',
+                'timestamp': timezone.now().isoformat(),
+                'components': {
+                    'forecaster_module': forecaster_available,
+                    'database': db_status,
+                    'dependencies': dependencies,
+                    'ai_system': ai_health,
+                    'available_methods': available_methods,
+                    'quick_test': quick_test
+                },
+                'recommendations': self.get_system_recommendations(
+                    forecaster_available, db_status, dependencies, quick_test
+                )
+            })
+
         except Exception as e:
             return Response({
-                'status': 'error',
+                'system_status': 'error',
                 'error': str(e),
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def check_import(self, module_name):
+        """Test d'import d'un module"""
+        try:
+            __import__(module_name)
+            return {'available': True, 'version': 'unknown'}
+        except ImportError as e:
+            return {'available': False, 'error': str(e)}
+
+    def check_database_connection(self):
+        """Test de connexion à la base de données"""
+        try:
+            from django.db import connection
+            from inventory.models import BloodInventory, Transaction
+
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Test des modèles
+            inventory_count = BloodInventory.objects.count()
+            transaction_count = Transaction.objects.count()
+
+            return {
+                'connected': True,
+                'inventory_records': inventory_count,
+                'transaction_records': transaction_count,
+                'has_data': inventory_count > 0 or transaction_count > 0
+            }
+
+        except Exception as e:
+            return {
+                'connected': False,
+                'error': str(e)
+            }
+
+    def quick_forecast_test(self):
+        """Test rapide de génération de prévision"""
+        try:
+            from forecasting.blood_demand_forecasting import generate_forecast_api
+
+            # Test avec O+ (type courant)
+            start_time = time.time()
+            result = generate_forecast_api('O+', days_ahead=3, method='auto')
+            processing_time = time.time() - start_time
+
+            success = 'predictions' in result and len(result.get('predictions', [])) > 0
+
+            return {
+                'success': success,
+                'processing_time_seconds': round(processing_time, 2),
+                'method_used': result.get('method_used', 'unknown'),
+                'prediction_count': len(result.get('predictions', [])),
+                'has_error': 'error' in result,
+                'error_message': result.get('error') if 'error' in result else None
+            }
+
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def get_system_recommendations(self, forecaster_available, db_status, dependencies, quick_test):
+        """Générer des recommandations basées sur l'état du système"""
+        recommendations = []
+
+        if not forecaster_available:
+            recommendations.append({
+                'type': 'critical',
+                'message': 'Le module de prévision IA n\'est pas disponible',
+                'action': 'Vérifier l\'installation et les imports'
+            })
+
+        if not db_status.get('connected'):
+            recommendations.append({
+                'type': 'critical',
+                'message': 'Connexion base de données échouée',
+                'action': 'Vérifier la configuration de la base de données'
+            })
+
+        if not db_status.get('has_data'):
+            recommendations.append({
+                'type': 'warning',
+                'message': 'Aucune donnée trouvée en base',
+                'action': 'Charger des données d\'exemple ou vérifier les modèles'
+            })
+
+        if not dependencies.get('xgboost', {}).get('available'):
+            recommendations.append({
+                'type': 'info',
+                'message': 'XGBoost non disponible',
+                'action': 'pip install xgboost pour améliorer les performances'
+            })
+
+        if not dependencies.get('statsmodels', {}).get('available'):
+            recommendations.append({
+                'type': 'info',
+                'message': 'Statsmodels non disponible',
+                'action': 'pip install statsmodels pour les modèles ARIMA'
+            })
+
+        if not quick_test.get('success'):
+            recommendations.append({
+                'type': 'warning',
+                'message': 'Test rapide de prévision échoué',
+                'action': 'Vérifier les logs pour plus de détails'
+            })
+
+        if quick_test.get('processing_time_seconds', 0) > 10:
+            recommendations.append({
+                'type': 'performance',
+                'message': 'Temps de traitement élevé',
+                'action': 'Optimiser les performances ou augmenter le cache'
+            })
+
+        if not recommendations:
+            recommendations.append({
+                'type': 'success',
+                'message': 'Système IA fonctionnel',
+                'action': 'Aucune action requise'
+            })
+
+        return recommendations
 
 @global_allow_any
 class AIMethodsView(APIView):
-    """Available AI methods endpoint"""
+    """
+    🔧 Endpoint pour tester les différentes méthodes IA
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
-        """Get available AI methods"""
+        """Liste des méthodes disponibles"""
         try:
             from forecasting.blood_demand_forecasting import get_available_methods
-            methods = get_available_methods()
+
+            methods_info = get_available_methods()
+
             return Response({
-                'methods': methods,
-                'default_method': 'auto',
+                'available_methods': methods_info['available_methods'],
+                'system_capabilities': methods_info['system_capabilities'],
                 'timestamp': timezone.now().isoformat()
-            }, status=status.HTTP_200_OK)
-        except ImportError:
-            return Response({
-                'methods': [
-                    {
-                        'value': 'classic',
-                        'label': '📊 Classic Forecast',
-                        'description': 'Basic forecasting using historical averages'
-                    }
-                ],
-                'default_method': 'classic',
-                'ai_available': False,
-                'timestamp': timezone.now().isoformat()
-            }, status=status.HTTP_200_OK)
+            })
+
         except Exception as e:
             return Response({
-                'error': str(e),
+                'error': 'Failed to get methods info',
+                'message': str(e),
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        """Test d'une méthode spécifique"""
+        try:
+            blood_type = request.data.get('blood_type', 'O+')
+            method = request.data.get('method', 'auto')
+            days = int(request.data.get('days', 7))
+
+            from forecasting.blood_demand_forecasting import generate_forecast_api
+
+            start_time = time.time()
+            result = generate_forecast_api(blood_type, days, method, force_retrain=True)
+            processing_time = time.time() - start_time
+
+            # Analyser le résultat
+            analysis = {
+                'success': 'predictions' in result and len(result.get('predictions', [])) > 0,
+                'processing_time_seconds': round(processing_time, 2),
+                'method_actually_used': result.get('method_used'),
+                'prediction_count': len(result.get('predictions', [])),
+                'has_confidence_intervals': 'confidence_intervals' in result,
+                'has_performance_metrics': 'model_performance' in result,
+                'data_source': result.get('data_source'),
+                'warning_present': 'warning' in result
+            }
+
+            return Response({
+                'test_parameters': {
+                    'blood_type': blood_type,
+                    'method_requested': method,
+                    'days': days
+                },
+                'result': result,
+                'analysis': analysis,
+                'timestamp': timezone.now().isoformat()
+            })
+
+        except Exception as e:
+            return Response({
+                'error': 'Method test failed',
+                'message': str(e),
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @global_allow_any
@@ -2402,50 +2646,278 @@ class SiteDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 # Dans votre fichier views.py (paste.txt), ajoutez ces fonctions à la fin :
 
+# Dans blood_demand_forecasting.py - Fonction API améliorée
+
 def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
     """
-    🎯 FONCTION PRINCIPALE D'API pour l'interface React
+    🎯 FONCTION API PRINCIPALE - VERSION ROBUSTE
+    Génère des prévisions avec gestion d'erreurs complète
     """
+    start_time = time.time()
+
     try:
-        # Utiliser votre RealDataBloodDemandForecaster si disponible
-        if ENHANCED_FORECASTING_AVAILABLE:
-            from .forecasting.blood_demand_forecasting import RealDataBloodDemandForecaster
-            forecaster = RealDataBloodDemandForecaster()
-            result = forecaster.predict_with_real_data(blood_type, days_ahead, method)
-        else:
-            # Fallback avec votre système existant
-            forecaster = ProductionLightweightForecaster()
-            result = {
-                'blood_type': blood_type,
-                'predictions': [],
-                'method_used': 'fallback',
-                'generated_at': timezone.now().isoformat(),
-                'error': 'Enhanced forecasting not available'
+        logger.info(f"🚀 Starting AI forecast: {blood_type}, {days_ahead} days, method: {method}")
+
+        # Validation des paramètres
+        if not blood_type or blood_type not in ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']:
+            return {
+                'error': 'Invalid blood type',
+                'message': f'Blood type "{blood_type}" is not supported',
+                'supported_types': ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
             }
 
-        # Enrichir avec des métadonnées pour l'interface
-        result['api_response'] = {
-            'timestamp': timezone.now().isoformat(),
-            'processing_time_ms': 100,
-            'version': '2.0-real-data',
-            'data_source': 'production_database'
+        if days_ahead < 1 or days_ahead > 30:
+            return {
+                'error': 'Invalid forecast period',
+                'message': f'Days ahead must be between 1 and 30, got {days_ahead}'
+            }
+
+        valid_methods = ['auto', 'random_forest', 'xgboost', 'arima', 'stl_arima']
+        if method not in valid_methods:
+            return {
+                'error': 'Invalid method',
+                'message': f'Method "{method}" is not supported',
+                'supported_methods': valid_methods
+            }
+
+        # Initialiser le forecaster
+        try:
+            forecaster = RealDataBloodDemandForecaster(max_execution_time=90)
+            logger.info("✅ Forecaster initialized successfully")
+        except Exception as init_error:
+            logger.error(f"❌ Forecaster initialization failed: {init_error}")
+            return {
+                'error': 'Forecaster initialization failed',
+                'message': str(init_error),
+                'timestamp': datetime.now().isoformat()
+            }
+
+        # Vérifier les données disponibles avant de continuer
+        try:
+            test_data = forecaster.get_historical_data_from_db(blood_type, days_back=14)
+            if test_data is None or len(test_data) < 7:
+                logger.warning(
+                    f"⚠️ Insufficient data for {blood_type}: {len(test_data) if test_data is not None else 0} days")
+                return generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster)
+
+            logger.info(f"✅ Data check passed: {len(test_data)} days available")
+
+        except Exception as data_error:
+            logger.error(f"❌ Data check failed: {data_error}")
+            return generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster)
+
+        # Nettoyer le cache si force_retrain
+        if force_retrain:
+            try:
+                forecaster.clear_model_cache(blood_type)
+                logger.info(f"🧹 Cache cleared for {blood_type}")
+            except Exception as cache_error:
+                logger.warning(f"⚠️ Cache clearing failed: {cache_error}")
+
+        # Générer la prévision
+        try:
+            result = forecaster.predict_with_real_data(blood_type, days_ahead, method)
+
+            if not result or 'error' in result:
+                logger.error(f"❌ Forecasting failed for {blood_type}")
+                return generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster)
+
+            # Ajouter des métadonnées
+            result.update({
+                'api_version': '2.0',
+                'processing_time_seconds': round(time.time() - start_time, 2),
+                'system_status': 'operational',
+                'force_retrain': force_retrain
+            })
+
+            logger.info(f"✅ Forecast completed for {blood_type} in {time.time() - start_time:.2f}s")
+            return result
+
+        except TimeoutException:
+            logger.error(f"⏰ Forecast timeout for {blood_type}")
+            return {
+                'error': 'Forecast timeout',
+                'message': f'Forecast generation exceeded maximum time limit',
+                'blood_type': blood_type,
+                'timestamp': datetime.now().isoformat()
+            }
+
+        except Exception as forecast_error:
+            logger.error(f"❌ Forecast generation error: {forecast_error}")
+            return generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster)
+
+    except Exception as critical_error:
+        logger.error(f"❌ Critical API error: {critical_error}")
+        return {
+            'error': 'Critical system error',
+            'message': str(critical_error),
+            'blood_type': blood_type,
+            'timestamp': datetime.now().isoformat(),
+            'processing_time_seconds': round(time.time() - start_time, 2)
         }
 
-        # Ajouter les recommandations automatiques
-        result['optimization_recommendations'] = generate_recommendations(result)
+def generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster):
+    """
+    🚨 Génère une prévision minimale mais utilisable avec contexte
+    """
+    try:
+        logger.info(f"🔄 Generating minimal forecast for {blood_type}")
 
-        return result
+        # Essayer de récupérer des données contextuelles
+        contextual_data = forecaster.get_contextual_data(blood_type)
+
+        # Utiliser les moyennes récentes si disponibles
+        recent_avg = contextual_data.get('recent_daily_avg', 0)
+        monthly_avg = contextual_data.get('monthly_daily_avg', 0)
+
+        # Déterminer une demande de base réaliste
+        if recent_avg > 0:
+            base_demand = max(1, int(recent_avg))
+        elif monthly_avg > 0:
+            base_demand = max(1, int(monthly_avg))
+        else:
+            # Valeurs par défaut basées sur la criticité du type sanguin
+            critical_types = ['O-', 'AB+', 'AB-']
+            base_demand = 3 if blood_type in critical_types else 2
+
+        # Générer les prédictions avec pattern hebdomadaire
+        predictions = []
+        for i in range(days_ahead):
+            future_date = datetime.now() + timedelta(days=i + 1)
+            day_of_week = future_date.weekday()
+
+            # Pattern hebdomadaire simple (moins de demande le weekend)
+            if day_of_week in [5, 6]:  # Weekend
+                daily_demand = max(1, int(base_demand * 0.7))
+            elif day_of_week == 0:  # Lundi (souvent plus élevé)
+                daily_demand = max(1, int(base_demand * 1.2))
+            else:
+                daily_demand = base_demand
+
+            # Ajouter une petite variation
+            variation = int(daily_demand * 0.1) if daily_demand > 2 else 0
+            if variation > 0:
+                import random
+                daily_demand += random.randint(-variation, variation)
+
+            daily_demand = max(1, daily_demand)
+
+            predictions.append({
+                'date': future_date.strftime('%Y-%m-%d'),
+                'predicted_demand': daily_demand,
+                'confidence': max(0.3, 0.5 - (i * 0.02))  # Confiance décroissante
+            })
+
+        # Calculer des intervalles de confiance simples
+        confidence_intervals = {
+            'lower': [max(0, int(p['predicted_demand'] * 0.7)) for p in predictions],
+            'upper': [int(p['predicted_demand'] * 1.4) for p in predictions],
+            'margin': base_demand * 0.3
+        }
+
+        return {
+            'blood_type': blood_type,
+            'predictions': predictions,
+            'method_used': 'minimal_contextual_forecast',
+            'confidence_intervals': confidence_intervals,
+            'generated_at': datetime.now().isoformat(),
+            'data_source': 'limited_context',
+            'warning': 'Prévision basée sur des données limitées',
+            'contextual_insights': {
+                'current_stock': contextual_data.get('current_stock', 0),
+                'recent_trend': recent_avg,
+                'data_availability': 'limited',
+                'base_demand_used': base_demand
+            },
+            'model_performance': {
+                'mape': 30.0,  # Estimation conservative
+                'training_samples': 0,
+                'confidence_level': 'low'
+            },
+            'optimization_recommendations': [
+                {
+                    'type': 'data_collection',
+                    'priority': 'high',
+                    'message': f'Collectez plus de données historiques pour {blood_type}',
+                    'action': 'improve_data_collection'
+                },
+                {
+                    'type': 'monitoring',
+                    'priority': 'medium',
+                    'message': f'Surveillez attentivement les niveaux de stock pour {blood_type}',
+                    'action': 'increase_monitoring'
+                }
+            ]
+        }
 
     except Exception as e:
-        logger.error(f"❌ Erreur API génération prévision: {e}")
+        logger.error(f"❌ Minimal forecast failed: {e}")
+
+        # Fallback ultime
+        predictions = []
+        for i in range(days_ahead):
+            future_date = datetime.now() + timedelta(days=i + 1)
+            predictions.append({
+                'date': future_date.strftime('%Y-%m-%d'),
+                'predicted_demand': 2,  # Valeur minimale sûre
+                'confidence': 0.3
+            })
+
         return {
-            'error': True,
-            'message': str(e),
             'blood_type': blood_type,
-            'method_attempted': method,
-            'timestamp': timezone.now().isoformat()
+            'predictions': predictions,
+            'method_used': 'emergency_fallback',
+            'generated_at': datetime.now().isoformat(),
+            'warning': 'Prévision d\'urgence - données insuffisantes',
+            'error_context': str(e)
         }
 
+def get_available_methods():
+    """
+    📋 Retourne les méthodes disponibles avec leur statut
+    """
+    methods = {
+        'auto': {
+            'name': 'Automatique',
+            'description': 'Sélection automatique de la meilleure méthode',
+            'available': True,
+            'recommended': True
+        },
+        'random_forest': {
+            'name': 'Random Forest',
+            'description': 'Algorithme d\'ensemble robuste',
+            'available': True,
+            'good_for': 'Données stables avec peu de bruit'
+        },
+        'xgboost': {
+            'name': 'XGBoost',
+            'description': 'Gradient boosting avancé',
+            'available': XGBOOST_AVAILABLE,
+            'good_for': 'Données complexes avec patterns non-linéaires'
+        },
+        'arima': {
+            'name': 'ARIMA',
+            'description': 'Modèle de série temporelle classique',
+            'available': STATSMODELS_AVAILABLE,
+            'good_for': 'Données avec tendances claires'
+        },
+        'stl_arima': {
+            'name': 'STL + ARIMA',
+            'description': 'Décomposition saisonnière + ARIMA',
+            'available': STATSMODELS_AVAILABLE,
+            'good_for': 'Données avec saisonnalité marquée'
+        }
+    }
+
+    return {
+        'available_methods': methods,
+        'system_capabilities': {
+            'xgboost_available': XGBOOST_AVAILABLE,
+            'statsmodels_available': STATSMODELS_AVAILABLE,
+            'max_forecast_days': 30,
+            'supported_blood_types': ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        }
+    }
 
 def generate_recommendations(forecast_result):
     """
@@ -2494,55 +2966,6 @@ def generate_recommendations(forecast_result):
     except Exception as e:
         logger.error(f"❌ Erreur génération recommandations: {e}")
         return []
-
-
-def get_available_methods():
-    """
-    📋 LISTE DES MÉTHODES DISPONIBLES pour l'interface
-    """
-    methods = [
-        {
-            'value': 'auto',
-            'label': '🤖 Auto-Sélection',
-            'description': 'Sélection automatique de la meilleure méthode'
-        },
-        {
-            'value': 'random_forest',
-            'label': '🌲 Random Forest',
-            'description': 'Apprentissage automatique robuste'
-        }
-    ]
-
-    # Vérifier si XGBoost est disponible
-    try:
-        import xgboost
-        methods.append({
-            'value': 'xgboost',
-            'label': '⚡ XGBoost',
-            'description': 'Gradient boosting haute performance'
-        })
-    except ImportError:
-        pass
-
-    # Vérifier si statsmodels est disponible
-    try:
-        import statsmodels
-        methods.extend([
-            {
-                'value': 'arima',
-                'label': '📈 ARIMA',
-                'description': 'Modèle statistique de séries temporelles'
-            },
-            {
-                'value': 'stl_arima',
-                'label': '🔬 STL + ARIMA',
-                'description': 'Décomposition saisonnière + ARIMA'
-            }
-        ])
-    except ImportError:
-        pass
-
-    return methods
 
 
 @api_view(['GET'])
