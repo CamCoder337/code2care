@@ -6,7 +6,6 @@ from django.utils.decorators import method_decorator
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from rest_framework.permissions import AllowAny
-from django.db.models import Count, Sum, Q, Avg
 from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
@@ -725,7 +724,7 @@ class SmartForecastView(APIView):
         try:
             # Import AI forecasting function with error handling
             try:
-                from forecasting.blood_demand_forecasting import generate_forecast_api
+                from .blood_demand_forecasting import generate_forecast_api
                 logger.info(f"✅ AI module imported successfully")
             except ImportError as import_error:
                 logger.error(f"❌ AI forecasting module not available: {import_error}")
@@ -934,11 +933,11 @@ class AISystemHealthView(APIView):
     def get(self, request):
         """Vérification complète du système IA"""
         try:
-            from forecasting.blood_demand_forecasting import health_check, get_available_methods
+            from .blood_demand_forecasting import health_check, get_available_methods
 
             # Test d'import
             try:
-                from forecasting.blood_demand_forecasting import RealDataBloodDemandForecaster
+                from .blood_demand_forecasting import RealDataBloodDemandForecaster
                 forecaster_available = True
             except ImportError as e:
                 forecaster_available = False
@@ -1024,7 +1023,7 @@ class AISystemHealthView(APIView):
     def quick_forecast_test(self):
         """Test rapide de génération de prévision"""
         try:
-            from forecasting.blood_demand_forecasting import generate_forecast_api
+            from .blood_demand_forecasting import generate_forecast_api
 
             # Test avec O+ (type courant)
             start_time = time.time()
@@ -1120,7 +1119,7 @@ class AIMethodsView(APIView):
     def get(self, request):
         """Liste des méthodes disponibles"""
         try:
-            from forecasting.blood_demand_forecasting import get_available_methods
+            from .blood_demand_forecasting import get_available_methods
 
             methods_info = get_available_methods()
 
@@ -1144,7 +1143,7 @@ class AIMethodsView(APIView):
             method = request.data.get('method', 'auto')
             days = int(request.data.get('days', 7))
 
-            from forecasting.blood_demand_forecasting import generate_forecast_api
+            from .blood_demand_forecasting import generate_forecast_api
 
             start_time = time.time()
             result = generate_forecast_api(blood_type, days, method, force_retrain=True)
@@ -2758,6 +2757,55 @@ def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain
             'processing_time_seconds': round(time.time() - start_time, 2)
         }
 
+
+
+def get_available_methods():
+    """
+    📋 Retourne les méthodes disponibles avec leur statut
+    """
+    methods = {
+        'auto': {
+            'name': 'Automatique',
+            'description': 'Sélection automatique de la meilleure méthode',
+            'available': True,
+            'recommended': True
+        },
+        'random_forest': {
+            'name': 'Random Forest',
+            'description': 'Algorithme d\'ensemble robuste',
+            'available': True,
+            'good_for': 'Données stables avec peu de bruit'
+        },
+        'xgboost': {
+            'name': 'XGBoost',
+            'description': 'Gradient boosting avancé',
+            'available': XGBOOST_AVAILABLE,
+            'good_for': 'Données complexes avec patterns non-linéaires'
+        },
+        'arima': {
+            'name': 'ARIMA',
+            'description': 'Modèle de série temporelle classique',
+            'available': STATSMODELS_AVAILABLE,
+            'good_for': 'Données avec tendances claires'
+        },
+        'stl_arima': {
+            'name': 'STL + ARIMA',
+            'description': 'Décomposition saisonnière + ARIMA',
+            'available': STATSMODELS_AVAILABLE,
+            'good_for': 'Données avec saisonnalité marquée'
+        }
+    }
+
+    return {
+        'available_methods': methods,
+        'system_capabilities': {
+            'xgboost_available': XGBOOST_AVAILABLE,
+            'statsmodels_available': STATSMODELS_AVAILABLE,
+            'max_forecast_days': 30,
+            'supported_blood_types': ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        }
+    }
+
 def generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster):
     """
     🚨 Génère une prévision minimale mais utilisable avec contexte
@@ -2873,53 +2921,6 @@ def generate_minimal_forecast_with_context(blood_type, days_ahead, forecaster):
             'warning': 'Prévision d\'urgence - données insuffisantes',
             'error_context': str(e)
         }
-
-def get_available_methods():
-    """
-    📋 Retourne les méthodes disponibles avec leur statut
-    """
-    methods = {
-        'auto': {
-            'name': 'Automatique',
-            'description': 'Sélection automatique de la meilleure méthode',
-            'available': True,
-            'recommended': True
-        },
-        'random_forest': {
-            'name': 'Random Forest',
-            'description': 'Algorithme d\'ensemble robuste',
-            'available': True,
-            'good_for': 'Données stables avec peu de bruit'
-        },
-        'xgboost': {
-            'name': 'XGBoost',
-            'description': 'Gradient boosting avancé',
-            'available': XGBOOST_AVAILABLE,
-            'good_for': 'Données complexes avec patterns non-linéaires'
-        },
-        'arima': {
-            'name': 'ARIMA',
-            'description': 'Modèle de série temporelle classique',
-            'available': STATSMODELS_AVAILABLE,
-            'good_for': 'Données avec tendances claires'
-        },
-        'stl_arima': {
-            'name': 'STL + ARIMA',
-            'description': 'Décomposition saisonnière + ARIMA',
-            'available': STATSMODELS_AVAILABLE,
-            'good_for': 'Données avec saisonnalité marquée'
-        }
-    }
-
-    return {
-        'available_methods': methods,
-        'system_capabilities': {
-            'xgboost_available': XGBOOST_AVAILABLE,
-            'statsmodels_available': STATSMODELS_AVAILABLE,
-            'max_forecast_days': 30,
-            'supported_blood_types': ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
-        }
-    }
 
 def generate_recommendations(forecast_result):
     """
@@ -3126,7 +3127,7 @@ def ai_system_health(request):
     try:
         # Check si le module forecasting existe
         try:
-            from forecasting.blood_demand_forecasting import health_check as ai_health
+            from .blood_demand_forecasting import health_check as ai_health
             result = ai_health()
             return Response(result, status=status.HTTP_200_OK)
         except ImportError:
