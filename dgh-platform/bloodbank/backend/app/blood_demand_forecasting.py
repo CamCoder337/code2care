@@ -42,8 +42,8 @@ try:
     MODELS_AVAILABLE = True
 except ImportError:
     try:
-        # Essayez depuis inventory.models si c'est votre structure
-        from inventory.models import BloodInventory as BloodUnit, Transaction as BloodRecord
+        # Essayez depuis app.models si c'est votre structure
+        from app.models import BloodInventory as BloodUnit, Transaction as BloodRecord
 
         MODELS_AVAILABLE = True
     except ImportError:
@@ -239,7 +239,7 @@ class RealDataBloodDemandForecaster:
         """
         🗄️ RÉCUPÉRATION DES VRAIES DONNÉES DEPUIS LA DB
         """
-        from inventory.models import BloodInventory, Transaction
+        from app.models import BloodInventory, Transaction
 
         try:
             end_date = datetime.now().date()
@@ -292,7 +292,7 @@ class RealDataBloodDemandForecaster:
         📈 RÉCUPÉRATION DE DONNÉES CONTEXTUELLES
         Stock actuel, tendances récentes, etc.
         """
-        from inventory.models import BloodInventory, Transaction
+        from app.models import BloodInventory, Transaction
 
         try:
             # Stock actuel
@@ -1555,7 +1555,7 @@ def verify_system_integrity():
     """
     try:
         from django.db import connection
-        from inventory.models import BloodInventory, Transaction
+        from app.models import BloodInventory, Transaction
 
         issues = []
 
