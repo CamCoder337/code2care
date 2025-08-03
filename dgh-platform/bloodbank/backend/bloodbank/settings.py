@@ -21,11 +21,10 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '0.0.0.0',
-    '.render.com',  # Pour Render deployment
-    '.onrender.com',
     'high5-code2care-sr7p.onrender.com',
-    "high-5-blood2care.vercel.app"# Alternative Render domain
+    'high-5-blood2care.vercel.app',
+    '.onrender.com',
+    '.vercel.app',
 ]
 
 # Add your custom domain here when you have one
@@ -38,7 +37,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://localhost:3000",
-    "https://high-5-blood2care.vercel.app"
+    "https://high5-code2care-sr7p.onrender.com",
+    "https://high-5-blood2care.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -57,6 +57,7 @@ CORS_ALLOW_HEADERS = [
     'x-use-ai-system',
     'cache-control',
     'pragma',
+    'access-control-allow-origin',
 ]
 
 # ✅ AJOUT : Autoriser toutes les méthodes HTTP nécessaires
@@ -67,6 +68,11 @@ CORS_ALLOW_METHODS = [
     'PATCH',
     'POST',
     'PUT',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://high5-code2care-sr7p.onrender.com",
+    "https://high-5-blood2care.vercel.app",
 ]
 
 # ✅ AJOUT : Pour les requêtes avec préflight (OPTIONS)

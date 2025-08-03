@@ -1,4 +1,4 @@
-# bloodbank/urls.py - VERSION ULTRA-SÛRE
+# bloodbank/urls.py - VERSION CORRIGÉE
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
@@ -20,6 +20,13 @@ def api_root(request):
             'dashboard': '/api/dashboard/overview/',
             'forecast': '/api/forecast/',
             'inventory': '/api/inventory/units/',
+            'alerts': '/api/alerts/',
+            'donors': '/api/donors/',
+            'patients': '/api/patients/',
+            'sites': '/api/sites/',
+            'requests': '/api/requests/',
+            'reports': '/api/reports/export/',
+            'system_metrics': '/api/system/metrics/',
         }
     })
 
@@ -70,18 +77,19 @@ urlpatterns = [
     # Main app URLs
     path('api/', include('app.urls')),
 
-    # Health check direct (sans import externe)
+    # Health check directs (fallback routes)
     path('health/', simple_health_check, name='direct-health-check'),
+    path('api/health/', simple_health_check, name='api-health-fallback'),
 
     # System metrics (pour résoudre l'erreur 404)
     path('system/metrics/', system_metrics, name='system-metrics'),
+    path('api/system/metrics/', system_metrics, name='api-system-metrics'),
 ]
 
 # Development only
 if settings.DEBUG:
     try:
         import debug_toolbar
-
         urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
     except ImportError:
         pass
@@ -90,10 +98,19 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 
-# Error handlers fallback
+# Error handlers
 def handler404(request, exception):
-    return JsonResponse({'error': 'Not Found', 'status': 404}, status=404)
+    return JsonResponse({
+        'error': 'Not Found',
+        'status': 404,
+        'path': request.path,
+        'message': 'The requested endpoint does not exist'
+    }, status=404)
 
 
 def handler500(request):
-    return JsonResponse({'error': 'Internal Server Error', 'status': 500}, status=500)
+    return JsonResponse({
+        'error': 'Internal Server Error',
+        'status': 500,
+        'message': 'An unexpected error occurred'
+    }, status=500)

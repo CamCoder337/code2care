@@ -1,4 +1,4 @@
-# app/urls.py
+# app/urls.py - VERSION CORRIGÉE
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
@@ -21,8 +21,8 @@ urlpatterns = [
     path('analytics/inventory/', views.InventoryAnalyticsAPIView.as_view(), name='inventory_analytics'),
 
     # ==================== FORECASTING - CONSOLIDATED ROUTES ====================
-    path('forecast/', views.SmartForecastView.as_view(), name='forecast_main'),  # ✅ Main route
-    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),  # ✅ AI alias
+    path('forecast/', views.SmartForecastView.as_view(), name='forecast_main'),
+    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),
 
     # Legacy forecasting routes (for backward compatibility)
     path('forecasting/demand/', views.SmartForecastView.as_view(), name='demand_forecast_legacy'),
@@ -36,9 +36,6 @@ urlpatterns = [
 
     # ==================== DATA IMPORT ====================
     path('data/import/', views.DataImportAPIView.as_view(), name='data_import'),
-
-    # ==================== REPORTS ====================
-    path('reports/export/', views.ReportExportAPIView.as_view(), name='report_export'),
 
     # ==================== DONORS CRUD ====================
     path('donors/', views.DonorListCreateAPIView.as_view(), name='donors_list_create'),
@@ -59,12 +56,12 @@ urlpatterns = [
     # ==================== BLOOD CONSUMPTION ====================
     path('consumption/', views.BloodConsumptionListCreateAPIView.as_view(), name='blood_consumption_list_create'),
 
+    # ==================== REPORTS - CORRECTION CRITIQUE ====================
+    path('reports/export/', views.ReportExportAPIView.as_view(), name='report_export'),
+
     # ==================== CONFIGURATION ====================
     path('config/system/', views.SystemConfigAPIView.as_view(), name='system_config'),
     path('config/compatibility/', views.blood_compatibility, name='blood_compatibility'),
-
-    # ==================== REPORTS - CORRECTION CRITIQUE ====================
-    path('reports/export/', views.ReportExportAPIView.as_view(), name='report_export'),
 
     # ==================== UTILITIES ====================
     path('utils/blood-compatibility/', views.blood_compatibility, name='blood_compatibility'),
