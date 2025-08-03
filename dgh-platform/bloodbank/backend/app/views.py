@@ -102,7 +102,7 @@ from .serializers import (
 )
 
 try:
-    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster,RealDataBloodDemandForecaster,generate_forecast_api,health_check,get_available_methods
+    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster, RealDataBloodDemandForecaster
     ENHANCED_FORECASTING_AVAILABLE = True
 except ImportError:
     ENHANCED_FORECASTING_AVAILABLE = False
@@ -2380,4 +2380,195 @@ class SiteDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Site.objects.all()
     serializer_class = SiteSerializer
     lookup_field = 'site_id'
+
+# 1. SOLUTION RAPIDE : Déplacer les fonctions dans le bon fichier
+
+# Dans votre fichier views.py (paste.txt), ajoutez ces fonctions à la fin :
+
+def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
+    """
+    🎯 FONCTION PRINCIPALE D'API pour l'interface React
+    """
+    try:
+        # Utiliser votre RealDataBloodDemandForecaster si disponible
+        if ENHANCED_FORECASTING_AVAILABLE:
+            from .forecasting.blood_demand_forecasting import RealDataBloodDemandForecaster
+            forecaster = RealDataBloodDemandForecaster()
+            result = forecaster.predict_with_real_data(blood_type, days_ahead, method)
+        else:
+            # Fallback avec votre système existant
+            forecaster = ProductionLightweightForecaster()
+            result = {
+                'blood_type': blood_type,
+                'predictions': [],
+                'method_used': 'fallback',
+                'generated_at': timezone.now().isoformat(),
+                'error': 'Enhanced forecasting not available'
+            }
+
+        # Enrichir avec des métadonnées pour l'interface
+        result['api_response'] = {
+            'timestamp': timezone.now().isoformat(),
+            'processing_time_ms': 100,
+            'version': '2.0-real-data',
+            'data_source': 'production_database'
+        }
+
+        # Ajouter les recommandations automatiques
+        result['optimization_recommendations'] = generate_recommendations(result)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Erreur API génération prévision: {e}")
+        return {
+            'error': True,
+            'message': str(e),
+            'blood_type': blood_type,
+            'method_attempted': method,
+            'timestamp': timezone.now().isoformat()
+        }
+
+
+def generate_recommendations(forecast_result):
+    """
+    💡 GÉNÉRATION DE RECOMMANDATIONS basées sur les vraies prédictions
+    """
+    try:
+        if not forecast_result.get('predictions'):
+            return []
+
+        recommendations = []
+        predictions = forecast_result['predictions']
+        blood_type = forecast_result['blood_type']
+
+        # Analyser les prédictions
+        if predictions:
+            demands = [p.get('predicted_demand', 0) for p in predictions]
+            max_demand = max(demands) if demands else 0
+            avg_demand = sum(demands) / len(demands) if demands else 0
+
+            # Stock actuel
+            current_stock = forecast_result.get('contextual_insights', {}).get('current_stock', 0)
+
+            # Recommandations basées sur les vraies prédictions
+            if max_demand > avg_demand * 1.5:
+                recommendations.append({
+                    'type': 'demand_spike',
+                    'priority': 'high',
+                    'message': f"Pic de demande prévu: {max_demand} unités. Prévoir un stock supplémentaire.",
+                    'action': 'increase_collection'
+                })
+
+            if current_stock > 0:
+                total_predicted = sum(demands)
+                if total_predicted > 0:
+                    days_coverage = current_stock / (total_predicted / len(demands))
+                    if days_coverage < 3:
+                        recommendations.append({
+                            'type': 'low_stock',
+                            'priority': 'critical',
+                            'message': f"Stock critique pour {blood_type}. Collecte urgente recommandée.",
+                            'action': 'urgent_collection'
+                        })
+
+        return recommendations
+
+    except Exception as e:
+        logger.error(f"❌ Erreur génération recommandations: {e}")
+        return []
+
+
+def get_available_methods():
+    """
+    📋 LISTE DES MÉTHODES DISPONIBLES pour l'interface
+    """
+    methods = [
+        {
+            'value': 'auto',
+            'label': '🤖 Auto-Sélection',
+            'description': 'Sélection automatique de la meilleure méthode'
+        },
+        {
+            'value': 'random_forest',
+            'label': '🌲 Random Forest',
+            'description': 'Apprentissage automatique robuste'
+        }
+    ]
+
+    # Vérifier si XGBoost est disponible
+    try:
+        import xgboost
+        methods.append({
+            'value': 'xgboost',
+            'label': '⚡ XGBoost',
+            'description': 'Gradient boosting haute performance'
+        })
+    except ImportError:
+        pass
+
+    # Vérifier si statsmodels est disponible
+    try:
+        import statsmodels
+        methods.extend([
+            {
+                'value': 'arima',
+                'label': '📈 ARIMA',
+                'description': 'Modèle statistique de séries temporelles'
+            },
+            {
+                'value': 'stl_arima',
+                'label': '🔬 STL + ARIMA',
+                'description': 'Décomposition saisonnière + ARIMA'
+            }
+        ])
+    except ImportError:
+        pass
+
+    return methods
+
+
+def health_check():
+    """
+    🏥 VÉRIFICATION DE SANTÉ DU SYSTÈME
+    """
+    try:
+        from django.db import connection
+
+        # Test de connexion DB
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            db_status = "connected"
+
+        # Vérifier les dépendances
+        xgboost_available = False
+        try:
+            import xgboost
+            xgboost_available = True
+        except ImportError:
+            pass
+
+        statsmodels_available = False
+        try:
+            import statsmodels
+            statsmodels_available = True
+        except ImportError:
+            pass
+
+        return {
+            'status': 'healthy',
+            'version': '2.0-real-data',
+            'database': db_status,
+            'xgboost_available': xgboost_available,
+            'statsmodels_available': statsmodels_available,
+            'timestamp': timezone.now().isoformat()
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        }
+
 
