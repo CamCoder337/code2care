@@ -21,6 +21,7 @@ urlpatterns = [
     path('analytics/inventory/', views.InventoryAnalyticsAPIView.as_view(), name='inventory_analytics'),
 
     # ==================== FORECASTING ====================
+    path('forecast/', views.DemandForecastAPIView.as_view(), name='forecast_main'),
     path('forecasting/demand/', views.DemandForecastAPIView.as_view(), name='demand_forecast'),
     path('forecasting/recommendations/', views.OptimizationRecommendationsAPIView.as_view(),
          name='optimization_recommendations'),

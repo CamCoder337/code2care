@@ -257,7 +257,7 @@ export default function PureForecastingSystem() {
 
       console.log('📡 Sending forecast request:', requestBody)
 
-      const response = await fetch(`${API_CONFIG.baseUrl}/forecast`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/forecast/`, {
         method: 'POST',
         signal: controller.signal,
         headers: {
