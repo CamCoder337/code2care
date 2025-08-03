@@ -1,4 +1,4 @@
-# bloodbank/urls.py - VERSION CORRIGÉE
+# bloodbank/urls.py - SOLUTION DÉFINITIVE
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
@@ -16,17 +16,17 @@ def api_root(request):
         'status': 'operational',
         'timestamp': timezone.now().isoformat(),
         'endpoints': {
-            'health': '/api/health/',
-            'dashboard': '/api/dashboard/overview/',
-            'forecast': '/api/forecast/',
-            'inventory': '/api/inventory/units/',
-            'alerts': '/api/alerts/',
-            'donors': '/api/donors/',
-            'patients': '/api/patients/',
-            'sites': '/api/sites/',
-            'requests': '/api/requests/',
-            'reports': '/api/reports/export/',
-            'system_metrics': '/api/system/metrics/',
+            'health': '/health/',
+            'dashboard': '/dashboard/overview/',
+            'forecast': '/forecast/',
+            'inventory': '/inventory/units/',
+            'alerts': '/alerts/',
+            'donors': '/donors/',
+            'patients': '/patients/',
+            'sites': '/sites/',
+            'requests': '/requests/',
+            'reports': '/reports/export/',
+            'system_metrics': '/system/metrics/',
         }
     })
 
@@ -70,26 +70,28 @@ urlpatterns = [
     # Administration
     path('admin/', admin.site.urls),
 
-    # API Root
+    # API Root (avec et sans /api/)
     path('api/', api_root, name='api-root'),
     path('', api_root, name='home'),
 
-    # Main app URLs
-    path('api/', include('app.urls')),
+    # ✅ ROUTES DIRECTES (sans /api/) - SOLUTION PRINCIPALE
+    path('', include('app.urls')),  # Routes directes vers app
+
+    # ✅ ROUTES AVEC /api/ (backward compatibility)
+    path('api/', include('app.urls')),  # Routes avec préfixe /api/
 
     # Health check directs (fallback routes)
     path('health/', simple_health_check, name='direct-health-check'),
-    path('api/health/', simple_health_check, name='api-health-fallback'),
 
-    # System metrics (pour résoudre l'erreur 404)
+    # System metrics direct
     path('system/metrics/', system_metrics, name='system-metrics'),
-    path('api/system/metrics/', system_metrics, name='api-system-metrics'),
 ]
 
 # Development only
 if settings.DEBUG:
     try:
         import debug_toolbar
+
         urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
     except ImportError:
         pass
@@ -104,7 +106,16 @@ def handler404(request, exception):
         'error': 'Not Found',
         'status': 404,
         'path': request.path,
-        'message': 'The requested endpoint does not exist'
+        'message': f'The requested endpoint {request.path} does not exist',
+        'available_endpoints': [
+            '/health/',
+            '/inventory/units/',
+            '/analytics/inventory/',
+            '/config/system/',
+            '/dashboard/overview/',
+            '/forecast/',
+            '/alerts/',
+        ]
     }, status=404)
 
 
