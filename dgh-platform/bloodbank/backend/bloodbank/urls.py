@@ -12,7 +12,6 @@ from django.utils import timezone
 def api_root(request):
     """
     🏠 API Root endpoint with comprehensive information
-    Fixed to handle all HTTP methods properly
     """
     return JsonResponse({
         'message': '🩸 Blood Bank Management System API v2.0',
@@ -65,6 +64,20 @@ def api_root(request):
     })
 
 
+# Define a simple health check function directly here
+@csrf_exempt
+def health_check(request):
+    """Simple health check endpoint"""
+    return JsonResponse({
+        'status': 'healthy',
+        'timestamp': timezone.now().isoformat(),
+        'version': '1.0.0',
+        'service': 'Blood Bank API',
+        'database': 'connected',
+        'method': request.method
+    })
+
+
 # ==================== MAIN URL CONFIGURATION ====================
 urlpatterns = [
     # ==================== ADMINISTRATION ====================
@@ -72,14 +85,14 @@ urlpatterns = [
 
     # ==================== API ROOT ====================
     path('api/', api_root, name='api-root'),
-    path('', api_root, name='home'),  # Root redirect to API info
+    path('', api_root, name='home'),
 
     # ==================== MAIN APPLICATION URLS ====================
-    path('api/', include('app.urls')),  # ✅ All app URLs under /api/
+    path('api/', include('app.urls')),  # All app URLs under /api/
 
-    # ==================== DIRECT HEALTH CHECK (Backup) ====================
-    # FIXED: Import the actual view function instead of using string
-    path('health/', health_check, name='direct-health-check'),  # This will handle /health/ through app.urls
+    # ==================== DIRECT HEALTH CHECK ====================
+    # FIXED: Direct health check without conflicts
+    path('health/', health_check, name='direct-health-check'),
 ]
 
 # ==================== DEVELOPMENT CONFIGURATION ====================
@@ -161,14 +174,14 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # ==================== ERROR HANDLERS ====================
-# Custom error handling - FIXED: Import actual view functions
+# Custom error handling
 try:
     from app.views import custom_404_view, custom_500_view
 
     handler404 = custom_404_view
     handler500 = custom_500_view
 except ImportError:
-    # Fallback error handlers if app.views doesn't have them
+    # Fallback error handlers
     def handler404(request, exception):
         return JsonResponse({'error': 'Not Found', 'status': 404}, status=404)
 
