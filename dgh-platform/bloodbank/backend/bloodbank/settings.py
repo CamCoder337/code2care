@@ -96,6 +96,7 @@ LOCAL_APPS = [
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
+# FIXED: Clean middleware configuration without duplicates
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Pour les fichiers statiques
@@ -108,11 +109,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Add debug toolbar in development
+# Add debug toolbar in development - FIXED: Only add once
 if DEBUG:
-    INSTALLED_APPS.append('debug_toolbar')
-    MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
-    INTERNAL_IPS = ['127.0.0.1', 'localhost']
+    try:
+        import debug_toolbar
+        INSTALLED_APPS.append('debug_toolbar')
+        MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+        INTERNAL_IPS = ['127.0.0.1', 'localhost']
+    except ImportError:
+        pass
 
 ROOT_URLCONF = 'bloodbank.urls'  # Adjust this to your project name
 
@@ -149,10 +154,6 @@ DATABASES = {
 DATABASE_URL = config('DATABASE_URL', default=None)
 if DATABASE_URL:
     DATABASES['default'] = dj_database_url.parse(DATABASE_URL)
-
-# Add this to your Django settings.py to fix Redis SSL issue
-
-import ssl
 
 # Redis Configuration with proper SSL handling
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
@@ -388,6 +389,7 @@ LOGGING = {
     },
 }
 
+# FIXED: Fallback cache configuration that works everywhere
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -409,7 +411,7 @@ CACHES = {
     }
 }
 
-# Redis configuration (if available)
+# Redis configuration (if available) - override default cache
 REDIS_URL = os.getenv('REDIS_URL')
 if REDIS_URL and not DEBUG:
     try:
@@ -452,7 +454,6 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
-
 
 # ==================== AI SYSTEM CONFIGURATION ====================
 # Configuration for the AI forecasting system
@@ -559,14 +560,17 @@ else:
 # ==================== PERFORMANCE OPTIMIZATIONS ====================
 # Database and performance settings
 
+# FIXED: Removed invalid PostgreSQL connection options
 # Database connection pooling (if using PostgreSQL)
 if 'postgresql' in DATABASES['default']['ENGINE']:
+    # Use proper PostgreSQL connection pooling options
+    DATABASES['default']['CONN_MAX_AGE'] = 60  # Reuse connections for 60 seconds
     DATABASES['default']['OPTIONS'] = {
-        'MAX_CONNS': 20,
-        'MIN_CONNS': 5,
+        'connect_timeout': 10,
+        'options': '-c default_transaction_isolation=read committed'
     }
 
-# Session optimization
+# Session optimization - FIXED: Avoid potential Redis dependency issues
 SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
 SESSION_CACHE_ALIAS = 'default'
 SESSION_COOKIE_AGE = 86400  # 24 hours
@@ -603,19 +607,6 @@ if DEBUG:
         '0.0.0.0',
     ]
 
-    # Development middleware
-    DEVELOPMENT_MIDDLEWARE = [
-        'debug_toolbar.middleware.DebugToolbarMiddleware',
-    ]
-
-    # Add to existing middleware if debug toolbar is available
-    try:
-        import debug_toolbar
-
-        MIDDLEWARE.extend(DEVELOPMENT_MIDDLEWARE)
-    except ImportError:
-        pass
-
 # Print configuration summary
 print(f"""
 🩸 Blood Bank System Configuration:
@@ -626,7 +617,6 @@ print(f"""
    - CORS Origins: {len(CORS_ALLOWED_ORIGINS)} configured
    - Logging: {len(LOGGING['handlers'])} handlers configured
 """)
-
 
 # ==================== ERROR HANDLING ====================
 # Custom exception handling
@@ -640,7 +630,6 @@ def handle_ai_system_errors():
         print(f"⚠️  AI Forecasting system not available: {e}")
         AI_FORECASTING_CONFIG['MODELS']['RANDOM_FOREST']['enabled'] = False
         return False
-
 
 # Initialize AI system check
 AI_SYSTEM_AVAILABLE = handle_ai_system_errors()
