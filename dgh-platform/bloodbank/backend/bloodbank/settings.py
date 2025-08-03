@@ -265,6 +265,7 @@ if not DEBUG:
     DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@bloodbank.com')
 
 # Logging configuration
+# Configuration de logging fusionnée
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -290,6 +291,12 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'verbose',
         },
+        'ai_forecasting_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'ai_forecasting.log',  # Déplacé dans le dossier logs
+            'formatter': 'verbose',  # Utilise le même formateur
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -301,14 +308,18 @@ LOGGING = {
             'level': config('DJANGO_LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
-        'bloodbank': {  # Adjust to your app name
+        'bloodbank': {  # Ajustez selon le nom de votre app
             'handlers': ['console', 'file'] if not DEBUG else ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
+        'forecasting.blood_demand_forecasting': {
+            'handlers': ['ai_forecasting_file', 'console'],  # Ajoute aussi la console
+            'level': 'INFO',
+            'propagate': False,  # Changé à False pour éviter la duplication
+        },
     },
 }
-
 # Create logs directory if it doesn't exist
 log_dir = BASE_DIR / 'logs'
 if not log_dir.exists():
