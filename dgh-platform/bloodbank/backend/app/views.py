@@ -105,15 +105,29 @@ from .serializers import (
     BloodRequestSerializer, BloodConsumptionSerializer, PrevisionSerializer
 )
 
-try:
-    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster, \
-    RealDataBloodDemandForecaster, XGBOOST_AVAILABLE, STATSMODELS_AVAILABLE
+# Import sécurisé du système IA
+def safe_import_forecasting():
+    """Import sécurisé du système de prévision"""
+    try:
+        from .blood_demand_forecasting import generate_forecast_api, get_available_methods, health_check
+        return {
+            'available': True,
+            'generate_forecast_api': generate_forecast_api,
+            'get_available_methods': get_available_methods,
+            'health_check': health_check
+        }
+    except ImportError as e:
+        logging.error(f"❌ Import forecasting failed: {e}")
+        return {
+            'available': False,
+            'error': str(e)
+        }
 
-    ENHANCED_FORECASTING_AVAILABLE = True
-except ImportError:
-    ENHANCED_FORECASTING_AVAILABLE = False
+# Vérifier la disponibilité au démarrage
+FORECASTING_SYSTEM = safe_import_forecasting()
 
 logger = logging.getLogger(__name__)
+
 
 
 
@@ -720,20 +734,19 @@ class SmartForecastView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def handle_ai_forecast_only(self, blood_type, days, method, force_retrain):
-        """Handle AI-powered forecasting with robust error handling"""
+        """Handle AI-powered forecasting with robust error handling - VERSION CORRIGÉE"""
         try:
-            # Import AI forecasting function with error handling
-            try:
-                from .blood_demand_forecasting import generate_forecast_api
-                logger.info(f"✅ AI module imported successfully")
-            except ImportError as import_error:
-                logger.error(f"❌ AI forecasting module not available: {import_error}")
+            # Vérifier la disponibilité du système
+            if not FORECASTING_SYSTEM.get('available'):
+                logger.error(f"❌ AI forecasting system not available: {FORECASTING_SYSTEM.get('error')}")
                 return self.handle_ai_import_error(blood_type, days, method)
 
             logger.info(f"🤖 Using AI system for {blood_type} forecast (method: {method})")
 
-            # Generate AI forecast with timeout protection
+            # Utiliser la fonction importée de manière sécurisée
             try:
+                generate_forecast_api = FORECASTING_SYSTEM['generate_forecast_api']
+
                 result = generate_forecast_api(
                     blood_type=blood_type,
                     days_ahead=days,
@@ -926,22 +939,25 @@ class SmartForecastView(APIView):
 @global_allow_any
 class AISystemHealthView(APIView):
     """
-    🏥 Endpoint de santé et debug pour le système IA
+    🏥 Endpoint de santé et debug pour le système IA - VERSION CORRIGÉE
     """
     permission_classes = [AllowAny]
 
     def get(self, request):
         """Vérification complète du système IA"""
         try:
-            from .blood_demand_forecasting import health_check, get_available_methods
+            # Vérifier la disponibilité du système
+            if not FORECASTING_SYSTEM.get('available'):
+                return Response({
+                    'system_status': 'unavailable',
+                    'error': FORECASTING_SYSTEM.get('error'),
+                    'timestamp': timezone.now().isoformat(),
+                    'recommendation': 'Check module imports and dependencies'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            # Test d'import
-            try:
-                from .blood_demand_forecasting import RealDataBloodDemandForecaster
-                forecaster_available = True
-            except ImportError as e:
-                forecaster_available = False
-                import_error = str(e)
+            # Utiliser les fonctions importées
+            health_check = FORECASTING_SYSTEM['health_check']
+            get_available_methods = FORECASTING_SYSTEM['get_available_methods']
 
             # Vérification des dépendances
             dependencies = {
@@ -964,10 +980,10 @@ class AISystemHealthView(APIView):
             quick_test = self.quick_forecast_test()
 
             return Response({
-                'system_status': 'healthy' if forecaster_available and db_status['connected'] else 'degraded',
+                'system_status': 'healthy' if db_status['connected'] else 'degraded',
                 'timestamp': timezone.now().isoformat(),
                 'components': {
-                    'forecaster_module': forecaster_available,
+                    'forecaster_module': True,
                     'database': db_status,
                     'dependencies': dependencies,
                     'ai_system': ai_health,
@@ -975,7 +991,7 @@ class AISystemHealthView(APIView):
                     'quick_test': quick_test
                 },
                 'recommendations': self.get_system_recommendations(
-                    forecaster_available, db_status, dependencies, quick_test
+                    True, db_status, dependencies, quick_test
                 )
             })
 
@@ -986,44 +1002,16 @@ class AISystemHealthView(APIView):
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def check_import(self, module_name):
-        """Test d'import d'un module"""
-        try:
-            __import__(module_name)
-            return {'available': True, 'version': 'unknown'}
-        except ImportError as e:
-            return {'available': False, 'error': str(e)}
-
-    def check_database_connection(self):
-        """Test de connexion à la base de données"""
-        try:
-            from django.db import connection
-            from .models import BloodInventory, Transaction
-
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-
-            # Test des modèles
-            inventory_count = BloodInventory.objects.count()
-            transaction_count = Transaction.objects.count()
-
-            return {
-                'connected': True,
-                'inventory_records': inventory_count,
-                'transaction_records': transaction_count,
-                'has_data': inventory_count > 0 or transaction_count > 0
-            }
-
-        except Exception as e:
-            return {
-                'connected': False,
-                'error': str(e)
-            }
-
     def quick_forecast_test(self):
         """Test rapide de génération de prévision"""
         try:
-            from .blood_demand_forecasting import generate_forecast_api
+            if not FORECASTING_SYSTEM.get('available'):
+                return {
+                    'success': False,
+                    'error': 'Forecasting system not available'
+                }
+
+            generate_forecast_api = FORECASTING_SYSTEM['generate_forecast_api']
 
             # Test avec O+ (type courant)
             start_time = time.time()
@@ -1044,6 +1032,46 @@ class AISystemHealthView(APIView):
         except Exception as e:
             return {
                 'success': False,
+                'error': str(e)
+            }
+
+    def check_import(self, module_name):
+        """Test d'import d'un module"""
+        try:
+            __import__(module_name)
+            return {'available': True, 'version': 'unknown'}
+        except ImportError as e:
+            return {'available': False, 'error': str(e)}
+
+    def check_database_connection(self):
+        """Test de connexion à la base de données"""
+        try:
+            from django.db import connection
+            from .models import BloodUnit, BloodRecord
+
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Test des modèles
+            try:
+                unit_count = BloodUnit.objects.count()
+                record_count = BloodRecord.objects.count()
+                has_data = unit_count > 0 or record_count > 0
+            except:
+                unit_count = 0
+                record_count = 0
+                has_data = False
+
+            return {
+                'connected': True,
+                'unit_records': unit_count,
+                'blood_records': record_count,
+                'has_data': has_data
+            }
+
+        except Exception as e:
+            return {
+                'connected': False,
                 'error': str(e)
             }
 
@@ -1069,7 +1097,7 @@ class AISystemHealthView(APIView):
             recommendations.append({
                 'type': 'warning',
                 'message': 'Aucune donnée trouvée en base',
-                'action': 'Charger des données d\'exemple ou vérifier les modèles'
+                'action': 'Le système utilisera des données synthétiques minimales'
             })
 
         if not dependencies.get('xgboost', {}).get('available'):
@@ -1090,7 +1118,7 @@ class AISystemHealthView(APIView):
             recommendations.append({
                 'type': 'warning',
                 'message': 'Test rapide de prévision échoué',
-                'action': 'Vérifier les logs pour plus de détails'
+                'action': 'Vérifier les logs et la configuration'
             })
 
         if quick_test.get('processing_time_seconds', 0) > 10:
