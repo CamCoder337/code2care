@@ -78,10 +78,8 @@ urlpatterns = [
     path('api/', include('app.urls')),  # ✅ All app URLs under /api/
 
     # ==================== DIRECT HEALTH CHECK (Backup) ====================
-    # In case there are issues with app.urls routing
-    path('health/', include([
-        path('', 'app.views.health_check', name='direct_health_check'),
-    ])),
+    # FIXED: Import the actual view function instead of using string
+    path('health/', include('app.urls')),  # This will handle /health/ through app.urls
 ]
 
 # ==================== DEVELOPMENT CONFIGURATION ====================
@@ -162,33 +160,18 @@ if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# ==================== PRODUCTION CONFIGURATION ====================
-else:
-    # Production-specific URLs can be added here
-    pass
-
 # ==================== ERROR HANDLERS ====================
-# Custom error handling
-handler404 = 'app.views.custom_404_view'
-handler500 = 'app.views.custom_500_view'
+# Custom error handling - FIXED: Import actual view functions
+try:
+    from app.views import custom_404_view, custom_500_view
 
-# ==================== HEALTH CHECK FALLBACK ====================
-# Additional health check pattern as absolute fallback
-if 'app.views.health_check' not in str(urlpatterns):
-    from django.views.decorators.csrf import csrf_exempt
-    from django.http import JsonResponse
-
-
-    @csrf_exempt
-    def fallback_health_check(request):
-        """Absolute fallback health check"""
-        return JsonResponse({
-            'status': 'basic_health_ok',
-            'message': 'Fallback health check working',
-            'timestamp': timezone.now().isoformat()
-        })
+    handler404 = custom_404_view
+    handler500 = custom_500_view
+except ImportError:
+    # Fallback error handlers if app.views doesn't have them
+    def handler404(request, exception):
+        return JsonResponse({'error': 'Not Found', 'status': 404}, status=404)
 
 
-    urlpatterns.append(
-        path('fallback-health/', fallback_health_check, name='fallback-health')
-    )
+    def handler500(request):
+        return JsonResponse({'error': 'Internal Server Error', 'status': 500}, status=500)
