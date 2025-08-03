@@ -135,7 +135,7 @@ const translations = {
   }
 }
 
-export default function PureForecastingSystem() {
+export default function EnhancedForecastingSystem() {
   // États principaux
   const [timeRange, setTimeRange] = useState("7")
   const [bloodType, setBloodType] = useState("O+")
@@ -733,7 +733,7 @@ export default function PureForecastingSystem() {
           </Card>
         )}
 
-        {/* Détails des prédictions - Seulement si données disponibles */}
+        {/* Détails des prédictions - Version améliorée avec plus d'informations techniques */}
         {forecastData?.predictions && Array.isArray(forecastData.predictions) && (
           <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-0 shadow-lg">
             <CardHeader>
@@ -792,9 +792,16 @@ export default function PureForecastingSystem() {
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
                             <span className="text-sm text-slate-600 dark:text-slate-400">{t.demand}</span>
-                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                              {demand} {t.units}
-                            </span>
+                            <div className="flex items-center space-x-2">
+                              {prediction.lower_bound && prediction.upper_bound && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  [{prediction.lower_bound}-{prediction.upper_bound}]
+                                </span>
+                              )}
+                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                {demand} {t.units}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="space-y-2">
@@ -805,6 +812,71 @@ export default function PureForecastingSystem() {
                               </span>
                             </div>
                             <Progress value={confidence * 100} className="h-2" />
+
+                            {/* Indicateur de fiabilité visuel */}
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500 dark:text-slate-400">Fiabilité</span>
+                              <div className="flex items-center space-x-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <div
+                                    key={star}
+                                    className={`w-2 h-2 rounded-full ${
+                                      star <= Math.ceil(confidence * 5) 
+                                        ? confidence > 0.8 ? 'bg-green-400' :
+                                          confidence > 0.6 ? 'bg-yellow-400' : 'bg-orange-400'
+                                        : 'bg-gray-300 dark:bg-gray-600'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Détails techniques supplémentaires */}
+                          {prediction.seasonal_component !== undefined && (
+                            <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
+                              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Composante saisonnière:</span>
+                                  <span className="font-mono">{prediction.seasonal_component}</span>
+                                </div>
+                                {prediction.trend_component !== undefined && (
+                                  <div className="flex justify-between">
+                                    <span>Tendance:</span>
+                                    <span className="font-mono">{prediction.trend_component}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Analyse du jour spécifique */}
+                          <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-600 dark:text-slate-400">Analyse du jour</span>
+                              <div className="flex items-center space-x-2">
+                                {/* Indicateur de jour de semaine */}
+                                <Badge variant="outline" className={`text-xs px-1 py-0 ${
+                                  new Date(prediction.date).getDay() === 0 || new Date(prediction.date).getDay() === 6
+                                    ? 'border-blue-300 text-blue-700 bg-blue-50'
+                                    : new Date(prediction.date).getDay() === 1 || new Date(prediction.date).getDay() === 2
+                                    ? 'border-red-300 text-red-700 bg-red-50'
+                                    : 'border-gray-300 text-gray-700 bg-gray-50'
+                                }`}>
+                                  {new Date(prediction.date).getDay() === 0 || new Date(prediction.date).getDay() === 6 ? 'Weekend' :
+                                   new Date(prediction.date).getDay() === 1 || new Date(prediction.date).getDay() === 2 ? 'Pic' : 'Normal'}
+                                </Badge>
+
+                                {/* Indicateur de variabilité */}
+                                <Badge variant="outline" className={`text-xs px-1 py-0 ${
+                                  confidence > 0.8 ? 'border-green-300 text-green-700 bg-green-50' :
+                                  confidence > 0.6 ? 'border-yellow-300 text-yellow-700 bg-yellow-50' :
+                                  'border-orange-300 text-orange-700 bg-orange-50'
+                                }`}>
+                                  {confidence > 0.8 ? 'Stable' : confidence > 0.6 ? 'Variable' : 'Incertain'}
+                                </Badge>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
@@ -812,19 +884,29 @@ export default function PureForecastingSystem() {
                               {isHighDemand ? (
                                 <>
                                   <Zap className="w-3 h-3 mr-1 text-red-500" />
-                                  <span className="text-red-600 dark:text-red-400">Action urgente requise</span>
+                                  <span className="text-red-600 dark:text-red-400 font-medium">Action urgente requise</span>
                                 </>
                               ) : isMediumDemand ? (
                                 <>
                                   <Clock className="w-3 h-3 mr-1 text-yellow-500" />
-                                  <span className="text-yellow-600 dark:text-yellow-400">Surveillance recommandée</span>
+                                  <span className="text-yellow-600 dark:text-yellow-400 font-medium">Surveillance recommandée</span>
                                 </>
                               ) : (
                                 <>
                                   <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-                                  <span className="text-green-600 dark:text-green-400">Demande normale</span>
+                                  <span className="text-green-600 dark:text-green-400 font-medium">Demande normale</span>
                                 </>
                               )}
+                            </div>
+
+                            {/* Recommandation spécifique au jour */}
+                            <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                              {isHighDemand ?
+                                `📈 Prévoir +${Math.ceil(demand * 0.3)} unités de sécurité` :
+                                isMediumDemand ?
+                                `⚖️ Stock optimal: ${Math.ceil(demand * 1.1)} unités` :
+                                `✅ Gestion standard suffisante`
+                              }
                             </div>
                           </div>
                         </div>
