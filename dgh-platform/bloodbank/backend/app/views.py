@@ -9,6 +9,7 @@ from rest_framework.permissions import AllowAny
 from django.db.models import Count, Sum, Q, Avg
 from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 from datetime import datetime, timedelta, date
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
@@ -2543,8 +2544,8 @@ def get_available_methods():
 @api_view(['GET'])
 def health_check(request):
     """
-    🏥 HEALTH CHECK ENDPOINT - VERSION ULTRA-AMÉLIORÉE
-    Diagnostic complet du système avec métriques avancées
+    🏥 HEALTH CHECK ENDPOINT - VERSION CORRIGÉE
+    Diagnostic complet du système avec imports corrects
     """
     start_time = time.time()
 
@@ -2557,36 +2558,22 @@ def health_check(request):
         try:
             db_start = time.time()
             with connection.cursor() as cursor:
-                cursor.execute("SELECT 1, NOW() as current_time")
+                cursor.execute("SELECT 1")
                 result = cursor.fetchone()
                 db_response_time = round((time.time() - db_start) * 1000, 2)  # ms
-
-                # Test plus avancé - vérifier les tables principales
-                cursor.execute("""
-                               SELECT table_name
-                               FROM information_schema.tables
-                               WHERE table_schema = 'public' LIMIT 5
-                               """)
-                tables = cursor.fetchall()
 
             db_status = "connected"
             db_info = {
                 'response_time_ms': db_response_time,
-                'server_time': result[1].isoformat() if result and len(result) > 1 else None,
-                'tables_count': len(tables),
+                'test_query': 'SELECT 1 - SUCCESS',
                 'connection_vendor': connection.vendor,
-                'connection_params': {
-                    'engine': settings.DATABASES['default'].get('ENGINE', 'unknown'),
-                    'name': settings.DATABASES['default'].get('NAME', 'unknown')[:20] + '...',
-                    'host': settings.DATABASES['default'].get('HOST', 'localhost'),
-                    'port': settings.DATABASES['default'].get('PORT', 'default')
-                }
+                'database_engine': getattr(settings, 'DATABASES', {}).get('default', {}).get('ENGINE', 'unknown')
             }
 
         except Exception as db_error:
             db_status = "error"
             db_info = {
-                'error': str(db_error)[:200],  # Limite la longueur de l'erreur
+                'error': str(db_error)[:200],
                 'error_type': type(db_error).__name__,
                 'response_time_ms': round((time.time() - db_start) * 1000, 2) if 'db_start' in locals() else None
             }
@@ -2598,7 +2585,7 @@ def health_check(request):
         try:
             cache_start = time.time()
             cache_test_key = f'health_check_{int(time.time())}'
-            test_value = f'test_value_{int(time.time())}'
+            test_value = f'test_{int(time.time())}'
 
             cache.set(cache_test_key, test_value, 30)
             retrieved_value = cache.get(cache_test_key)
@@ -2608,20 +2595,20 @@ def health_check(request):
                 cache_status = "connected"
                 cache_info = {
                     'response_time_ms': cache_response_time,
-                    'test_successful': True,
-                    'backend': getattr(cache, '_cache', {}).get('_class', 'unknown')
+                    'test_successful': True
                 }
             else:
                 cache_status = "error"
                 cache_info = {
                     'response_time_ms': cache_response_time,
-                    'test_successful': False,
-                    'expected': test_value,
-                    'received': retrieved_value
+                    'test_successful': False
                 }
 
             # Cleanup
-            cache.delete(cache_test_key)
+            try:
+                cache.delete(cache_test_key)
+            except:
+                pass
 
         except Exception as cache_error:
             cache_status = "error"
@@ -2635,34 +2622,35 @@ def health_check(request):
         ai_info = {}
 
         try:
-            # Test import des modules AI
+            # Test des modules AI de base
             ai_modules = {}
 
+            # Test XGBoost
             try:
                 import xgboost
-                ai_modules['xgboost'] = {
-                    'available': True,
-                    'version': xgboost.__version__
-                }
+                ai_modules['xgboost'] = {'available': True, 'version': xgboost.__version__}
             except ImportError:
-                ai_modules['xgboost'] = {'available': False, 'error': 'Module not installed'}
+                ai_modules['xgboost'] = {'available': False, 'error': 'Not installed'}
+            except Exception as e:
+                ai_modules['xgboost'] = {'available': False, 'error': str(e)[:100]}
 
+            # Test Statsmodels
             try:
                 import statsmodels
-                ai_modules['statsmodels'] = {
-                    'available': True,
-                    'version': statsmodels.__version__
-                }
+                ai_modules['statsmodels'] = {'available': True, 'version': statsmodels.__version__}
             except ImportError:
-                ai_modules['statsmodels'] = {'available': False, 'error': 'Module not installed'}
+                ai_modules['statsmodels'] = {'available': False, 'error': 'Not installed'}
+            except Exception as e:
+                ai_modules['statsmodels'] = {'available': False, 'error': str(e)[:100]}
 
+            # Test modules de base
             try:
                 import pandas as pd
                 import numpy as np
                 ai_modules['pandas'] = {'available': True, 'version': pd.__version__}
                 ai_modules['numpy'] = {'available': True, 'version': np.__version__}
             except ImportError as e:
-                ai_modules['data_processing'] = {'available': False, 'error': str(e)}
+                ai_modules['data_processing'] = {'available': False, 'error': str(e)[:100]}
 
             # Test du module AI personnalisé
             try:
@@ -2670,10 +2658,11 @@ def health_check(request):
                 ai_custom_status = ai_health_check()
                 ai_status = "connected"
             except ImportError:
-                ai_custom_status = {'status': 'not_available', 'error': 'AI module not found'}
+                ai_custom_status = {'status': 'not_available',
+                                    'error': 'Module forecasting.blood_demand_forecasting not found'}
                 ai_status = "not_available"
             except Exception as e:
-                ai_custom_status = {'status': 'error', 'error': str(e)}
+                ai_custom_status = {'status': 'error', 'error': str(e)[:200]}
                 ai_status = "error"
 
             ai_info = {
@@ -2689,21 +2678,29 @@ def health_check(request):
                 'error_type': type(ai_error).__name__
             }
 
-        # ==================== SYSTEM METRICS ====================
+        # ==================== SYSTEM INFO ====================
         system_info = {}
         try:
-            # Métriques système si psutil est disponible
-            if 'psutil' in sys.modules:
-                system_info = {
+            system_info = {
+                'python_version': sys.version.split()[0],
+                'platform': sys.platform,
+                'debug_mode': getattr(settings, 'DEBUG', 'unknown')
+            }
+
+            # Optionnel: métriques système si psutil disponible
+            try:
+                import psutil
+                system_info.update({
                     'cpu_percent': psutil.cpu_percent(interval=0.1),
-                    'memory_percent': psutil.virtual_memory().percent,
-                    'disk_usage_percent': psutil.disk_usage('/').percent,
-                    'load_average': os.getloadavg() if hasattr(os, 'getloadavg') else 'not_available'
-                }
-            else:
-                system_info = {'note': 'psutil not available for detailed metrics'}
+                    'memory_percent': psutil.virtual_memory().percent
+                })
+            except ImportError:
+                system_info['psutil'] = 'not_available'
+            except Exception:
+                system_info['psutil'] = 'error'
+
         except Exception:
-            system_info = {'error': 'Could not retrieve system metrics'}
+            system_info = {'error': 'Could not retrieve system info'}
 
         # ==================== RESPONSE COMPILATION ====================
         total_response_time = round((time.time() - start_time) * 1000, 2)
@@ -2712,7 +2709,9 @@ def health_check(request):
         overall_status = "healthy"
         if db_status == "error":
             overall_status = "critical"
-        elif cache_status == "error" or ai_status == "error":
+        elif cache_status == "error":
+            overall_status = "degraded"
+        elif ai_status == "error":
             overall_status = "degraded"
         elif ai_status == "not_available":
             overall_status = "partial"
@@ -2720,12 +2719,11 @@ def health_check(request):
         response_data = {
             'status': overall_status,
             'timestamp': timezone.now().isoformat(),
-            'version': '2.1-enhanced',
+            'version': '2.2-fixed',
             'response_time_ms': total_response_time,
             'request_info': {
                 'method': request.method,
                 'path': request.path,
-                'user_agent': request.META.get('HTTP_USER_AGENT', 'unknown')[:100],
                 'remote_addr': request.META.get('REMOTE_ADDR', 'unknown')
             },
             'components': {
@@ -2742,13 +2740,7 @@ def health_check(request):
                     'details': ai_info
                 }
             },
-            'system_metrics': system_info,
-            'environment': {
-                'debug_mode': settings.DEBUG,
-                'django_version': getattr(settings, 'DJANGO_VERSION', 'unknown'),
-                'python_version': sys.version.split()[0],
-                'platform': sys.platform
-            }
+            'system_info': system_info
         }
 
         # Status code basé sur l'état global
@@ -2766,15 +2758,11 @@ def health_check(request):
 
         return Response({
             'status': 'error',
-            'error': str(e)[:300],  # Limite la longueur
+            'error': str(e)[:300],
             'error_type': type(e).__name__,
             'timestamp': timezone.now().isoformat(),
             'response_time_ms': round((time.time() - start_time) * 1000, 2),
-            'fallback_info': {
-                'database': 'unknown',
-                'cache': 'unknown',
-                'ai_system': 'unknown'
-            }
+            'version': '2.2-fixed-error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
