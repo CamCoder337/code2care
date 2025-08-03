@@ -1,4 +1,4 @@
-# app/forecasting/blood_demand_forecasting.py - VERSION OPTIMISÉE POUR RENDER
+# blood_demand_forecasting.py - VERSION AVEC VRAIES DONNÉES DB
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -9,12 +9,13 @@ from datetime import datetime, timedelta
 import warnings
 import time
 from django.core.cache import cache
+from django.db.models import Q, Sum, Avg, Count
 import logging
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-# ==================== IMPORTS CONDITIONNELS OPTIMISÉS ====================
+# Imports conditionnels optimisés
 try:
     import xgboost as xgb
 
@@ -34,1007 +35,1336 @@ except ImportError:
     logger.info("Statsmodels not available, using ML models only")
 
 
-class TimeoutException(Exception):
-    """Exception levée en cas de timeout"""
-    pass
-
-
-class RenderOptimizedForecaster:
+class RealDataBloodDemandForecaster:
     """
-    Forecaster optimisé pour Render (512MB RAM, 0.1 CPU) - Version hybride
-    Combine votre approche existante avec des optimisations pour éviter les timeouts
+    🏆 FORECASTER AVEC VRAIES DONNÉES DB
+    Toutes les données synthétiques supprimées - utilise uniquement les données réelles
     """
 
-    def __init__(self, max_execution_time=120):  # 2 minutes max
+    def __init__(self, max_execution_time=120):
         self.max_execution_time = max_execution_time
         self.start_time = None
 
-        # ==================== MODÈLES LÉGERS ====================
-        # Modèles réduits pour économiser la mémoire
+        # Modèles ML optimisés
         self.models = {
             'random_forest': RandomForestRegressor(
-                n_estimators=30,  # Réduit de 100 à 30
-                max_depth=6,  # Réduit de 10 à 6
+                n_estimators=50,  # Augmenté pour plus de précision avec vraies données
+                max_depth=8,
                 random_state=42,
-                n_jobs=1  # Un seul job pour éviter la surcharge mémoire
+                n_jobs=1
             )
         }
 
-        # XGBoost léger si disponible
         if XGBOOST_AVAILABLE:
             self.models['xgboost'] = xgb.XGBRegressor(
-                n_estimators=30,  # Réduit
-                max_depth=4,  # Réduit
+                n_estimators=50,
+                max_depth=6,
                 learning_rate=0.1,
                 random_state=42,
-                n_jobs=1
+                n_jobs=1,
+                verbosity=0
             )
 
         self.scaler = StandardScaler()
         self.trained_models = {}
         self.model_performance = {}
         self.arima_models = {}
-        self.stl_models = {}
+
+        # Configuration des groupes sanguins (sans données factices)
+        self.blood_type_config = {
+            'O+': {'priority': 'critical', 'typical_weekend_factor': 0.7},
+            'A+': {'priority': 'high', 'typical_weekend_factor': 0.75},
+            'B+': {'priority': 'medium', 'typical_weekend_factor': 0.8},
+            'AB+': {'priority': 'low', 'typical_weekend_factor': 0.85},
+            'O-': {'priority': 'critical', 'typical_weekend_factor': 0.6},
+            'A-': {'priority': 'high', 'typical_weekend_factor': 0.7},
+            'B-': {'priority': 'medium', 'typical_weekend_factor': 0.75},
+            'AB-': {'priority': 'critical', 'typical_weekend_factor': 0.8}
+        }
 
     def check_timeout(self):
         """Vérifier si on approche du timeout"""
         if self.start_time and time.time() - self.start_time > self.max_execution_time:
             raise TimeoutException("Maximum execution time exceeded")
 
-    def fit_arima_optimized(self, series, blood_type):
-        """ARIMA optimisé avec timeout et paramètres réduits"""
-        if not STATSMODELS_AVAILABLE:
-            return None
+    def get_historical_data_from_db(self, blood_type, days_back=180):
+        """
+        🗄️ RÉCUPÉRATION DES VRAIES DONNÉES DEPUIS LA DB
+        """
+        from inventory.models import BloodInventory, Transaction
 
         try:
-            self.check_timeout()
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=days_back)
 
-            series = series.dropna()
-            if len(series) < 15:  # Réduit le minimum de 30 à 15
-                logger.info(f"Insufficient data for ARIMA {blood_type}: {len(series)} points")
+            logger.info(f"📊 Récupération données DB pour {blood_type} ({start_date} à {end_date})")
+
+            # Récupérer les transactions par jour (demande réelle)
+            daily_demand = Transaction.objects.filter(
+                blood_type=blood_type,
+                transaction_type='OUT',  # Sorties = demande
+                date__range=[start_date, end_date]
+            ).extra(
+                select={'day': 'DATE(date)'}
+            ).values('day').annotate(
+                total_demand=Sum('quantity')
+            ).order_by('day')
+
+            if not daily_demand.exists():
+                logger.warning(f"❌ Aucune donnée trouvée pour {blood_type}")
                 return None
 
-            # Vérification rapide de stationnarité
-            stationary_series, d = self.make_stationary_fast(series)
+            # Convertir en DataFrame pandas
+            df_data = []
+            for record in daily_demand:
+                df_data.append({
+                    'date': record['day'],
+                    'demand': record['total_demand'] or 0
+                })
 
-            # ARIMA simplifié avec moins de paramètres testés
-            best_model = None
+            df = pd.DataFrame(df_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date')
 
-            # Test seulement quelques combinaisons communes
-            common_orders = [(1, d, 1), (2, d, 1), (1, d, 2), (0, d, 1), (1, d, 0)]
+            # Remplir les jours manquants avec 0
+            idx = pd.date_range(start_date, end_date, freq='D')
+            df = df.reindex(idx, fill_value=0)
+            df.index.name = 'date'
 
-            for order in common_orders:
-                try:
-                    self.check_timeout()
-                    model = ARIMA(series, order=order)
-                    fitted = model.fit(maxiter=20)  # Limiter les iterations
+            logger.info(f"✅ Données récupérées: {len(df)} jours, demande moyenne: {df['demand'].mean():.1f}")
 
-                    if best_model is None:
-                        best_model = fitted
-                        break  # Prendre le premier qui marche pour gagner du temps
+            return df
 
-                except Exception:
-                    continue
-
-            if best_model:
-                self.arima_models[blood_type] = best_model
-                logger.info(f"ARIMA {order} fitted for {blood_type}")
-                return best_model
-
-            return None
-
-        except TimeoutException:
-            logger.warning(f"ARIMA timeout for {blood_type}")
-            return None
         except Exception as e:
-            logger.error(f"ARIMA failed for {blood_type}: {e}")
+            logger.error(f"❌ Erreur récupération données DB: {e}")
             return None
 
-    def make_stationary_fast(self, series):
-        """Version rapide de make_stationary"""
-        # Test simple sans statistiques complexes
-        if len(series) < 10:
-            return series, 0
+    def get_contextual_data(self, blood_type):
+        """
+        📈 RÉCUPÉRATION DE DONNÉES CONTEXTUELLES
+        Stock actuel, tendances récentes, etc.
+        """
+        from inventory.models import BloodInventory, Transaction
 
-        # Différence d'ordre 1 par défaut pour la plupart des séries temporelles
-        diff_series = series.diff().dropna()
-        return diff_series, 1
+        try:
+            # Stock actuel
+            current_stock = BloodInventory.objects.filter(
+                blood_type=blood_type
+            ).aggregate(
+                total_units=Sum('units_available'),
+                avg_expiry_days=Avg('days_until_expiry')
+            )
 
-    def prepare_ml_features_lite(self, df):
-        """Features engineering allégé pour économiser le temps et la mémoire"""
+            # Tendance des 7 derniers jours
+            recent_demand = Transaction.objects.filter(
+                blood_type=blood_type,
+                transaction_type='OUT',
+                date__gte=datetime.now() - timedelta(days=7)
+            ).aggregate(
+                total_demand=Sum('quantity'),
+                avg_daily=Avg('quantity'),
+                transaction_count=Count('id')
+            )
+
+            # Tendance des 30 derniers jours
+            monthly_trend = Transaction.objects.filter(
+                blood_type=blood_type,
+                transaction_type='OUT',
+                date__gte=datetime.now() - timedelta(days=30)
+            ).aggregate(
+                total_demand=Sum('quantity'),
+                avg_daily=Avg('quantity')
+            )
+
+            return {
+                'current_stock': current_stock['total_units'] or 0,
+                'avg_expiry_days': current_stock['avg_expiry_days'] or 30,
+                'recent_weekly_demand': recent_demand['total_demand'] or 0,
+                'recent_daily_avg': recent_demand['avg_daily'] or 0,
+                'monthly_daily_avg': monthly_trend['avg_daily'] or 0,
+                'recent_transactions': recent_demand['transaction_count'] or 0
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erreur données contextuelles: {e}")
+            return {}
+
+    def prepare_ml_features_from_real_data(self, df, contextual_data=None):
+        """
+        🛠️ FEATURES ENGINEERING SUR VRAIES DONNÉES
+        """
+        if df is None or len(df) < 7:
+            logger.warning("Données insuffisantes pour feature engineering")
+            return None
+
         df = df.copy()
 
-        if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
-
-        # ==================== FEATURES ESSENTIELLES SEULEMENT ====================
+        # Features temporelles de base
         df['day_of_week'] = df.index.dayofweek
         df['month'] = df.index.month
+        df['day_of_month'] = df.index.day
+        df['quarter'] = df.index.quarter
         df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
         df['is_monday'] = (df['day_of_week'] == 0).astype(int)
+        df['is_friday'] = (df['day_of_week'] == 4).astype(int)
 
-        # Moyennes mobiles réduites (seulement les plus importantes)
-        for window in [7, 14]:  # Seulement 7 et 14 jours
-            df[f'demand_ma_{window}'] = df['demand'].rolling(window=window, min_periods=1).mean()
+        # Moyennes mobiles sur vraies données
+        for window in [3, 7, 14, 30]:
+            if len(df) >= window:
+                df[f'demand_ma_{window}'] = df['demand'].rolling(window=window, min_periods=1).mean()
 
-        # Lags essentiels seulement
-        for lag in [1, 7]:  # Seulement lag 1 et 7
-            df[f'demand_lag_{lag}'] = df['demand'].shift(lag)
+        # Lags essentiels
+        for lag in [1, 2, 7, 14]:
+            if len(df) > lag:
+                df[f'demand_lag_{lag}'] = df['demand'].shift(lag)
 
-        # Features cycliques simples
+        # Tendances calculées sur vraies données
+        if len(df) >= 14:
+            df['demand_trend_7'] = df['demand'].rolling(7, min_periods=3).apply(
+                lambda x: np.polyfit(range(len(x)), x, 1)[0] if len(x) > 2 else 0
+            )
+            df['demand_trend_14'] = df['demand'].rolling(14, min_periods=7).apply(
+                lambda x: np.polyfit(range(len(x)), x, 1)[0] if len(x) > 2 else 0
+            )
+
+        # Volatilité récente
+        if len(df) >= 7:
+            df['demand_volatility_7'] = df['demand'].rolling(7, min_periods=3).std()
+
+        # Features cycliques
         df['sin_day_of_week'] = np.sin(2 * np.pi * df['day_of_week'] / 7)
         df['cos_day_of_week'] = np.cos(2 * np.pi * df['day_of_week'] / 7)
+        df['sin_month'] = np.sin(2 * np.pi * df['month'] / 12)
+        df['cos_month'] = np.cos(2 * np.pi * df['month'] / 12)
+
+        # Features contextuelles si disponibles
+        if contextual_data:
+            df['stock_ratio'] = contextual_data.get('current_stock', 0) / max(1, df['demand'].mean())
+            df['recent_trend_factor'] = contextual_data.get('recent_daily_avg', 0) / max(1, df['demand'].mean())
 
         return df
 
-    def train_comprehensive_optimized(self, historical_data, blood_type):
-        """Entraînement optimisé avec timeout et cache"""
+    def train_model_with_real_data(self, blood_type, method='auto'):
+        """
+        🎯 ENTRAÎNEMENT AVEC VRAIES DONNÉES UNIQUEMENT
+        """
         self.start_time = time.time()
 
-        # ==================== VÉRIFIER LE CACHE ====================
-        cache_key = f'model_training_{blood_type}'
+        # Cache intelligent
+        cache_key = f'real_model_{blood_type}_{method}'
         cached_result = cache.get(cache_key)
         if cached_result:
-            logger.info(f"Using cached model for {blood_type}")
+            logger.info(f"✅ Modèle en cache pour {blood_type}")
             self.model_performance[blood_type] = cached_result['performance']
             self.trained_models.update(cached_result['models'])
             return cached_result['performance'], cached_result['best_method']
 
-        logger.info(f"Training optimized models for {blood_type}...")
+        # Récupérer les vraies données
+        historical_data = self.get_historical_data_from_db(blood_type)
+        if historical_data is None or len(historical_data) < 14:
+            logger.error(f"❌ Données insuffisantes pour {blood_type}")
+            return {}, 'insufficient_data'
 
-        # Préparer les données
-        df = historical_data.copy()
-        if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
-        df = df.sort_index()
+        # Données contextuelles
+        contextual_data = self.get_contextual_data(blood_type)
+
+        logger.info(f"🔬 Entraînement modèle pour {blood_type} avec {len(historical_data)} jours de vraies données")
 
         results = {}
 
         try:
-            # ==================== 1. MODÈLES ML PRIORITAIRES ====================
-            # ML en premier car plus rapide et plus prévisible
-            logger.info("- Training ML models...")
-            ml_results = self.train_ml_models_optimized(df, blood_type)
-            results.update(ml_results)
+            # Auto-sélection de méthode basée sur les vraies données
+            if method == 'auto':
+                method = self.select_optimal_method_for_real_data(historical_data, blood_type)
 
-            # ==================== 2. ARIMA SI TEMPS DISPONIBLE ====================
-            if STATSMODELS_AVAILABLE and time.time() - self.start_time < 60:  # Si moins de 1 minute écoulée
-                logger.info("- Training ARIMA (if time permits)...")
-                try:
-                    arima_model = self.fit_arima_optimized(df['demand'], blood_type)
-                    if arima_model:
-                        results['arima'] = self.evaluate_arima_model_fast(arima_model, df['demand'])
-                except TimeoutException:
-                    logger.warning("ARIMA training skipped due to timeout")
+            # Entraînement selon la méthode choisie
+            if method == 'random_forest' or method == 'xgboost':
+                results = self.train_ml_models_real_data(historical_data, blood_type, contextual_data, method)
 
-            # ==================== 3. SÉLECTION DU MEILLEUR MODÈLE ====================
+            elif method == 'arima' and STATSMODELS_AVAILABLE:
+                results['arima'] = self.train_arima_real_data(historical_data, blood_type)
+
+            elif method == 'stl_arima' and STATSMODELS_AVAILABLE:
+                results['stl_arima'] = self.train_stl_arima_real_data(historical_data, blood_type)
+
+            # Sélection du meilleur modèle
             if results:
-                best_method = self.select_best_method(results)
-                logger.info(f"Best method for {blood_type}: {best_method}")
+                best_method = min(results.items(), key=lambda x: x[1].get('mape', float('inf')))[0]
 
-                # ==================== CACHE DES RÉSULTATS ====================
+                # Cache des résultats
                 cache_data = {
                     'performance': results,
                     'models': {k: v for k, v in self.trained_models.items() if blood_type in k},
-                    'best_method': best_method
+                    'best_method': best_method,
+                    'data_points': len(historical_data),
+                    'contextual_data': contextual_data
                 }
                 cache.set(cache_key, cache_data, 3600)  # Cache 1 heure
 
                 self.model_performance[blood_type] = results
+                logger.info(f"✅ Modèle entraîné: {best_method} (MAPE: {results[best_method].get('mape', 0):.2f}%)")
+
                 return results, best_method
             else:
-                logger.warning(f"No models successfully trained for {blood_type}")
-                return {}, 'fallback'
+                logger.warning(f"⚠️ Aucun modèle n'a pu être entraîné pour {blood_type}")
+                return {}, 'training_failed'
 
-        except TimeoutException:
-            logger.error(f"Training timeout for {blood_type}")
-            return {}, 'fallback'
         except Exception as e:
-            logger.error(f"Training error for {blood_type}: {e}")
-            return {}, 'fallback'
+            logger.error(f"❌ Erreur entraînement pour {blood_type}: {e}")
+            return {}, 'error'
 
-    def select_best_method(self, results):
-        """Sélection intelligente du meilleur modèle"""
-        if not results:
-            return 'fallback'
-
-        # Priorité: 1. ML models (plus stables), 2. ARIMA si très bon
-        ml_methods = ['random_forest', 'xgboost']
-        ml_results = {k: v for k, v in results.items() if k in ml_methods}
-
-        if ml_results:
-            # Choisir le meilleur ML
-            best_ml = min(ml_results.items(), key=lambda x: x[1].get('mape', float('inf')))
-
-            # Comparer avec ARIMA si disponible
-            if 'arima' in results:
-                arima_mape = results['arima'].get('mape', float('inf'))
-                if arima_mape < best_ml[1].get('mape', float('inf')) * 0.8:  # ARIMA doit être 20% meilleur
-                    return 'arima'
-
-            return best_ml[0]
-
-        # Fallback vers ARIMA si pas de ML
-        if 'arima' in results:
-            return 'arima'
-
-        return 'fallback'
-
-    def train_ml_models_optimized(self, df, blood_type):
-        """Entraînement ML optimisé"""
+    def select_optimal_method_for_real_data(self, data, blood_type):
+        """
+        🤖 SÉLECTION INTELLIGENTE basée sur les caractéristiques des vraies données
+        """
         try:
-            self.check_timeout()
+            series = data['demand']
 
-            # Préparation features légère
-            df_features = self.prepare_ml_features_lite(df)
-            df_features = df_features.dropna()
+            # Analyser les caractéristiques des vraies données
+            mean_demand = series.mean()
+            volatility = series.std() / max(mean_demand, 1)
+            trend_strength = abs(np.corrcoef(range(len(series)), series)[0, 1]) if len(series) > 10 else 0
 
-            if len(df_features) < 8:  # Réduit le minimum
-                logger.info(f"Insufficient data after feature engineering for {blood_type}")
+            # Détection de saisonnalité réelle
+            if len(series) >= 14:
+                from scipy import stats
+                weekly_pattern = [series[series.index.dayofweek == i].mean() for i in range(7)]
+                seasonality_strength = np.std(weekly_pattern) / max(np.mean(weekly_pattern), 1)
+            else:
+                seasonality_strength = 0
+
+            logger.info(f"📊 Analyse données {blood_type}: volatilité={volatility:.2f}, "
+                        f"tendance={trend_strength:.2f}, saisonnalité={seasonality_strength:.2f}")
+
+            # Logique de sélection basée sur les données réelles
+            if seasonality_strength > 0.3 and len(series) >= 21 and STATSMODELS_AVAILABLE:
+                return 'stl_arima'  # Forte saisonnalité détectée
+            elif trend_strength > 0.5 and STATSMODELS_AVAILABLE:
+                return 'arima'  # Forte tendance détectée
+            elif volatility < 0.5 and XGBOOST_AVAILABLE:
+                return 'xgboost'  # Données stables, ML performant
+            else:
+                return 'random_forest'  # Cas général robuste
+
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur sélection méthode: {e}")
+            return 'random_forest'  # Fallback sûr
+
+    def train_ml_models_real_data(self, data, blood_type, contextual_data, method):
+        """
+        🤖 ENTRAÎNEMENT ML SUR VRAIES DONNÉES
+        """
+        try:
+            # Features engineering sur vraies données
+            df_features = self.prepare_ml_features_from_real_data(data, contextual_data)
+            if df_features is None:
                 return {}
 
-            # Features pour ML
+            df_features = df_features.dropna()
+
+            if len(df_features) < 10:
+                logger.warning(f"⚠️ Pas assez de données après nettoyage: {len(df_features)}")
+                return {}
+
+            # Sélection des features
             feature_cols = [col for col in df_features.columns
                             if col not in ['demand'] and not col.startswith('demand_ratio')]
 
             X = df_features[feature_cols]
             y = df_features['demand']
 
-            # Split temporel
-            split_idx = max(6, int(len(df_features) * 0.8))
+            # Split temporel (important pour les séries temporelles)
+            split_idx = max(7, int(len(df_features) * 0.8))
             X_train, X_test = X[:split_idx], X[split_idx:]
             y_train, y_test = y[:split_idx], y[split_idx:]
 
             results = {}
 
-            # ==================== RANDOM FOREST (PRIORITAIRE) ====================
-            try:
-                self.check_timeout()
-                rf_model = self.models['random_forest']
-                rf_model.fit(X_train, y_train)
-                rf_pred = rf_model.predict(X_test)
+            # Entraîner le modèle spécifié
+            if method in ['random_forest', 'auto'] or (method == 'xgboost' and not XGBOOST_AVAILABLE):
+                model = self.models['random_forest']
+                model.fit(X_train, y_train)
+                pred = model.predict(X_test)
 
                 results['random_forest'] = {
-                    'mae': mean_absolute_error(y_test, rf_pred),
-                    'rmse': np.sqrt(mean_squared_error(y_test, rf_pred)),
-                    'mape': mean_absolute_percentage_error(y_test, rf_pred) * 100
+                    'mae': float(mean_absolute_error(y_test, pred)),
+                    'rmse': float(np.sqrt(mean_squared_error(y_test, pred))),
+                    'mape': float(mean_absolute_percentage_error(y_test, pred) * 100),
+                    'training_samples': len(X_train),
+                    'test_samples': len(X_test)
                 }
 
-                self.trained_models[f'rf_{blood_type}'] = rf_model
-                logger.info(f"  - Random Forest trained (MAPE: {results['random_forest']['mape']:.2f}%)")
+                self.trained_models[f'rf_{blood_type}'] = {
+                    'model': model,
+                    'features': feature_cols,
+                    'scaler': None,
+                    'trained_date': datetime.now()
+                }
 
-            except TimeoutException:
-                raise
-            except Exception as e:
-                logger.error(f"  - Random Forest failed: {e}")
+                logger.info(f"✅ Random Forest: MAPE {results['random_forest']['mape']:.2f}%")
 
-            # ==================== XGBOOST SI TEMPS DISPONIBLE ====================
-            if XGBOOST_AVAILABLE and time.time() - self.start_time < 90:  # Si moins de 1.5 minutes
-                try:
-                    self.check_timeout()
-                    xgb_model = self.models['xgboost']
-                    xgb_model.fit(X_train, y_train)
-                    xgb_pred = xgb_model.predict(X_test)
+            if method == 'xgboost' and XGBOOST_AVAILABLE:
+                model = self.models['xgboost']
+                model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+                pred = model.predict(X_test)
 
-                    results['xgboost'] = {
-                        'mae': mean_absolute_error(y_test, xgb_pred),
-                        'rmse': np.sqrt(mean_squared_error(y_test, xgb_pred)),
-                        'mape': mean_absolute_percentage_error(y_test, xgb_pred) * 100
-                    }
+                results['xgboost'] = {
+                    'mae': float(mean_absolute_error(y_test, pred)),
+                    'rmse': float(np.sqrt(mean_squared_error(y_test, pred))),
+                    'mape': float(mean_absolute_percentage_error(y_test, pred) * 100),
+                    'training_samples': len(X_train),
+                    'test_samples': len(X_test)
+                }
 
-                    self.trained_models[f'xgb_{blood_type}'] = xgb_model
-                    logger.info(f"  - XGBoost trained (MAPE: {results['xgboost']['mape']:.2f}%)")
+                self.trained_models[f'xgb_{blood_type}'] = {
+                    'model': model,
+                    'features': feature_cols,
+                    'scaler': None,
+                    'trained_date': datetime.now()
+                }
 
-                except TimeoutException:
-                    logger.warning("XGBoost training skipped due to timeout")
-                except Exception as e:
-                    logger.error(f"  - XGBoost failed: {e}")
+                logger.info(f"✅ XGBoost: MAPE {results['xgboost']['mape']:.2f}%")
 
             return results
 
-        except TimeoutException:
-            raise
         except Exception as e:
-            logger.error(f"ML training failed for {blood_type}: {e}")
+            logger.error(f"❌ Erreur entraînement ML: {e}")
             return {}
 
-    def predict_hybrid_optimized(self, blood_type, days_ahead=30, method='auto'):
-        """Prédiction optimisée avec cache et timeout"""
+    def train_arima_real_data(self, data, blood_type):
+        """
+        📈 ARIMA SUR VRAIES DONNÉES
+        """
+        if not STATSMODELS_AVAILABLE:
+            return {}
 
-        # ==================== VÉRIFIER LE CACHE ====================
-        cache_key = f'prediction_{blood_type}_{days_ahead}_{method}'
-        cached_prediction = cache.get(cache_key)
-        if cached_prediction:
-            logger.info(f"Using cached prediction for {blood_type}")
-            return cached_prediction
+        try:
+            series = data['demand']
+
+            if len(series) < 20:
+                logger.warning(f"⚠️ Pas assez de données pour ARIMA: {len(series)}")
+                return {}
+
+            # Auto-sélection de l'ordre ARIMA sur vraies données
+            best_aic = float('inf')
+            best_order = (1, 1, 1)
+
+            for p in range(3):
+                for d in range(2):
+                    for q in range(3):
+                        try:
+                            model = ARIMA(series, order=(p, d, q))
+                            fitted = model.fit()
+                            if fitted.aic < best_aic:
+                                best_aic = fitted.aic
+                                best_order = (p, d, q)
+                        except:
+                            continue
+
+            # Modèle final
+            final_model = ARIMA(series, order=best_order)
+            fitted_final = final_model.fit()
+
+            # Évaluation
+            fitted_values = fitted_final.fittedvalues
+            residuals = series[len(series) - len(fitted_values):] - fitted_values
+
+            mae = float(np.mean(np.abs(residuals)))
+            rmse = float(np.sqrt(np.mean(residuals ** 2)))
+
+            # MAPE sur vraies données
+            actual = series[len(series) - len(fitted_values):]
+            mape = float(np.mean(np.abs((actual - fitted_values) / np.maximum(actual, 1))) * 100)
+
+            self.arima_models[blood_type] = fitted_final
+
+            logger.info(f"✅ ARIMA {best_order}: MAPE {mape:.2f}%")
+
+            return {
+                'mae': mae,
+                'rmse': rmse,
+                'mape': mape,
+                'order': best_order,
+                'aic': float(fitted_final.aic),
+                'training_samples': len(series)
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erreur ARIMA: {e}")
+            return {}
+
+    def train_stl_arima_real_data(self, data, blood_type):
+        """
+        🔬 STL + ARIMA SUR VRAIES DONNÉES
+        """
+        if not STATSMODELS_AVAILABLE:
+            return {}
+
+        try:
+            series = data['demand']
+
+            if len(series) < 28:  # Au moins 4 semaines
+                logger.warning(f"⚠️ Pas assez de données pour STL: {len(series)}")
+                return {}
+
+            # Décomposition STL sur vraies données
+            stl = STL(series, seasonal=7, robust=True)  # Cycle hebdomadaire
+            decomposition = stl.fit()
+
+            # ARIMA sur résidus
+            deseasonalized = series - decomposition.seasonal
+
+            # Auto-sélection ordre ARIMA
+            best_aic = float('inf')
+            best_order = (1, 0, 1)
+
+            for p in range(3):
+                for d in range(2):
+                    for q in range(3):
+                        try:
+                            model = ARIMA(deseasonalized, order=(p, d, q))
+                            fitted = model.fit()
+                            if fitted.aic < best_aic:
+                                best_aic = fitted.aic
+                                best_order = (p, d, q)
+                        except:
+                            continue
+
+            # Modèle final
+            arima_model = ARIMA(deseasonalized, order=best_order)
+            fitted_arima = arima_model.fit()
+
+            # Évaluation avec reconstruction
+            arima_fitted = fitted_arima.fittedvalues
+            reconstructed = arima_fitted + decomposition.seasonal[len(decomposition.seasonal) - len(arima_fitted):]
+
+            actual_for_eval = series[len(series) - len(reconstructed):]
+            residuals = actual_for_eval - reconstructed
+
+            mae = float(np.mean(np.abs(residuals)))
+            rmse = float(np.sqrt(np.mean(residuals ** 2)))
+            mape = float(np.mean(np.abs((actual_for_eval - reconstructed) / np.maximum(actual_for_eval, 1))) * 100)
+
+            # Sauvegarder les composantes
+            self.trained_models[f'stl_{blood_type}'] = {
+                'arima_model': fitted_arima,
+                'seasonal_component': decomposition.seasonal,
+                'trend_component': decomposition.trend,
+                'order': best_order,
+                'trained_date': datetime.now()
+            }
+
+            logger.info(f"✅ STL+ARIMA {best_order}: MAPE {mape:.2f}%")
+
+            return {
+                'mae': mae,
+                'rmse': rmse,
+                'mape': mape,
+                'order': best_order,
+                'aic': float(fitted_arima.aic),
+                'seasonal_strength': float(np.std(decomposition.seasonal)),
+                'training_samples': len(series)
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erreur STL+ARIMA: {e}")
+            return {}
+
+    def predict_with_real_data(self, blood_type, days_ahead=7, method='auto'):
+        """
+        🔮 PRÉDICTION BASÉE SUR VRAIES DONNÉES UNIQUEMENT
+        """
+        cache_key = f'real_prediction_{blood_type}_{days_ahead}_{method}'
+        cached = cache.get(cache_key)
+        if cached:
+            logger.info(f"✅ Prédiction en cache pour {blood_type}")
+            return cached
 
         self.start_time = time.time()
 
         try:
-            # ==================== SÉLECTION DE MÉTHODE ====================
-            if method == 'auto':
-                method = self.select_prediction_method(blood_type, days_ahead)
+            # Entraîner le modèle avec vraies données
+            performance, best_method = self.train_model_with_real_data(blood_type, method)
 
-            logger.info(f"Using method: {method} for {blood_type}")
+            if not performance:
+                logger.error(f"❌ Impossible d'entraîner le modèle pour {blood_type}")
+                return self.emergency_fallback_real_data(blood_type, days_ahead)
 
-            # ==================== PRÉDICTION ====================
-            predictions = self.predict_single_method_optimized(blood_type, days_ahead, method)
+            # Utiliser la meilleure méthode trouvée
+            final_method = best_method if method == 'auto' else method
 
-            # Générer les dates futures
-            future_dates = [
-                (datetime.now() + timedelta(days=i)).strftime('%Y-%m-%d')
-                for i in range(1, days_ahead + 1)
-            ]
+            # Génération des prédictions
+            predictions = self.generate_predictions_real_data(blood_type, days_ahead, final_method)
 
-            # Intervalles de confiance simplifiés
-            confidence_intervals = self.calculate_confidence_intervals_fast(predictions)
+            if not predictions:
+                return self.emergency_fallback_real_data(blood_type, days_ahead)
+
+            # Données contextuelles pour enrichir le résultat
+            contextual_data = self.get_contextual_data(blood_type)
 
             result = {
                 'blood_type': blood_type,
-                'predictions': [
-                    {
-                        'date': date,
-                        'predicted_demand': max(0, int(pred)),
-                        'confidence': 0.80  # Réduit légèrement car modèles optimisés
-                    }
-                    for date, pred in zip(future_dates, predictions)
-                ],
-                'method_used': method,
-                'confidence_intervals': confidence_intervals,
-                'model_performance': self.model_performance.get(blood_type, {}),
-                'generated_at': datetime.now().isoformat()
+                'predictions': predictions,
+                'method_used': final_method,
+                'model_performance': performance.get(final_method, {}),
+                'confidence_intervals': self.calculate_confidence_intervals_real_data(predictions),
+                'generated_at': datetime.now().isoformat(),
+                'data_source': 'real_database',
+                'contextual_insights': {
+                    'current_stock': contextual_data.get('current_stock', 0),
+                    'recent_trend': contextual_data.get('recent_daily_avg', 0),
+                    'stock_days_remaining': self.calculate_stock_duration(contextual_data, predictions)
+                },
+                'quality_metrics': {
+                    'training_accuracy': performance.get(final_method, {}).get('mape', 0),
+                    'data_freshness': 'real_time',
+                    'prediction_confidence': self.calculate_overall_confidence(predictions,
+                                                                               performance.get(final_method, {}))
+                }
             }
 
-            # ==================== CACHE DU RÉSULTAT ====================
-            cache.set(cache_key, result, 1800)  # Cache 30 minutes
+            # Cache adaptatif selon la performance
+            cache_duration = 1800 if performance.get(final_method, {}).get('mape', 100) < 20 else 900
+            cache.set(cache_key, result, cache_duration)
 
+            logger.info(f"✅ Prédiction générée pour {blood_type} avec méthode {final_method}")
             return result
 
-        except TimeoutException:
-            logger.error(f"Prediction timeout for {blood_type}")
-            return self.fallback_prediction_optimized(blood_type, days_ahead)
         except Exception as e:
-            logger.error(f"Prediction failed for {blood_type}: {e}")
-            return self.fallback_prediction_optimized(blood_type, days_ahead)
+            logger.error(f"❌ Erreur prédiction: {e}")
+            return self.emergency_fallback_real_data(blood_type, days_ahead)
 
-    def select_prediction_method(self, blood_type, days_ahead):
-        """Sélection optimisée de la méthode de prédiction"""
-        if blood_type in self.model_performance:
-            return self.select_best_method(self.model_performance[blood_type])
+    def generate_predictions_real_data(self, blood_type, days_ahead, method):
+        """
+        🎯 GÉNÉRATION DES PRÉDICTIONS avec vraies données
+        """
+        try:
+            if method == 'random_forest' or method == 'xgboost':
+                return self.predict_ml_real_data(blood_type, days_ahead, method)
+            elif method == 'arima':
+                return self.predict_arima_real_data(blood_type, days_ahead)
+            elif method == 'stl_arima':
+                return self.predict_stl_arima_real_data(blood_type, days_ahead)
+            else:
+                logger.warning(f"⚠️ Méthode inconnue: {method}")
+                return None
 
-        # Logique par défaut
-        if days_ahead <= 7:
-            return 'random_forest'  # Plus stable pour court terme
-        elif XGBOOST_AVAILABLE:
-            return 'xgboost'  # Meilleur pour moyen terme
-        else:
-            return 'random_forest'
+        except Exception as e:
+            logger.error(f"❌ Erreur génération prédictions: {e}")
+            return None
 
-    def predict_single_method_optimized(self, blood_type, days_ahead, method):
-        """Prédiction avec méthode unique optimisée"""
-        self.check_timeout()
-
-        if method == 'arima' and blood_type in self.arima_models:
-            model = self.arima_models[blood_type]
-            forecast = model.forecast(steps=days_ahead)
-            return np.maximum(forecast, 0)
-
-        elif method in ['random_forest', 'xgboost']:
-            return self.predict_ml_method_optimized(blood_type, days_ahead, method)
-
-        else:
-            logger.info(f"Method {method} not available, using fallback")
-            return self.fallback_prediction_simple_optimized(blood_type, days_ahead)
-
-    def predict_ml_method_optimized(self, blood_type, days_ahead, method):
-        """Prédiction ML optimisée"""
+    def predict_ml_real_data(self, blood_type, days_ahead, method):
+        """
+        🤖 PRÉDICTION ML basée sur features des vraies données
+        """
         model_key = f"{'rf' if method == 'random_forest' else 'xgb'}_{blood_type}"
 
         if model_key not in self.trained_models:
-            return self.fallback_prediction_simple_optimized(blood_type, days_ahead)
+            logger.error(f"❌ Modèle {model_key} non trouvé")
+            return None
 
         try:
-            self.check_timeout()
-            model = self.trained_models[model_key]
-
-            # Features futures simplifiées
-            future_features = self.generate_future_features_optimized(days_ahead)
-            predictions = model.predict(future_features)
-
-            return np.maximum(predictions, 0)
-
-        except Exception as e:
-            logger.error(f"ML prediction failed for {blood_type}: {e}")
-            return self.fallback_prediction_simple_optimized(blood_type, days_ahead)
-
-    def generate_future_features_optimized(self, days_ahead):
-        """Génération optimisée de features futures"""
-        # Version simplifiée et rapide
-        future_dates = pd.date_range(
-            start=datetime.now(),
-            periods=days_ahead,
-            freq='D'
-        )
-
-        features = []
-        for i, date in enumerate(future_dates):
-            row = [
-                date.dayofweek,  # day_of_week
-                date.month,  # month
-                1 if date.dayofweek in [5, 6] else 0,  # is_weekend
-                1 if date.dayofweek == 0 else 0,  # is_monday
-                10,  # demand_ma_7 (valeur par défaut)
-                10,  # demand_ma_14 (valeur par défaut)
-                10,  # demand_lag_1 (valeur par défaut)
-                10,  # demand_lag_7 (valeur par défaut)
-                np.sin(2 * np.pi * date.dayofweek / 7),  # sin_day_of_week
-                np.cos(2 * np.pi * date.dayofweek / 7),  # cos_day_of_week
-            ]
-            features.append(row)
-
-        return np.array(features)
-
-    def calculate_confidence_intervals_fast(self, predictions):
-        """Intervalles de confiance rapides"""
-        if len(predictions) == 0:
-            return {'lower': [], 'upper': [], 'margin': 0}
-
-        std_dev = np.std(predictions) if len(predictions) > 1 else np.mean(predictions) * 0.2
-        margin = 1.96 * std_dev  # 95% de confiance
-
-        lower_bound = np.maximum(predictions - margin, 0)
-        upper_bound = predictions + margin
-
-        return {
-            'lower': lower_bound.tolist(),
-            'upper': upper_bound.tolist(),
-            'margin': float(margin)
-        }
-
-    def fallback_prediction_optimized(self, blood_type, days_ahead):
-        """Prédiction de secours optimisée"""
-        logger.info(f"Using fallback prediction for {blood_type}")
-
-        # Base sur des moyennes typiques par groupe sanguin
-        base_demands = {
-            'O+': 15, 'A+': 12, 'B+': 8, 'AB+': 3,
-            'O-': 7, 'A-': 6, 'B-': 4, 'AB-': 2
-        }
-
-        base_demand = base_demands.get(blood_type, 10)
-        predictions = []
-
-        for i in range(days_ahead):
-            # Variation saisonnière simple
-            day_of_week = (datetime.now() + timedelta(days=i + 1)).weekday()
-
-            # Pic en début de semaine (lundi-mardi)
-            if day_of_week in [0, 1]:
-                seasonal_factor = 1.2
-            elif day_of_week in [5, 6]:  # Weekend plus bas
-                seasonal_factor = 0.8
-            else:
-                seasonal_factor = 1.0
-
-            daily_pred = base_demand * seasonal_factor
-
-            predictions.append({
-                'date': (datetime.now() + timedelta(days=i + 1)).strftime('%Y-%m-%d'),
-                'predicted_demand': max(1, int(daily_pred)),
-                'confidence': 0.6
-            })
-
-        return {
-            'blood_type': blood_type,
-            'predictions': predictions,
-            'method_used': 'fallback_optimized',
-            'confidence_intervals': {
-                'lower': [max(1, int(p['predicted_demand'] * 0.7)) for p in predictions],
-                'upper': [int(p['predicted_demand'] * 1.3) for p in predictions]
-            },
-            'warning': 'Using optimized fallback prediction method',
-            'generated_at': datetime.now().isoformat()
-        }
-
-    def fallback_prediction_simple_optimized(self, blood_type, days_ahead):
-        """Prédiction de secours simple optimisée"""
-        base_demands = {
-            'O+': 15, 'A+': 12, 'B+': 8, 'AB+': 3,
-            'O-': 7, 'A-': 6, 'B-': 4, 'AB-': 2
-        }
-
-        base_demand = base_demands.get(blood_type, 10)
-        predictions = []
-
-        for i in range(days_ahead):
-            day_of_week = i % 7
-            seasonal_factor = 1.2 if day_of_week in [0, 1] else (0.8 if day_of_week in [5, 6] else 1.0)
-            daily_pred = base_demand * seasonal_factor
-            predictions.append(max(1, daily_pred))
-
-        return np.array(predictions)
-
-    def evaluate_arima_model_fast(self, model, series):
-        """Évaluation ARIMA rapide"""
-        try:
-            fitted_values = model.fittedvalues
-            if len(fitted_values) == 0:
-                return {'mae': float('inf'), 'rmse': float('inf'), 'mape': float('inf')}
-
-            residuals = series[-len(fitted_values):] - fitted_values
-
-            mae = np.mean(np.abs(residuals))
-            rmse = np.sqrt(np.mean(residuals ** 2))
-
-            # MAPE simplifié
-            non_zero_actual = series[-len(fitted_values):][series[-len(fitted_values):] != 0]
-            non_zero_fitted = fitted_values[series[-len(fitted_values):] != 0]
-
-            if len(non_zero_actual) > 0:
-                mape = np.mean(np.abs((non_zero_actual - non_zero_fitted) / non_zero_actual)) * 100
-            else:
-                mape = 100.0
-
-            return {
-                'mae': float(mae),
-                'rmse': float(rmse),
-                'mape': float(mape)
-            }
-        except Exception as e:
-            logger.error(f"ARIMA evaluation failed: {e}")
-            return {'mae': float('inf'), 'rmse': float('inf'), 'mape': float('inf')}
-
-    def clear_cache(self, blood_type=None):
-        """Nettoyer le cache"""
-        if blood_type:
-            cache.delete_many([
-                f'model_training_{blood_type}',
-                f'prediction_{blood_type}_7_auto',
-                f'prediction_{blood_type}_30_auto'
-            ])
-        else:
-            # Nettoyage global (à utiliser avec parcimonie)
-            cache.clear()
-        logger.info(f"Cache cleared for {blood_type or 'all'}")
-
-
-# ==================== VERSION LIGHTWEIGHT POUR PRODUCTION ====================
-# REMPLACEMENT DE ProductionLightweightForecaster dans blood_demand_forecasting.py
-
-class ProductionLightweightForecaster:
-    """Version ultra-légère pour production avec vrais algorithmes différenciés"""
-
-    def __init__(self):
-        # 🔥 VRAIS MODÈLES DIFFÉRENTS pour chaque méthode
-        self.models = {
-            'random_forest': RandomForestRegressor(
-                n_estimators=25, max_depth=6, random_state=42, n_jobs=1
-            ),
-            'arima_params': {'order': (2, 1, 1), 'seasonal': False},
-            'stl_arima_params': {'seasonal_periods': 7, 'arima_order': (1, 0, 1)}
-        }
-
-        # XGBoost conditionnel
-        if XGBOOST_AVAILABLE:
-            self.models['xgboost'] = xgb.XGBRegressor(
-                n_estimators=20, max_depth=4, learning_rate=0.15,
-                random_state=42, n_jobs=1, verbosity=0
-            )
-
-        self.trained_models = {}
-        self.synthetic_data_cache = {}
-
-    def quick_predict_cached(self, blood_type, days=7, method='auto'):
-        """Prédiction différenciée par méthode avec cache intelligent"""
-
-        # 🎯 Cache spécifique par méthode
-        cache_key = f'quick_pred_{blood_type}_{days}_{method}'
-        result = cache.get(cache_key)
-        if result:
-            return result
-
-        # 🔥 GÉNÉRATION DE DONNÉES SYNTHÉTIQUES RÉALISTES
-        synthetic_data = self.generate_synthetic_historical_data(blood_type)
-
-        # 🎨 MÉTHODES VRAIMENT DIFFÉRENTES
-        if method == 'auto':
-            method = self.smart_method_selection(blood_type, days)
-
-        predictions = []
-        method_info = {}
-
-        # ==================== RANDOM FOREST ====================
-        if method == 'random_forest':
-            predictions, method_info = self.predict_random_forest(synthetic_data, blood_type, days)
-
-        # ==================== XGBOOST ====================
-        elif method == 'xgboost' and XGBOOST_AVAILABLE:
-            predictions, method_info = self.predict_xgboost(synthetic_data, blood_type, days)
-
-        # ==================== ARIMA ====================
-        elif method == 'arima':
-            predictions, method_info = self.predict_arima_lite(synthetic_data, blood_type, days)
-
-        # ==================== STL + ARIMA ====================
-        elif method == 'stl_arima':
-            predictions, method_info = self.predict_stl_arima(synthetic_data, blood_type, days)
-
-        # ==================== FALLBACK ====================
-        else:
-            predictions, method_info = self.predict_pattern_based(blood_type, days)
-            method = 'pattern_based'
-
-        result = {
-            'blood_type': blood_type,
-            'predictions': predictions,
-            'method_used': method,
-            'model_confidence': method_info.get('confidence', 0.75),
-            'pattern_detected': method_info.get('pattern', 'standard'),
-            'seasonal_strength': method_info.get('seasonality', 0.3),
-            'trend_direction': method_info.get('trend', 'stable'),
-            'volatility_level': method_info.get('volatility', 'medium'),
-            'generated_at': datetime.now().isoformat(),
-            'generation_details': {
-                'data_points_used': len(synthetic_data),
-                'feature_importance': method_info.get('feature_importance', {}),
-                'model_parameters': method_info.get('parameters', {}),
-                'accuracy_estimate': method_info.get('accuracy', '80-85%')
-            }
-        }
-
-        # Cache différencié par complexité
-        cache_time = 1800 if method in ['random_forest', 'xgboost'] else 3600
-        cache.set(cache_key, result, cache_time)
-        return result
-
-    def generate_synthetic_historical_data(self, blood_type):
-        """🔥 Génération de données historiques réalistes"""
-
-        cache_key = f'synthetic_data_{blood_type}'
-        if cache_key in self.synthetic_data_cache:
-            return self.synthetic_data_cache[cache_key]
-
-        # Paramètres réalistes par groupe sanguin
-        blood_profiles = {
-            'O+': {'base': 15, 'volatility': 0.25, 'trend': 0.02, 'weekend_factor': 0.7},
-            'A+': {'base': 12, 'volatility': 0.20, 'trend': 0.01, 'weekend_factor': 0.8},
-            'B+': {'base': 8, 'volatility': 0.30, 'trend': -0.01, 'weekend_factor': 0.6},
-            'AB+': {'base': 3, 'volatility': 0.40, 'trend': 0.005, 'weekend_factor': 0.5},
-            'O-': {'base': 7, 'volatility': 0.35, 'trend': 0.015, 'weekend_factor': 0.9},
-            'A-': {'base': 6, 'volatility': 0.25, 'trend': 0.01, 'weekend_factor': 0.85},
-            'B-': {'base': 4, 'volatility': 0.45, 'trend': -0.005, 'weekend_factor': 0.7},
-            'AB-': {'base': 2, 'volatility': 0.50, 'trend': 0.02, 'weekend_factor': 0.6}
-        }
-
-        profile = blood_profiles.get(blood_type, blood_profiles['O+'])
-
-        # Générer 90 jours de données
-        dates = pd.date_range(end=datetime.now(), periods=90, freq='D')
-        data = []
-
-        for i, date in enumerate(dates):
-            # Tendance à long terme
-            trend = profile['base'] + (profile['trend'] * i)
-
-            # Saisonnalité hebdomadaire
-            day_of_week = date.dayofweek
-            if day_of_week in [0, 1]:  # Lundi, Mardi
-                seasonal = 1.3
-            elif day_of_week in [5, 6]:  # Weekend
-                seasonal = profile['weekend_factor']
-            else:
-                seasonal = 1.0
-
-            # Saisonnalité mensuelle
-            monthly_factor = 1 + 0.1 * np.sin(2 * np.pi * date.month / 12)
-
-            # Bruit réaliste
-            noise = np.random.normal(0, profile['volatility'])
-
-            # Événements exceptionnels (5% de chance)
-            if np.random.random() < 0.05:
-                event_factor = np.random.choice([0.5, 1.8], p=[0.3, 0.7])
-            else:
-                event_factor = 1.0
-
-            demand = max(1, int(trend * seasonal * monthly_factor * event_factor + noise))
-            data.append(demand)
-
-        df = pd.DataFrame({'demand': data}, index=dates)
-        self.synthetic_data_cache[cache_key] = df
-        return df
-
-    def predict_random_forest(self, data, blood_type, days):
-        """🌲 Prédiction Random Forest avec features engineering"""
-
-        # Features engineering
-        df = data.copy()
-        df['day_of_week'] = df.index.dayofweek
-        df['month'] = df.index.month
-        df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
-        df['demand_lag_1'] = df['demand'].shift(1)
-        df['demand_lag_7'] = df['demand'].shift(7)
-        df['demand_ma_7'] = df['demand'].rolling(7, min_periods=1).mean()
-        df['demand_trend'] = df['demand'].rolling(14, min_periods=1).apply(
-            lambda x: np.polyfit(range(len(x)), x, 1)[0] if len(x) > 1 else 0
-        )
-
-        # Nettoyer et préparer
-        df = df.dropna()
-        features = ['day_of_week', 'month', 'is_weekend', 'demand_lag_1',
-                    'demand_lag_7', 'demand_ma_7', 'demand_trend']
-
-        X = df[features]
-        y = df['demand']
-
-        # Entraîner
-        model = self.models['random_forest']
-        model.fit(X, y)
-
-        # Prédire
-        predictions = []
-        last_values = df.tail(7)['demand'].values
-
-        for i in range(days):
-            future_date = datetime.now() + timedelta(days=i + 1)
-
-            # Features futures
-            future_features = [
-                future_date.weekday(),
-                future_date.month,
-                1 if future_date.weekday() in [5, 6] else 0,
-                last_values[-1] if len(last_values) > 0 else df['demand'].mean(),
-                last_values[-7] if len(last_values) >= 7 else df['demand'].mean(),
-                np.mean(last_values[-7:]) if len(last_values) >= 7 else df['demand'].mean(),
-                0.1  # Tendance estimée
-            ]
-
-            pred = model.predict([future_features])[0]
-            predictions.append({
-                'date': future_date.strftime('%Y-%m-%d'),
-                'predicted_demand': max(1, int(pred)),
-                'confidence': min(0.9, 0.7 + (0.2 * np.random.random())),
-                'lower_bound': max(1, int(pred * 0.75)),
-                'upper_bound': int(pred * 1.25)
-            })
-
-            # Mettre à jour last_values
-            last_values = np.append(last_values[1:], pred) if len(last_values) >= 7 else np.append(last_values, pred)
-
-        # Importance des features
-        feature_importance = dict(zip(features, model.feature_importances_))
-
-        return predictions, {
-            'confidence': 0.82,
-            'pattern': 'ml_detected',
-            'seasonality': 0.6,
-            'trend': 'data_driven',
-            'volatility': 'model_adapted',
-            'feature_importance': feature_importance,
-            'parameters': {'n_estimators': 25, 'max_depth': 6},
-            'accuracy': '80-90%'
-        }
-
-    def predict_xgboost(self, data, blood_type, days):
-        """⚡ Prédiction XGBoost optimisée"""
-
-        if not XGBOOST_AVAILABLE:
-            return self.predict_random_forest(data, blood_type, days)
-
-        # Préparation similaire à RF mais avec plus de features
-        df = data.copy()
-        df['day_of_week'] = df.index.dayofweek
-        df['month'] = df.index.month
-        df['quarter'] = df.index.quarter
-        df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
-
-        # Lags multiples
-        for lag in [1, 2, 7, 14]:
-            df[f'demand_lag_{lag}'] = df['demand'].shift(lag)
-
-        # Moyennes mobiles
-        for window in [3, 7, 14]:
-            df[f'demand_ma_{window}'] = df['demand'].rolling(window, min_periods=1).mean()
-
-        # Features cycliques
-        df['sin_day'] = np.sin(2 * np.pi * df['day_of_week'] / 7)
-        df['cos_day'] = np.cos(2 * np.pi * df['day_of_week'] / 7)
-        df['sin_month'] = np.sin(2 * np.pi * df['month'] / 12)
-        df['cos_month'] = np.cos(2 * np.pi * df['month'] / 12)
-
-        # Nettoyer
-        df = df.dropna()
-        feature_cols = [col for col in df.columns if col != 'demand']
-
-        X = df[feature_cols]
-        y = df['demand']
-
-        # Entraîner XGBoost
-        model = self.models['xgboost']
-        model.fit(X, y, verbose=False)
-
-        # Prédictions avec logique avancée
-        predictions = []
-
-        for i in range(days):
-            future_date = datetime.now() + timedelta(days=i + 1)
-
-            # Construction des features futures (plus sophistiquée)
-            future_row = self._build_xgb_features(future_date, df, i)
-            pred = model.predict([future_row])[0]
-
-            # Ajustements post-prédiction
-            confidence = max(0.6, 0.9 - (i * 0.01))  # Confiance décroissante
-
-            predictions.append({
-                'date': future_date.strftime('%Y-%m-%d'),
-                'predicted_demand': max(1, int(pred)),
-                'confidence': round(confidence, 2),
-                'lower_bound': max(1, int(pred * (0.8 - i * 0.01))),
-                'upper_bound': int(pred * (1.2 + i * 0.01)),
-                'prediction_interval': f'Day {i + 1}'
-            })
-
-        return predictions, {
-            'confidence': 0.87,
-            'pattern': 'gradient_boosted',
-            'seasonality': 0.75,
-            'trend': 'xgb_optimized',
-            'volatility': 'adaptive',
-            'feature_importance': dict(zip(feature_cols, model.feature_importances_)),
-            'parameters': {'n_estimators': 20, 'max_depth': 4, 'learning_rate': 0.15},
-            'accuracy': '85-92%'
-        }
-
-    def predict_arima_lite(self, data, blood_type, days):
-        """📈 ARIMA simplifié mais réaliste"""
-
-        if not STATSMODELS_AVAILABLE:
-            return self.predict_pattern_based(blood_type, days)
-
-        try:
-            series = data['demand']
-
-            # ARIMA simple mais efficace
-            from statsmodels.tsa.arima.model import ARIMA
-            model = ARIMA(series, order=(2, 1, 1))
-            fitted_model = model.fit()
-
-            # Prédictions
-            forecast = fitted_model.forecast(steps=days)
-            conf_int = fitted_model.get_forecast(steps=days).conf_int()
+            model_data = self.trained_models[model_key]
+            model = model_data['model']
+            feature_cols = model_data['features']
+
+            # Récupérer les dernières données réelles pour construire les features futures
+            recent_data = self.get_historical_data_from_db(blood_type, days_back=30)
+            if recent_data is None:
+                return None
+
+            # Préparer les features sur les données récentes
+            contextual_data = self.get_contextual_data(blood_type)
+            df_with_features = self.prepare_ml_features_from_real_data(recent_data, contextual_data)
+
+            if df_with_features is None:
+                return None
 
             predictions = []
-            for i in range(days):
+            last_known_values = df_with_features['demand'].tail(14).values  # Dernières 2 semaines
+
+            for i in range(days_ahead):
                 future_date = datetime.now() + timedelta(days=i + 1)
+
+                # Construction des features futures basées sur les patterns réels
+                future_features = self.build_future_features_from_real_patterns(
+                    future_date, df_with_features, last_known_values, i, contextual_data
+                )
+
+                if len(future_features) != len(feature_cols):
+                    logger.warning(f"⚠️ Mismatch features: {len(future_features)} vs {len(feature_cols)}")
+                    continue
+
+                # Prédiction
+                pred = model.predict([future_features])[0]
+                pred = max(0, int(pred))  # Pas de demande négative
+
+                # Calcul de confiance basé sur la variance récente
+                recent_variance = np.var(last_known_values[-7:]) if len(last_known_values) >= 7 else 1
+                base_confidence = max(0.6, min(0.95, 1.0 - (recent_variance / max(np.mean(last_known_values), 1))))
+
+                # Diminution de confiance avec la distance temporelle
+                confidence = base_confidence * (0.98 ** i)
+
                 predictions.append({
                     'date': future_date.strftime('%Y-%m-%d'),
-                    'predicted_demand': max(1, int(forecast.iloc[i])),
-                    'confidence': 0.78,
-                    'lower_bound': max(1, int(conf_int.iloc[i, 0])),
-                    'upper_bound': max(1, int(conf_int.iloc[i, 1]))
+                    'predicted_demand': pred,
+                    'confidence': round(confidence, 3),
+                    'method_details': {
+                        'features_used': len(feature_cols),
+                        'base_confidence': round(base_confidence, 3),
+                        'temporal_decay': round(0.98 ** i, 3)
+                    }
                 })
 
-            return predictions, {
-                'confidence': 0.78,
-                'pattern': 'time_series_arima',
-                'seasonality': 0.4,
-                'trend': 'arima_detected',
-                'volatility': 'statistical',
-                'parameters': {'order': '(2,1,1)', 'method': 'MLE'},
-                'accuracy': '75-85%'
-            }
+                # Mettre à jour les valeurs connues pour la prédiction suivante
+                if len(last_known_values) >= 14:
+                    last_known_values = np.append(last_known_values[1:], pred)
+                else:
+                    last_known_values = np.append(last_known_values, pred)
+
+            return predictions
 
         except Exception as e:
-            logger.warning(f"ARIMA failed: {e}")
-            return self.predict_pattern_based(blood_type, days)
+            logger.error(f"❌ Erreur prédiction ML: {e}")
+            return None
 
-    def predict_stl_arima(self, data, blood_type, days):
-        """📊 STL + ARIMA pour décomposition saisonnière"""
+    def build_future_features_from_real_patterns(self, future_date, historical_df, last_values, day_offset,
+                                                 contextual_data):
+        """
+        🏗️ CONSTRUCTION DE FEATURES FUTURES basées sur les patterns des vraies données
+        """
+        try:
+            features = []
 
-        if not STATSMODELS_AVAILABLE:
-            return self.predict_pattern_based(blood_type, days)
+            # Features temporelles de base
+            features.extend([
+                future_date.weekday(),  # day_of_week
+                future_date.month,  # month
+                future_date.day,  # day_of_month
+                future_date.quarter,  # quarter
+                1 if future_date.weekday() in [5, 6] else 0,  # is_weekend
+                1 if future_date.weekday() == 0 else 0,  # is_monday
+                1 if future_date.weekday() == 4 else 0,  # is_friday
+            ])
+
+            # Moyennes mobiles basées sur les dernières valeurs réelles
+            if len(last_values) >= 3:
+                features.append(np.mean(last_values[-3:]))  # demand_ma_3
+            else:
+                features.append(historical_df['demand'].mean())
+
+            if len(last_values) >= 7:
+                features.append(np.mean(last_values[-7:]))  # demand_ma_7
+            else:
+                features.append(historical_df['demand'].mean())
+
+            if len(last_values) >= 14:
+                features.append(np.mean(last_values[-14:]))  # demand_ma_14
+            else:
+                features.append(historical_df['demand'].mean())
+
+            # Moyenne sur 30 jours si disponible
+            if 'demand_ma_30' in historical_df.columns:
+                features.append(historical_df['demand_ma_30'].iloc[-1])
+            else:
+                features.append(historical_df['demand'].mean())
+
+            # Lags basés sur les vraies données
+            for lag in [1, 2, 7, 14]:
+                if len(last_values) >= lag:
+                    features.append(last_values[-lag])
+                else:
+                    features.append(historical_df['demand'].mean())
+
+            # Tendances calculées sur les vraies données récentes
+            if len(last_values) >= 7:
+                trend_7 = np.polyfit(range(7), last_values[-7:], 1)[0]
+                features.append(trend_7)
+            else:
+                features.append(0.0)
+
+            if len(last_values) >= 14:
+                trend_14 = np.polyfit(range(14), last_values[-14:], 1)[0]
+                features.append(trend_14)
+            else:
+                features.append(0.0)
+
+            # Volatilité récente
+            if len(last_values) >= 7:
+                volatility = np.std(last_values[-7:])
+                features.append(volatility)
+            else:
+                features.append(historical_df['demand'].std())
+
+            # Features cycliques
+            features.extend([
+                np.sin(2 * np.pi * future_date.weekday() / 7),
+                np.cos(2 * np.pi * future_date.weekday() / 7),
+                np.sin(2 * np.pi * future_date.month / 12),
+                np.cos(2 * np.pi * future_date.month / 12),
+            ])
+
+            # Features contextuelles
+            if contextual_data:
+                avg_demand = np.mean(last_values) if len(last_values) > 0 else historical_df['demand'].mean()
+                features.extend([
+                    contextual_data.get('current_stock', 0) / max(1, avg_demand),  # stock_ratio
+                    contextual_data.get('recent_daily_avg', 0) / max(1, avg_demand)  # recent_trend_factor
+                ])
+            else:
+                features.extend([1.0, 1.0])  # Valeurs par défaut
+
+            return features
+
+        except Exception as e:
+            logger.error(f"❌ Erreur construction features: {e}")
+            return []
+
+    def predict_arima_real_data(self, blood_type, days_ahead):
+        """
+        📈 PRÉDICTION ARIMA sur vraies données
+        """
+        if blood_type not in self.arima_models:
+            logger.error(f"❌ Modèle ARIMA non trouvé pour {blood_type}")
+            return None
 
         try:
-            from statsmodels.tsa.seasonal import STL
-            from statsmodels.tsa.arima.model import ARIMA
+            model = self.arima_models[blood_type]
 
-            series = data['demand']
+            # Prédiction ARIMA
+            forecast = model.forecast(steps=days_ahead)
+            conf_int = model.get_forecast(steps=days_ahead).conf_int()
 
-            # Décomposition STL
-            stl = STL(series, seasonal=13)  # Saisonnalité hebdomadaire
-            decomposition = stl.fit()
+            predictions = []
 
-            # ARIMA sur la composante désaisonnalisée
-            deseasonalized = series - decomposition.seasonal
-            arima_model = ARIMA(deseasonalized, order=(1, 0, 1))
-            fitted_arima = arima_model.fit()
+            for i in range(days_ahead):
+                future_date = datetime.now() + timedelta(days=i + 1)
+                pred = max(0, int(forecast.iloc[i]))
 
-            # Prédictions
-            trend_forecast = fitted_arima.forecast(steps=days)
+                # Confiance basée sur l'intervalle de confiance
+                lower_bound = max(0, conf_int.iloc[i, 0])
+                upper_bound = conf_int.iloc[i, 1]
+                confidence_width = upper_bound - lower_bound
+
+                # Normaliser la confiance (plus l'intervalle est étroit, plus la confiance est élevée)
+                base_confidence = max(0.5, min(0.95, 1.0 - (confidence_width / max(pred, 1))))
+                confidence = base_confidence * (0.97 ** i)  # Décroissance temporelle
+
+                predictions.append({
+                    'date': future_date.strftime('%Y-%m-%d'),
+                    'predicted_demand': pred,
+                    'confidence': round(confidence, 3),
+                    'lower_bound': max(0, int(lower_bound)),
+                    'upper_bound': max(pred, int(upper_bound)),
+                    'method_details': {
+                        'confidence_interval_width': round(confidence_width, 2),
+                        'forecast_value': round(float(forecast.iloc[i]), 2)
+                    }
+                })
+
+            return predictions
+
+        except Exception as e:
+            logger.error(f"❌ Erreur prédiction ARIMA: {e}")
+            return None
+
+    def predict_stl_arima_real_data(self, blood_type, days_ahead):
+        """
+        🔬 PRÉDICTION STL + ARIMA sur vraies données
+        """
+        model_key = f'stl_{blood_type}'
+
+        if model_key not in self.trained_models:
+            logger.error(f"❌ Modèle STL non trouvé pour {blood_type}")
+            return None
+
+        try:
+            model_data = self.trained_models[model_key]
+            arima_model = model_data['arima_model']
+            seasonal_component = model_data['seasonal_component']
+
+            # Prédiction de la composante de tendance
+            trend_forecast = arima_model.forecast(steps=days_ahead)
 
             # Reconstruction avec saisonnalité
-            seasonal_pattern = decomposition.seasonal[-7:].values  # Dernière semaine
+            seasonal_pattern = seasonal_component.tail(7).values  # Dernier pattern hebdomadaire
 
             predictions = []
-            for i in range(days):
-                future_date = datetime.now() + timedelta(days=i + 1)
-                seasonal_component = seasonal_pattern[i % 7]
 
-                final_pred = trend_forecast.iloc[i] + seasonal_component
+            for i in range(days_ahead):
+                future_date = datetime.now() + timedelta(days=i + 1)
+
+                # Composante saisonnière cyclique
+                seasonal_value = seasonal_pattern[i % 7]
+
+                # Prédiction finale
+                trend_value = trend_forecast.iloc[i]
+                final_pred = max(0, int(trend_value + seasonal_value))
+
+                # Confiance basée sur la stabilité de la décomposition
+                seasonal_stability = 1.0 - (np.std(seasonal_pattern) / max(np.mean(seasonal_pattern), 1))
+                base_confidence = max(0.6, min(0.9, seasonal_stability))
+                confidence = base_confidence * (0.96 ** i)
 
                 predictions.append({
                     'date': future_date.strftime('%Y-%m-%d'),
-                    'predicted_demand': max(1, int(final_pred)),
-                    'confidence': 0.83,
-                    'seasonal_component': round(seasonal_component, 2),
-                    'trend_component': round(trend_forecast.iloc[i], 2),
-                    'lower_bound': max(1, int(final_pred * 0.85)),
-                    'upper_bound': int(final_pred * 1.15)
+                    'predicted_demand': final_pred,
+                    'confidence': round(confidence, 3),
+                    'seasonal_component': round(seasonal_value, 2),
+                    'trend_component': round(float(trend_value), 2),
+                    'method_details': {
+                        'seasonal_pattern_day': i % 7,
+                        'seasonal_stability': round(seasonal_stability, 3)
+                    }
                 })
 
-            return predictions, {
-                'confidence': 0.83,
-                'pattern': 'stl_decomposed',
-                'seasonality': 0.8,
-                'trend': 'stl_extracted',
-                'volatility': 'decomposed',
-                'parameters': {'stl_seasonal': 13, 'arima_order': '(1,0,1)'},
-                'accuracy': '78-88%'
+            return predictions
+
+        except Exception as e:
+            logger.error(f"❌ Erreur prédiction STL: {e}")
+            return None
+
+    def calculate_confidence_intervals_real_data(self, predictions):
+        """
+        📊 CALCUL D'INTERVALLES DE CONFIANCE basés sur les vraies données
+        """
+        if not predictions:
+            return {'lower': [], 'upper': [], 'margin': 0}
+
+        try:
+            demands = [p['predicted_demand'] for p in predictions]
+            confidences = [p['confidence'] for p in predictions]
+
+            lower_bounds = []
+            upper_bounds = []
+
+            for i, (demand, conf) in enumerate(zip(demands, confidences)):
+                # Marge d'erreur adaptative
+                base_margin = demand * (1.0 - conf)  # Plus la confiance est faible, plus la marge est large
+                time_margin = demand * 0.05 * i  # Augmentation avec le temps
+
+                total_margin = base_margin + time_margin
+
+                lower_bounds.append(max(0, int(demand - total_margin)))
+                upper_bounds.append(int(demand + total_margin))
+
+            return {
+                'lower': lower_bounds,
+                'upper': upper_bounds,
+                'margin': float(np.mean([u - d for u, d in zip(upper_bounds, demands)]))
             }
 
         except Exception as e:
-            logger.warning(f"STL+ARIMA failed: {e}")
-            return self.predict_arima_lite(data, blood_type, days)
+            logger.error(f"❌ Erreur calcul intervalles: {e}")
+            return {'lower': [], 'upper': [], 'margin': 0}
 
-    def smart_method_selection(self, blood_type, days):
-        """🤖 Sélection intelligente de méthode"""
+    def calculate_stock_duration(self, contextual_data, predictions):
+        """
+        📦 CALCUL DE LA DURÉE DE VIE DU STOCK basé sur les vraies prédictions
+        """
+        try:
+            current_stock = contextual_data.get('current_stock', 0)
+            if current_stock <= 0 or not predictions:
+                return 0
 
-        # Logique de sélection basée sur le contexte
-        if days <= 7:
-            if blood_type in ['O+', 'A+']:  # Groupes fréquents
-                return 'xgboost' if XGBOOST_AVAILABLE else 'random_forest'
+            cumulative_demand = 0
+            for i, pred in enumerate(predictions):
+                cumulative_demand += pred['predicted_demand']
+                if cumulative_demand >= current_stock:
+                    return i + 1
+
+            # Si le stock dure plus longtemps que nos prédictions
+            return len(predictions) + 1
+
+        except Exception as e:
+            logger.error(f"❌ Erreur calcul durée stock: {e}")
+            return 0
+
+    def calculate_overall_confidence(self, predictions, performance):
+        """
+        🎯 CALCUL DE LA CONFIANCE GLOBALE
+        """
+        try:
+            if not predictions or not performance:
+                return 0.5
+
+            # Confiance moyenne des prédictions
+            pred_confidence = np.mean([p['confidence'] for p in predictions])
+
+            # Confiance basée sur la performance du modèle
+            model_mape = performance.get('mape', 50)
+            model_confidence = max(0.1, min(0.9, 1.0 - (model_mape / 100)))
+
+            # Confiance combinée
+            overall = (pred_confidence * 0.6) + (model_confidence * 0.4)
+
+            return round(overall, 3)
+
+        except Exception as e:
+            logger.error(f"❌ Erreur calcul confiance: {e}")
+            return 0.5
+
+    def emergency_fallback_real_data(self, blood_type, days_ahead):
+        """
+        🚨 FALLBACK D'URGENCE basé sur les moyennes récentes des vraies données
+        """
+        try:
+            logger.warning(f"🚨 Utilisation du fallback d'urgence pour {blood_type}")
+
+            # Récupérer les données récentes
+            recent_data = self.get_historical_data_from_db(blood_type, days_back=30)
+            contextual_data = self.get_contextual_data(blood_type)
+
+            if recent_data is not None and len(recent_data) > 0:
+                # Utiliser les moyennes réelles récentes
+                recent_mean = recent_data['demand'].tail(14).mean()
+                recent_std = recent_data['demand'].tail(14).std()
+
+                # Pattern hebdomadaire basé sur les vraies données
+                weekly_pattern = []
+                for day in range(7):
+                    day_data = recent_data[recent_data.index.dayofweek == day]['demand']
+                    if len(day_data) > 0:
+                        weekly_pattern.append(day_data.mean())
+                    else:
+                        weekly_pattern.append(recent_mean)
+
+                weekly_avg = np.mean(weekly_pattern) if weekly_pattern else recent_mean
+
             else:
-                return 'stl_arima' if STATSMODELS_AVAILABLE else 'random_forest'
+                # Utiliser les données contextuelles si disponibles
+                recent_mean = max(1, contextual_data.get('recent_daily_avg', 5))
+                recent_std = recent_mean * 0.3
+                weekly_pattern = [recent_mean] * 7
+                weekly_avg = recent_mean
 
-        elif days <= 14:
-            return 'stl_arima' if STATSMODELS_AVAILABLE else 'xgboost'
+            predictions = []
 
-        else:  # Long terme
-            return 'arima' if STATSMODELS_AVAILABLE else 'random_forest'
+            for i in range(days_ahead):
+                future_date = datetime.now() + timedelta(days=i + 1)
+                day_of_week = future_date.weekday()
 
-    def _build_xgb_features(self, future_date, historical_df, day_ahead):
-        """Construction des features pour XGBoost"""
+                # Utiliser le pattern hebdomadaire réel
+                if len(weekly_pattern) > day_of_week:
+                    base_demand = weekly_pattern[day_of_week]
+                else:
+                    base_demand = recent_mean
 
-        # Features de base
-        features = [
-            future_date.weekday(),
-            future_date.month,
-            future_date.quarter,
-            1 if future_date.weekday() in [5, 6] else 0
-        ]
+                # Normaliser par rapport à la moyenne hebdomadaire
+                if weekly_avg > 0:
+                    seasonal_factor = base_demand / weekly_avg
+                else:
+                    seasonal_factor = 1.0
 
-        # Lags (utiliser les dernières valeurs)
-        last_demands = historical_df['demand'].tail(14).values
-        for lag in [1, 2, 7, 14]:
-            if len(last_demands) >= lag:
-                features.append(last_demands[-lag])
+                # Ajustement pour les weekends (basé sur les données réelles si disponibles)
+                if day_of_week in [5, 6]:  # Weekend
+                    config = self.blood_type_config.get(blood_type, {})
+                    weekend_factor = config.get('typical_weekend_factor', 0.8)
+                    seasonal_factor *= weekend_factor
+
+                final_demand = max(1, int(recent_mean * seasonal_factor))
+
+                # Confiance réduite pour le fallback mais pas nulle
+                confidence = max(0.4, min(0.7, 0.6 - (i * 0.02)))
+
+                predictions.append({
+                    'date': future_date.strftime('%Y-%m-%d'),
+                    'predicted_demand': final_demand,
+                    'confidence': round(confidence, 3)
+                })
+
+            return {
+                'blood_type': blood_type,
+                'predictions': predictions,
+                'method_used': 'emergency_fallback_real_data',
+                'confidence_intervals': self.calculate_confidence_intervals_real_data(predictions),
+                'generated_at': datetime.now().isoformat(),
+                'data_source': 'real_database_limited',
+                'warning': 'Prédiction de secours basée sur les moyennes récentes réelles',
+                'contextual_insights': {
+                    'current_stock': contextual_data.get('current_stock', 0),
+                    'recent_trend': contextual_data.get('recent_daily_avg', 0),
+                    'data_availability': 'limited'
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erreur fallback d'urgence: {e}")
+
+            # Fallback ultime avec valeurs minimales
+            config = self.blood_type_config.get(blood_type, {})
+            min_demand = 2 if config.get('priority') == 'critical' else 1
+
+            predictions = []
+            for i in range(days_ahead):
+                future_date = datetime.now() + timedelta(days=i + 1)
+                predictions.append({
+                    'date': future_date.strftime('%Y-%m-%d'),
+                    'predicted_demand': min_demand,
+                    'confidence': 0.3
+                })
+
+            return {
+                'blood_type': blood_type,
+                'predictions': predictions,
+                'method_used': 'minimal_fallback',
+                'generated_at': datetime.now().isoformat(),
+                'warning': 'Prédiction minimale - données insuffisantes',
+                'error': str(e)
+            }
+
+    def get_model_performance_summary(self, blood_type):
+        """
+        📊 RÉSUMÉ DES PERFORMANCES DU MODÈLE
+        """
+        try:
+            if blood_type not in self.model_performance:
+                return {}
+
+            performance = self.model_performance[blood_type]
+
+            summary = {
+                'best_method': min(performance.items(), key=lambda x: x[1].get('mape', float('inf')))[0],
+                'best_mape': min([p.get('mape', float('inf')) for p in performance.values()]),
+                'methods_trained': list(performance.keys()),
+                'training_data_points': performance.get(list(performance.keys())[0], {}).get('training_samples', 0),
+                'last_training': datetime.now().isoformat()
+            }
+
+            return summary
+
+        except Exception as e:
+            logger.error(f"❌ Erreur résumé performance: {e}")
+            return {}
+
+    def clear_model_cache(self, blood_type=None):
+        """
+        🧹 NETTOYAGE DU CACHE DES MODÈLES
+        """
+        try:
+            if blood_type:
+                # Nettoyage spécifique
+                cache_keys = [
+                    f'real_model_{blood_type}_auto',
+                    f'real_model_{blood_type}_random_forest',
+                    f'real_model_{blood_type}_xgboost',
+                    f'real_model_{blood_type}_arima',
+                    f'real_model_{blood_type}_stl_arima',
+                    f'real_prediction_{blood_type}_7_auto',
+                    f'real_prediction_{blood_type}_14_auto',
+                    f'real_prediction_{blood_type}_30_auto'
+                ]
+                cache.delete_many(cache_keys)
+
+                # Nettoyage des modèles en mémoire
+                keys_to_remove = [k for k in self.trained_models.keys() if blood_type in k]
+                for key in keys_to_remove:
+                    del self.trained_models[key]
+
+                if blood_type in self.model_performance:
+                    del self.model_performance[blood_type]
+
+                if blood_type in self.arima_models:
+                    del self.arima_models[blood_type]
+
+                logger.info(f"✅ Cache nettoyé pour {blood_type}")
+
             else:
-                features.append(historical_df['demand'].mean())
+                # Nettoyage global
+                cache.clear()
+                self.trained_models.clear()
+                self.model_performance.clear()
+                self.arima_models.clear()
 
-        # Moyennes mobiles
-        for window in [3, 7, 14]:
-            if len(last_demands) >= window:
-                features.append(np.mean(last_demands[-window:]))
-            else:
-                features.append(historical_df['demand'].mean())
+                logger.info("✅ Cache global nettoyé")
 
-        # Features cycliques
-        features.extend([
-            np.sin(2 * np.pi * future_date.weekday() / 7),
-            np.cos(2 * np.pi * future_date.weekday() / 7),
-            np.sin(2 * np.pi * future_date.month / 12),
-            np.cos(2 * np.pi * future_date.month / 12)
+        except Exception as e:
+            logger.error(f"❌ Erreur nettoyage cache: {e}")
+
+
+class TimeoutException(Exception):
+    """Exception levée en cas de timeout"""
+    pass
+
+
+# ==================== FONCTIONS D'API POUR L'INTERFACE ====================
+
+def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
+    """
+    🎯 FONCTION PRINCIPALE D'API pour l'interface React
+
+    Args:
+        blood_type: Type de sang (O+, A+, etc.)
+        days_ahead: Nombre de jours à prédire
+        method: Méthode à utiliser ('auto', 'random_forest', 'xgboost', 'arima', 'stl_arima')
+        force_retrain: Forcer le réentraînement du modèle
+
+    Returns:
+        dict: Résultat complet de la prédiction
+    """
+    forecaster = RealDataBloodDemandForecaster()
+
+    try:
+        # Forcer le nettoyage du cache si demandé
+        if force_retrain:
+            forecaster.clear_model_cache(blood_type)
+
+        # Générer la prédiction
+        result = forecaster.predict_with_real_data(blood_type, days_ahead, method)
+
+        # Enrichir avec des métadonnées pour l'interface
+        result['api_response'] = {
+            'timestamp': datetime.now().isoformat(),
+            'processing_time_ms': int((time.time() - time.time()) * 1000),  # À ajuster
+            'version': '2.0-real-data',
+            'data_source': 'production_database'
+        }
+
+        # Ajouter les recommandations automatiques
+        result['optimization_recommendations'] = generate_recommendations(result)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Erreur API génération prévision: {e}")
+        return {
+            'error': True,
+            'message': str(e),
+            'blood_type': blood_type,
+            'method_attempted': method,
+            'timestamp': datetime.now().isoformat()
+        }
+
+
+def generate_recommendations(forecast_result):
+    """
+    💡 GÉNÉRATION DE RECOMMANDATIONS basées sur les vraies prédictions
+    """
+    try:
+        if not forecast_result.get('predictions'):
+            return []
+
+        recommendations = []
+        predictions = forecast_result['predictions']
+        blood_type = forecast_result['blood_type']
+
+        # Analyser les prédictions
+        demands = [p['predicted_demand'] for p in predictions]
+        max_demand = max(demands)
+        avg_demand = np.mean(demands)
+
+        # Stock actuel
+        current_stock = forecast_result.get('contextual_insights', {}).get('current_stock', 0)
+
+        # Recommandations basées sur les vraies prédictions
+        if max_demand > avg_demand * 1.5:
+            recommendations.append({
+                'type': 'demand_spike',
+                'priority': 'high',
+                'message': f"Pic de demande prévu: {max_demand} unités. Prévoir un stock supplémentaire.",
+                'action': 'increase_collection'
+            })
+
+        if current_stock > 0:
+            stock_duration = forecast_result.get('contextual_insights', {}).get('stock_days_remaining', 0)
+            if stock_duration < 3:
+                recommendations.append({
+                    'type': 'low_stock',
+                    'priority': 'critical',
+                    'message': f"Stock critique: {current_stock} unités pour {stock_duration} jours seulement.",
+                    'action': 'urgent_collection'
+                })
+            elif stock_duration < 7:
+                recommendations.append({
+                    'type': 'moderate_stock',
+                    'priority': 'medium',
+                    'message': f"Stock modéré: planifier une collecte dans les prochains jours.",
+                    'action': 'schedule_collection'
+                })
+
+        # Recommandations basées sur la confiance du modèle
+        avg_confidence = np.mean([p['confidence'] for p in predictions])
+        if avg_confidence < 0.7:
+            recommendations.append({
+                'type': 'low_confidence',
+                'priority': 'medium',
+                'message': f"Confiance du modèle modérée ({avg_confidence:.1%}). Surveiller de près les tendances réelles.",
+                'action': 'monitor_closely'
+            })
+
+        return recommendations
+
+    except Exception as e:
+        logger.error(f"❌ Erreur génération recommandations: {e}")
+        return []
+
+
+def get_available_methods():
+    """
+    📋 LISTE DES MÉTHODES DISPONIBLES pour l'interface
+    """
+    methods = [
+        {
+            'value': 'auto',
+            'label': '🤖 Auto-Sélection',
+            'description': 'Sélection automatique de la meilleure méthode'
+        },
+        {
+            'value': 'random_forest',
+            'label': '🌲 Random Forest',
+            'description': 'Apprentissage automatique robuste'
+        }
+    ]
+
+    if XGBOOST_AVAILABLE:
+        methods.append({
+            'value': 'xgboost',
+            'label': '⚡ XGBoost',
+            'description': 'Gradient boosting haute performance'
+        })
+
+    if STATSMODELS_AVAILABLE:
+        methods.extend([
+            {
+                'value': 'arima',
+                'label': '📈 ARIMA',
+                'description': 'Modèle statistique de séries temporelles'
+            },
+            {
+                'value': 'stl_arima',
+                'label': '🔬 STL + ARIMA',
+                'description': 'Décomposition saisonnière + ARIMA'
+            }
         ])
 
-        return features
+    return methods
+
+
+def health_check():
+    """
+    🏥 VÉRIFICATION DE SANTÉ DU SYSTÈME
+    """
+    try:
+        from django.db import connection
+
+        # Test de connexion DB
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            db_status = "connected"
+
+        return {
+            'status': 'healthy',
+            'version': '2.0-real-data',
+            'database': db_status,
+            'xgboost_available': XGBOOST_AVAILABLE,
+            'statsmodels_available': STATSMODELS_AVAILABLE,
+            'timestamp': datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
