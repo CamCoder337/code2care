@@ -107,7 +107,9 @@ from .serializers import (
 )
 
 try:
-    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster, RealDataBloodDemandForecaster
+    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster, \
+    RealDataBloodDemandForecaster, XGBOOST_AVAILABLE, STATSMODELS_AVAILABLE
+
     ENHANCED_FORECASTING_AVAILABLE = True
 except ImportError:
     ENHANCED_FORECASTING_AVAILABLE = False
@@ -997,7 +999,7 @@ class AISystemHealthView(APIView):
         """Test de connexion à la base de données"""
         try:
             from django.db import connection
-            from inventory.models import BloodInventory, Transaction
+            from .models import BloodInventory, Transaction
 
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")

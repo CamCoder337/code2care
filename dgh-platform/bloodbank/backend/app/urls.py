@@ -1,6 +1,7 @@
 # app/urls.py - VERSION CORRIGÉE AVEC FALLBACKS
 from django.urls import path
 from . import views
+from .views import AISystemHealthView, AIMethodsView
 
 urlpatterns = [
     # ==================== HEALTH CHECKS MULTIPLES ====================
