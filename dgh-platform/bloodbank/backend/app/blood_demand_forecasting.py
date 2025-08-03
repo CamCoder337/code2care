@@ -37,13 +37,13 @@ except ImportError:
 
 try:
     # Essayez d'importer depuis app.models
-    from app.models import BloodUnit, BloodRecord
+    from .models import BloodUnit, BloodRecord
 
     MODELS_AVAILABLE = True
 except ImportError:
     try:
         # Essayez depuis app.models si c'est votre structure
-        from app.models import BloodInventory as BloodUnit, Transaction as BloodRecord
+        from .models import BloodInventory as BloodUnit, Transaction as BloodRecord
 
         MODELS_AVAILABLE = True
     except ImportError:
@@ -87,7 +87,7 @@ def get_historical_data_from_db(self, blood_type, days_back=180):
         except Exception:
             try:
                 # Version 2: Si vous avez BloodConsumption
-                from app.models import BloodConsumption
+                from .models import BloodConsumption
 
                 daily_demand = BloodConsumption.objects.filter(
                     blood_type=blood_type,
@@ -100,7 +100,7 @@ def get_historical_data_from_db(self, blood_type, days_back=180):
 
             except Exception:
                 # Version 3: Utiliser BloodRequest comme approximation
-                from app.models import BloodRequest
+                from .models import BloodRequest
 
                 daily_demand = BloodRequest.objects.filter(
                     blood_type=blood_type,
@@ -239,7 +239,7 @@ class RealDataBloodDemandForecaster:
         """
         🗄️ RÉCUPÉRATION DES VRAIES DONNÉES DEPUIS LA DB
         """
-        from app.models import BloodInventory, Transaction
+        from .models import BloodInventory, Transaction
 
         try:
             end_date = datetime.now().date()
@@ -292,7 +292,7 @@ class RealDataBloodDemandForecaster:
         📈 RÉCUPÉRATION DE DONNÉES CONTEXTUELLES
         Stock actuel, tendances récentes, etc.
         """
-        from app.models import BloodInventory, Transaction
+        from .models import BloodInventory, Transaction
 
         try:
             # Stock actuel
@@ -1555,7 +1555,7 @@ def verify_system_integrity():
     """
     try:
         from django.db import connection
-        from app.models import BloodInventory, Transaction
+        from .models import BloodInventory, Transaction
 
         issues = []
 
