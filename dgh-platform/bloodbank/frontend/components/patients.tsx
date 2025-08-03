@@ -1,73 +1,79 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/lib/i18n"
-import { UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Phone, Mail, Activity } from "lucide-react"
+import { UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Phone, Mail, Activity, Loader2, AlertCircle } from "lucide-react"
+import { usePatients, useCreatePatient, useUpdatePatient, useDeletePatient } from "@/lib/hooks/useApi"
+import { toast } from "sonner"
 
 export function Patients() {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [filters, setFilters] = useState({
+    blood_type: "",
+    page: 1,
+    page_size: 20
+  })
 
-  // Mock patients data
-  const patients = [
-    {
-      id: "P001",
-      name: "Marie Dubois",
-      age: 34,
-      gender: "F",
-      blood_type: "O+",
-      phone: "+237 6XX XXX XXX",
-      email: "marie.dubois@email.com",
-      address: "Yaoundé, Cameroun",
-      last_transfusion: "2024-01-15",
-      total_transfusions: 3,
-      status: "active",
-      medical_conditions: ["Anémie"],
-      emergency_contact: "Jean Dubois - +237 6XX XXX XXX",
-    },
-    {
-      id: "P002",
-      name: "Paul Ngono",
-      age: 45,
-      gender: "M",
-      blood_type: "A-",
-      phone: "+237 6XX XXX XXX",
-      email: "paul.ngono@email.com",
-      address: "Douala, Cameroun",
-      last_transfusion: "2024-01-20",
-      total_transfusions: 7,
-      status: "active",
-      medical_conditions: ["Leucémie"],
-      emergency_contact: "Claire Ngono - +237 6XX XXX XXX",
-    },
-    {
-      id: "P003",
-      name: "Fatima Bello",
-      age: 28,
-      gender: "F",
-      blood_type: "B+",
-      phone: "+237 6XX XXX XXX",
-      email: "fatima.bello@email.com",
-      address: "Garoua, Cameroun",
-      last_transfusion: "2024-01-10",
-      total_transfusions: 2,
-      status: "inactive",
-      medical_conditions: ["Drépanocytose"],
-      emergency_contact: "Ahmed Bello - +237 6XX XXX XXX",
-    },
-  ]
+  // Construire les paramètres de requête
+  const queryParams = {
+    search: searchTerm || undefined,
+    blood_type: filters.blood_type || undefined,
+    page: currentPage,
+    page_size: filters.page_size,
+  }
 
-  const filteredPatients = patients.filter(
-    (patient) =>
-      patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.blood_type.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  // Hooks API
+  const {
+    data: patientsData,
+    isLoading,
+    isError,
+    error,
+    refetch
+  } = usePatients(queryParams)
+
+  const createPatientMutation = useCreatePatient()
+  const updatePatientMutation = useUpdatePatient()
+  const deletePatientMutation = useDeletePatient()
+
+  // Effet pour gérer les changements de recherche avec debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1) // Reset à la page 1 lors d'une nouvelle recherche
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Calculer les statistiques à partir des données
+  const getStatistics = () => {
+    if (!patientsData?.results) {
+      return {
+        totalPatients: 0,
+        activePatients: 0,
+        transfusionsThisMonth: 0,
+        emergencies: 0
+      }
+    }
+
+    // Pour les statistiques complètes, on aurait besoin d'endpoints dédiés
+    // Ici on utilise les données disponibles
+    const totalPatients = patientsData.count || 0
+    const activePatients = patientsData.results.length || 0
+
+    return {
+      totalPatients,
+      activePatients,
+      transfusionsThisMonth: 0, // Nécessiterait un endpoint dédié
+      emergencies: 0 // Nécessiterait un endpoint dédié
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -79,6 +85,82 @@ export function Patients() {
         return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
     }
   }
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A"
+    return new Date(dateString).toLocaleDateString("fr-FR")
+  }
+
+  const getPatientInitials = (firstName: string, lastName: string) => {
+    return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase()
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+  }
+
+  const handleFilterChange = (filterKey: string, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterKey]: value
+    }))
+    setCurrentPage(1)
+  }
+
+  const statistics = getStatistics()
+
+  // Affichage du loading
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <div className="p-6 lg:p-8 space-y-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+              <span className="text-lg text-gray-600 dark:text-gray-400">
+                Chargement des patients...
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Affichage des erreurs
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <div className="p-6 lg:p-8 space-y-8">
+          <div className="flex items-center justify-center h-64">
+            <Card className="p-6 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <div className="flex items-center gap-3 text-red-700 dark:text-red-400">
+                <AlertCircle className="w-6 h-6" />
+                <div>
+                  <h3 className="font-semibold">Erreur de chargement</h3>
+                  <p className="text-sm">
+                    {error?.message || "Impossible de charger les patients"}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-3"
+                    onClick={() => refetch()}
+                  >
+                    Réessayer
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const patients = patientsData?.results || []
+  const totalCount = patientsData?.count || 0
+  const hasNextPage = !!patientsData?.next
+  const hasPreviousPage = !!patientsData?.previous
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -95,11 +177,24 @@ export function Patients() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 hover:scale-105 transition-all duration-300">
+            <Button
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 hover:scale-105 transition-all duration-300"
+              onClick={() => {
+                // Ouvrir modal de création
+                toast.info("Fonctionnalité de création en cours de développement")
+              }}
+            >
               <Plus className="w-5 h-5 mr-2" />
               Nouveau Patient
             </Button>
-            <Button variant="outline" className="px-6 py-3 hover:scale-105 transition-all duration-300 bg-transparent">
+            <Button
+              variant="outline"
+              className="px-6 py-3 hover:scale-105 transition-all duration-300 bg-transparent"
+              onClick={() => {
+                // Export functionality
+                toast.info("Fonctionnalité d'export en cours de développement")
+              }}
+            >
               <Download className="w-5 h-5 mr-2" />
               Exporter
             </Button>
@@ -119,9 +214,24 @@ export function Patients() {
                   className="pl-10 h-12 text-base"
                 />
               </div>
+              <select
+                value={filters.blood_type}
+                onChange={(e) => handleFilterChange('blood_type', e.target.value)}
+                className="px-4 h-12 border border-gray-300 rounded-md bg-white dark:bg-slate-800 dark:border-gray-600"
+              >
+                <option value="">Tous les groupes sanguins</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+              </select>
               <Button variant="outline" className="px-6 h-12 bg-transparent">
                 <Filter className="w-5 h-5 mr-2" />
-                Filtres
+                Plus de filtres
               </Button>
             </div>
           </CardContent>
@@ -134,7 +244,7 @@ export function Patients() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Total Patients</p>
-                  <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">{patients.length}</p>
+                  <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">{statistics.totalPatients}</p>
                 </div>
                 <UserCheck className="w-8 h-8 text-purple-600" />
               </div>
@@ -146,9 +256,7 @@ export function Patients() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-green-600 dark:text-green-400">Patients Actifs</p>
-                  <p className="text-3xl font-bold text-green-700 dark:text-green-300">
-                    {patients.filter((p) => p.status === "active").length}
-                  </p>
+                  <p className="text-3xl font-bold text-green-700 dark:text-green-300">{statistics.activePatients}</p>
                 </div>
                 <Activity className="w-8 h-8 text-green-600" />
               </div>
@@ -160,7 +268,7 @@ export function Patients() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Transfusions ce mois</p>
-                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">24</p>
+                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{statistics.transfusionsThisMonth}</p>
                 </div>
                 <Calendar className="w-8 h-8 text-blue-600" />
               </div>
@@ -172,7 +280,7 @@ export function Patients() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-orange-600 dark:text-orange-400">Urgences</p>
-                  <p className="text-3xl font-bold text-orange-700 dark:text-orange-300">3</p>
+                  <p className="text-3xl font-bold text-orange-700 dark:text-orange-300">{statistics.emergencies}</p>
                 </div>
                 <Activity className="w-8 h-8 text-orange-600" />
               </div>
@@ -185,115 +293,203 @@ export function Patients() {
           <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6">
             <CardTitle className="text-2xl font-bold">Liste des Patients</CardTitle>
             <CardDescription className="text-purple-100">
-              {filteredPatients.length} patient{filteredPatients.length > 1 ? "s" : ""} trouvé
-              {filteredPatients.length > 1 ? "s" : ""}
+              {totalCount} patient{totalCount > 1 ? "s" : ""} au total, {patients.length} affiché{patients.length > 1 ? "s" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-slate-700">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Patient
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Groupe Sanguin
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Contact
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Dernière Transfusion
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Statut
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredPatients.map((patient) => (
-                    <tr
-                      key={patient.id}
-                      className="hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors cursor-pointer"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {patient.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-gray-100">{patient.name}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              ID: {patient.id} • {patient.age} ans • {patient.gender === "M" ? "Homme" : "Femme"}
+            {patients.length === 0 ? (
+              <div className="p-8 text-center">
+                <UserCheck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  Aucun patient trouvé
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {searchTerm || filters.blood_type
+                    ? "Aucun patient ne correspond à vos critères de recherche."
+                    : "Aucun patient enregistré dans le système."
+                  }
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-slate-700">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Patient
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Groupe Sanguin
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Date de Naissance
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Historique
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {patients.map((patient) => (
+                        <tr
+                          key={patient.patient_id}
+                          className="hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors cursor-pointer"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                {getPatientInitials(patient.first_name, patient.last_name)}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                  {patient.first_name} {patient.last_name}
+                                </p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  ID: {patient.patient_id} • {patient.age} ans
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
+                              {patient.blood_type}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {formatDate(patient.date_of_birth)}
                             </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
-                          {patient.blood_type}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
-                            <Phone className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-600 dark:text-gray-400">{patient.phone}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Mail className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-600 dark:text-gray-400">{patient.email}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {new Date(patient.last_transfusion).toLocaleDateString("fr-FR")}
-                          </p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">
-                            Total: {patient.total_transfusions} transfusions
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={getStatusBadge(patient.status)}>
-                          {patient.status === "active" ? "Actif" : "Inactif"}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-transparent"
-                            onClick={() => setSelectedPatient(patient)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="hover:bg-green-50 dark:hover:bg-green-900/20 bg-transparent"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                              {patient.patient_history || "Aucun historique"}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-transparent"
+                                onClick={() => {
+                                  setSelectedPatient(patient)
+                                  toast.info("Détails du patient")
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="hover:bg-green-50 dark:hover:bg-green-900/20 bg-transparent"
+                                onClick={() => {
+                                  toast.info("Fonctionnalité d'édition en cours de développement")
+                                }}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalCount > filters.page_size && (
+                  <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        Page {currentPage} sur {Math.ceil(totalCount / filters.page_size)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!hasPreviousPage}
+                        onClick={() => handlePageChange(currentPage - 1)}
+                      >
+                        Précédent
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!hasNextPage}
+                        onClick={() => handlePageChange(currentPage + 1)}
+                      >
+                        Suivant
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
+
+        {/* Patient Detail Modal */}
+        {selectedPatient && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-bold">
+                      {selectedPatient.first_name} {selectedPatient.last_name}
+                    </CardTitle>
+                    <CardDescription className="text-purple-100">
+                      ID: {selectedPatient.patient_id}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setSelectedPatient(null)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Groupe Sanguin
+                    </label>
+                    <p className="font-semibold">{selectedPatient.blood_type}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Âge
+                    </label>
+                    <p className="font-semibold">{selectedPatient.age} ans</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Date de Naissance
+                    </label>
+                    <p className="font-semibold">{formatDate(selectedPatient.date_of_birth)}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Historique Médical
+                  </label>
+                  <p className="mt-1 p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
+                    {selectedPatient.patient_history || "Aucun historique disponible"}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   )
