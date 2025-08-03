@@ -102,7 +102,10 @@ from .serializers import (
 )
 
 try:
-    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster
+    from .forecasting.blood_demand_forecasting import RenderOptimizedForecaster, ProductionLightweightForecaster,RealDataBloodDemandForecaster,
+    generate_forecast_api,
+    health_check,
+    get_available_methods
     ENHANCED_FORECASTING_AVAILABLE = True
 except ImportError:
     ENHANCED_FORECASTING_AVAILABLE = False
@@ -589,6 +592,260 @@ class DemandForecastAPIView(APIView):
                 'generated_at': timezone.now().isoformat()
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+    def get_all_forecasts_optimized(self, days):
+        """Prévisions pour tous les groupes sanguins - Version rapide avec cache individuel"""
+        blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        forecasts = []
+
+        for bt in blood_types:
+            try:
+                # Cache individuel par groupe sanguin
+                individual_cache_key = cache_key_builder('forecast_individual', bt, days)
+                cached_forecast = safe_cache_get(individual_cache_key)
+
+                if cached_forecast:
+                    forecasts.append(cached_forecast)
+                else:
+                    forecast = self.lightweight_forecaster.quick_predict_cached(bt, days)
+                    safe_cache_set(individual_cache_key, forecast, timeout=1800)  # 30 minutes
+                    forecasts.append(forecast)
+
+            except Exception as e:
+                logger.warning(f"Forecast failed for {bt}: {e}")
+                # Ajouter prévision minimale
+                forecasts.append({
+                    'blood_type': bt,
+                    'predictions': [],
+                    'method_used': 'error_fallback',
+                    'error': str(e)
+                })
+
+        return forecasts
+
+    def get_single_forecast_optimized(self, blood_type, days):
+        """Prévision pour un seul groupe sanguin avec cache"""
+        try:
+            # Cache spécifique au groupe sanguin
+            individual_cache_key = cache_key_builder('forecast_single', blood_type, days)
+            cached_forecast = safe_cache_get(individual_cache_key)
+
+            if cached_forecast:
+                return cached_forecast
+
+            forecast = self.lightweight_forecaster.quick_predict_cached(blood_type, days)
+            safe_cache_set(individual_cache_key, forecast, timeout=1800)  # 30 minutes
+            return forecast
+
+        except Exception as e:
+            logger.error(f"Single forecast failed for {blood_type}: {e}")
+            return {
+                'blood_type': blood_type,
+                'predictions': [],
+                'method_used': 'error_fallback',
+                'error': str(e)
+            }
+
+@global_allow_any
+class SmartForecastView(APIView):
+    """
+    🧠 Vue intégrée avec IA sur vraies données
+    Combine votre logique existante avec le nouveau moteur IA
+    """
+
+    def get(self, request):
+        """Méthode GET existante - maintenue pour compatibilité"""
+        # Votre code GET existant ici
+        # ...
+        return self.handle_forecast_request(request, is_post=False)
+
+    def post(self, request):
+        """
+        🔥 Méthode POST améliorée avec IA sur vraies données
+        """
+        return self.handle_forecast_request(request, is_post=True)
+
+    def handle_forecast_request(self, request, is_post=True):
+        """Gestionnaire unifié pour GET et POST"""
+        try:
+            # Récupérer les paramètres
+            if is_post:
+                data = request.data
+                blood_type = data.get('blood_type', 'O+')
+                days = int(data.get('days_ahead', 7))
+                method = data.get('method', 'auto')
+                force_retrain = data.get('force_retrain', False)
+            else:
+                blood_type = request.query_params.get('blood_type', 'all')
+                days = int(request.query_params.get('days', 7))
+                method = 'auto'
+                force_retrain = False
+
+            # Vérifier si on utilise le nouveau système IA
+            use_ai_system = (
+                    is_post and
+                    blood_type != 'all' and
+                    request.headers.get('X-Use-AI-System') == 'true'
+            )
+
+            if use_ai_system:
+                # 🧠 Utiliser le nouveau système IA avec vraies données
+                logger.info(f"🤖 Utilisation du système IA pour {blood_type}")
+
+                result = generate_forecast_api(
+                    blood_type=blood_type,
+                    days_ahead=days,
+                    method=method,
+                    force_retrain=force_retrain
+                )
+
+                if result.get('error'):
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+                # Adapter le format pour le frontend
+                adapted_result = self.adapt_ai_result_for_frontend(result, days)
+                return Response(adapted_result, status=status.HTTP_200_OK)
+
+            else:
+                # 📊 Utiliser votre système existant (fallback)
+                logger.info(f"📊 Utilisation du système classique pour {blood_type}")
+                return self.handle_classic_forecast(request, blood_type, days, is_post)
+
+        except Exception as e:
+            logger.error(f"❌ Erreur dans handle_forecast_request: {e}")
+            return Response({
+                'error': True,
+                'message': str(e),
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def adapt_ai_result_for_frontend(self, ai_result, days):
+        """
+        🔄 Adapter le résultat IA pour être compatible avec le frontend React
+        """
+        try:
+            # Le frontend attend ce format spécifique
+            adapted = {
+                # Format principal attendu par le React
+                'predictions': ai_result.get('predictions', []),
+                'method_used': ai_result.get('method_used', 'auto'),
+                'blood_type': ai_result.get('blood_type'),
+                'forecast_period_days': days,
+                'generated_at': ai_result.get('generated_at'),
+                'generation_time_ms': ai_result.get('generation_time_ms', 0),
+                'data_source': ai_result.get('data_source', 'real_database'),
+
+                # Métriques de performance
+                'model_performance': ai_result.get('model_performance', {}),
+                'quality_metrics': ai_result.get('quality_metrics', {}),
+
+                # Intervalles de confiance
+                'confidence_intervals': ai_result.get('confidence_intervals', {}),
+
+                # Insights contextuels
+                'contextual_insights': ai_result.get('contextual_insights', {}),
+
+                # Recommandations
+                'optimization_recommendations': ai_result.get('optimization_recommendations', []),
+
+                # Métadonnées
+                'api_response': ai_result.get('api_response', {}),
+                'enhanced_forecasting_available': True,
+                'cache_duration': '30 minutes',
+                'cache_backend': 'Django Cache + AI Models'
+            }
+
+            return adapted
+
+        except Exception as e:
+            logger.error(f"❌ Erreur adaptation résultat IA: {e}")
+            return ai_result  # Retourner le résultat brut en cas d'erreur
+
+    def handle_classic_forecast(self, request, blood_type, days, is_post):
+        """
+        📊 Votre logique de prévision classique (système existant)
+        """
+        # Cache par paramètres avec votre système existant
+        cache_key = f'demand_forecast_{blood_type}_{days}'
+        cached_result = cache.get(cache_key)
+
+        if cached_result:
+            logger.info(f"Forecast for {blood_type} served from Django cache")
+            return Response(cached_result)
+
+        start_time = time.time()
+
+        try:
+            if blood_type == 'all':
+                forecasts = self.get_all_forecasts_optimized(days)
+            else:
+                forecasts = [self.get_single_forecast_optimized(blood_type, days)]
+
+            execution_time = time.time() - start_time
+
+            result = {
+                'forecasts' if blood_type == 'all' else 'predictions': forecasts,
+                'blood_type': blood_type,
+                'forecast_period_days': days,
+                'method_used': 'classic_django',
+                'generated_at': timezone.now().isoformat(),
+                'generation_time_ms': int(execution_time * 1000),
+                'data_source': 'django_cache',
+                'enhanced_forecasting_available': True,
+                'metadata': {
+                    'method': 'lightweight_optimized',
+                    'confidence_level': 0.75,
+                    'cache_duration': '1 hour',
+                    'execution_time_seconds': round(execution_time, 2)
+                }
+            }
+
+            # Cache court pour le système classique
+            cache.set(cache_key, result, timeout=1800)  # 30 minutes
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"❌ Erreur forecast classique: {e}")
+            raise
+
+@global_allow_any
+class AISystemHealthView(APIView):
+    """
+    🏥 Endpoint de santé du système IA
+    """
+
+    def get(self, request):
+        """Vérification de santé du système IA"""
+        try:
+            health_data = health_check()
+            return Response(health_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'error': str(e),
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@global_allow_any
+class AIMethodsView(APIView):
+    """
+    📋 Endpoint pour obtenir les méthodes IA disponibles
+    """
+
+    def get(self, request):
+        """Récupérer les méthodes de prévision disponibles"""
+        try:
+            methods = get_available_methods()
+            return Response({
+                'methods': methods,
+                'default_method': 'auto',
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': str(e),
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     def get_all_forecasts_optimized(self, days):
         """Prévisions pour tous les groupes sanguins - Version rapide avec cache individuel"""
         blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']

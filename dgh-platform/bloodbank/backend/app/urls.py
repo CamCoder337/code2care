@@ -25,6 +25,11 @@ urlpatterns = [
     path('forecasting/demand/', views.DemandForecastAPIView.as_view(), name='demand_forecast'),
     path('forecasting/recommendations/', views.OptimizationRecommendationsAPIView.as_view(),
          name='optimization_recommendations'),
+    #2
+    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),
+    path('health/', views.AISystemHealthView.as_view(), name='ai_health'),
+    path('methods/', views.AIMethodsView.as_view(), name='ai_methods'),
+    path('system/metrics/', views.AISystemHealthView.as_view(), name='system_metrics'),
 
     # ==================== DATA IMPORT ====================
     path('data/import/', views.DataImportAPIView.as_view(), name='data_import'),
