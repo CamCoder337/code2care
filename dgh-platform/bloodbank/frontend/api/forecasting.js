@@ -8,7 +8,7 @@ const API_CONFIG = {
 export class ForecastingAPIClient {
 
   async generateForecast(params) {
-    const response = await fetch(`${API_CONFIG.baseUrl}/forecast/real-data/`, {
+    const response = await fetch(`${API_CONFIG.baseUrl}/forecast/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
