@@ -21,13 +21,14 @@ urlpatterns = [
     path('analytics/inventory/', views.InventoryAnalyticsAPIView.as_view(), name='inventory_analytics'),
 
     # ==================== FORECASTING ====================
-    path('forecast/', views.DemandForecastAPIView.as_view(), name='forecast_main'),
-    path('forecasting/demand/', views.DemandForecastAPIView.as_view(), name='demand_forecast'),
+    # ==================== FORECASTING - ROUTES CONSOLIDÉES ====================
+    path('forecast/', views.SmartForecastView.as_view(), name='forecast_main'),  # ✅ Route principale
+    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),  # ✅ Alias pour IA
+    path('forecasting/demand/', views.DemandForecastAPIView.as_view(), name='demand_forecast'),  # Legacy
     path('forecasting/recommendations/', views.OptimizationRecommendationsAPIView.as_view(),
          name='optimization_recommendations'),
-    #2
-    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),
-    path('health/', views.AISystemHealthView.as_view(), name='ai_health'),
+
+    # ==================== AI SYSTEM ENDPOINTS ====================
     path('methods/', views.AIMethodsView.as_view(), name='ai_methods'),
     path('system/metrics/', views.AISystemHealthView.as_view(), name='system_metrics'),
 

@@ -24,8 +24,8 @@ ALLOWED_HOSTS = [
     '0.0.0.0',
     '.render.com',  # Pour Render deployment
     '.onrender.com',
-    'https://high5-code2care-sr7p.onrender.com',
-    "https://high-5-blood2care.vercel.app"# Alternative Render domain
+    'high5-code2care-sr7p.onrender.com',
+    "high-5-blood2care.vercel.app"# Alternative Render domain
 ]
 
 # Add your custom domain here when you have one
@@ -42,6 +42,33 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# ✅ AJOUT CRITIQUE : Autoriser les en-têtes personnalisés
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-use-ai-system',  # 🔥 OBLIGATOIRE pour votre système IA
+]
+
+# ✅ AJOUT : Autoriser toutes les méthodes HTTP nécessaires
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# ✅ AJOUT : Pour les requêtes avec préflight (OPTIONS)
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 heures
 
 # Application definition
 DJANGO_APPS = [
