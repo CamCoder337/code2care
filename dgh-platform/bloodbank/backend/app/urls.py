@@ -20,16 +20,18 @@ urlpatterns = [
     path('inventory/units/', views.BloodUnitListAPIView.as_view(), name='blood_units_list'),
     path('analytics/inventory/', views.InventoryAnalyticsAPIView.as_view(), name='inventory_analytics'),
 
-    # ==================== FORECASTING ====================
-    # ==================== FORECASTING - ROUTES CONSOLIDÉES ====================
-    path('forecast/', views.SmartForecastView.as_view(), name='forecast_main'),  # ✅ Route principale
-    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),  # ✅ Alias pour IA
-    path('forecasting/demand/', views.DemandForecastAPIView.as_view(), name='demand_forecast'),  # Legacy
+    # ==================== FORECASTING - CONSOLIDATED ROUTES ====================
+    path('forecast/', views.SmartForecastView.as_view(), name='forecast_main'),  # ✅ Main route
+    path('forecast/real-data/', views.SmartForecastView.as_view(), name='ai_forecast'),  # ✅ AI alias
+
+    # Legacy forecasting routes (for backward compatibility)
+    path('forecasting/demand/', views.SmartForecastView.as_view(), name='demand_forecast_legacy'),
     path('forecasting/recommendations/', views.OptimizationRecommendationsAPIView.as_view(),
          name='optimization_recommendations'),
 
     # ==================== AI SYSTEM ENDPOINTS ====================
     path('methods/', views.AIMethodsView.as_view(), name='ai_methods'),
+    path('system/health/', views.AISystemHealthView.as_view(), name='ai_system_health'),
     path('system/metrics/', views.AISystemHealthView.as_view(), name='system_metrics'),
 
     # ==================== DATA IMPORT ====================

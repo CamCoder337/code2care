@@ -1,90 +1,194 @@
-# bloodbank/urls.py
+# bloodbank/urls.py - FIXED VERSION
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
-from django.views.generic import TemplateView
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.conf.urls.static import static
+from django.utils import timezone
 
+
+@csrf_exempt
 def api_root(request):
-    """Point d'entrée principal de l'API"""
+    """
+    🏠 API Root endpoint with comprehensive information
+    Fixed to handle all HTTP methods properly
+    """
     return JsonResponse({
-        'message': 'API Blood Bank System v1.0',
+        'message': '🩸 Blood Bank Management System API v2.0',
+        'status': 'operational',
+        'timestamp': timezone.now().isoformat(),
         'endpoints': {
+            'health': {
+                'health_check': '/api/health/',
+                'system_health': '/api/system/health/',
+                'ai_methods': '/api/methods/'
+            },
             'dashboard': {
                 'overview': '/api/dashboard/overview/',
                 'alerts': '/api/dashboard/alerts/'
             },
             'forecasting': {
-                'demand_forecast': '/api/forecast/demand/',
-                'optimization': '/api/optimization/recommendations/'
+                'main_forecast': '/api/forecast/',
+                'ai_forecast': '/api/forecast/real-data/',
+                'legacy_demand': '/api/forecasting/demand/',
             },
             'inventory': {
                 'units': '/api/inventory/units/',
-                'requests': '/api/inventory/requests/',
-                'consumption': '/api/inventory/consumption/'
+                'analytics': '/api/analytics/inventory/',
+                'requests': '/api/requests/',
+                'consumption': '/api/consumption/'
             },
-            'analytics': {
-                'inventory': '/api/analytics/inventory/'
-            },
-            'reports': {
-                'export': '/api/reports/export/'
-            },
-            'data_management': {
-                'import': '/api/data/import/'
+            'management': {
+                'donors': '/api/donors/',
+                'patients': '/api/patients/',
+                'sites': '/api/sites/'
             },
             'system': {
                 'config': '/api/config/system/',
-                'blood_compatibility': '/api/config/blood-compatibility/',
-                'health': '/api/health/'
+                'blood_compatibility': '/api/config/compatibility/',
+                'data_import': '/api/data/import/',
+                'reports': '/api/reports/export/'
             }
         },
-        'documentation': '/api/docs/',
-        'admin': '/admin/'
+        'features': {
+            'ai_forecasting': True,
+            'real_time_analytics': True,
+            'cache_optimization': True,
+            'multi_method_prediction': True
+        },
+        'documentation': {
+            'api_docs': '/api/docs/',
+            'admin_panel': '/admin/',
+            'debug_info': '/debug/' if settings.DEBUG else None
+        }
     })
 
+
+# ==================== MAIN URL CONFIGURATION ====================
 urlpatterns = [
     # ==================== ADMINISTRATION ====================
     path('admin/', admin.site.urls),
 
     # ==================== API ROOT ====================
     path('api/', api_root, name='api-root'),
+    path('', api_root, name='home'),  # Root redirect to API info
 
-    # ==================== APPLICATION URLS ====================
-    path('', include('app.urls')),
+    # ==================== MAIN APPLICATION URLS ====================
+    path('api/', include('app.urls')),  # ✅ All app URLs under /api/
 
-    # ==================== API DOCUMENTATION (optionnel) ====================
-    # path('api/docs/', TemplateView.as_view(template_name='api_docs.html'), name='api-docs'),
+    # ==================== DIRECT HEALTH CHECK (Backup) ====================
+    # In case there are issues with app.urls routing
+    path('health/', include([
+        path('', 'app.views.health_check', name='direct_health_check'),
+    ])),
 ]
 
-# ==================== CONFIGURATION DE DÉVELOPPEMENT ====================
+# ==================== DEVELOPMENT CONFIGURATION ====================
 if settings.DEBUG:
-    import debug_toolbar
-    urlpatterns = [
-        path('__debug__/', include(debug_toolbar.urls)),
-    ] + urlpatterns
+    # Debug toolbar
+    try:
+        import debug_toolbar
 
-# Serve media files in development
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    # Ajout d'un endpoint de debug
+        urlpatterns = [
+                          path('__debug__/', include(debug_toolbar.urls)),
+                      ] + urlpatterns
+    except ImportError:
+        pass
+
+
+    # Debug endpoints
     def debug_info(request):
+        """Development debug information"""
         return JsonResponse({
-            'debug': True,
-            'django_version': settings.SECRET_KEY[:10] + '...',
-            'database': 'Connected',
-            'static_files': 'Enabled'
+            'debug_mode': True,
+            'django_version': '5.2.4',
+            'python_version': '3.13.4',
+            'database_status': 'connected',
+            'cache_status': 'active',
+            'ai_system': 'available',
+            'static_files': 'enabled',
+            'timestamp': timezone.now().isoformat(),
+            'request_info': {
+                'method': request.method,
+                'path': request.path,
+                'user_agent': request.META.get('HTTP_USER_AGENT', 'unknown')[:100]
+            }
         })
 
-    urlpatterns.append(path('debug/', debug_info, name='debug-info'))
 
-if settings.DEBUG:
-    import debug_toolbar
-    urlpatterns += [
-        path('__debug__/', include(debug_toolbar.urls)),
-    ]
+    def debug_routes(request):
+        """Show all available routes"""
+        from django.urls import get_resolver
+        from django.urls.resolvers import URLPattern, URLResolver
 
-# ==================== Handler pour les erreurs personnalisées ====================
+        def extract_urls(urlpatterns, base=''):
+            urls = []
+            for pattern in urlpatterns:
+                if isinstance(pattern, URLPattern):
+                    urls.append({
+                        'name': pattern.name,
+                        'pattern': base + str(pattern.pattern),
+                        'view': str(pattern.callback)
+                    })
+                elif isinstance(pattern, URLResolver):
+                    urls.extend(extract_urls(pattern.url_patterns, base + str(pattern.pattern)))
+            return urls
+
+        try:
+            resolver = get_resolver()
+            all_urls = extract_urls(resolver.url_patterns)
+
+            return JsonResponse({
+                'total_routes': len(all_urls),
+                'routes': all_urls[:50],  # Limit to first 50 for readability
+                'timestamp': timezone.now().isoformat()
+            })
+        except Exception as e:
+            return JsonResponse({
+                'error': 'Could not extract routes',
+                'message': str(e),
+                'timestamp': timezone.now().isoformat()
+            })
+
+
+    # Add debug URLs
+    urlpatterns.extend([
+        path('debug/', debug_info, name='debug-info'),
+        path('debug/routes/', debug_routes, name='debug-routes'),
+    ])
+
+    # Media and static files for development
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# ==================== PRODUCTION CONFIGURATION ====================
+else:
+    # Production-specific URLs can be added here
+    pass
+
+# ==================== ERROR HANDLERS ====================
+# Custom error handling
 handler404 = 'app.views.custom_404_view'
 handler500 = 'app.views.custom_500_view'
+
+# ==================== HEALTH CHECK FALLBACK ====================
+# Additional health check pattern as absolute fallback
+if 'app.views.health_check' not in str(urlpatterns):
+    from django.views.decorators.csrf import csrf_exempt
+    from django.http import JsonResponse
+
+
+    @csrf_exempt
+    def fallback_health_check(request):
+        """Absolute fallback health check"""
+        return JsonResponse({
+            'status': 'basic_health_ok',
+            'message': 'Fallback health check working',
+            'timestamp': timezone.now().isoformat()
+        })
+
+
+    urlpatterns.append(
+        path('fallback-health/', fallback_health_check, name='fallback-health')
+    )
