@@ -2541,7 +2541,6 @@ def get_available_methods():
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
 def health_check(request):  # ✅ FIXED: Now accepts request parameter
     """
     🏥 HEALTH CHECK ENDPOINT - FIXED VERSION

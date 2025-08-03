@@ -54,7 +54,9 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-    'x-use-ai-system',  # 🔥 OBLIGATOIRE pour votre système IA
+    'x-use-ai-system',
+    'cache-control',
+    'pragma',
 ]
 
 # ✅ AJOUT : Autoriser toutes les méthodes HTTP nécessaires
@@ -250,6 +252,15 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'forecasting': '50/hour',  # Specific limit for AI forecasting
+    }
 }
 
 # Internationalization
@@ -293,6 +304,9 @@ if not DEBUG:
 
 # Logging configuration
 # Configuration de logging fusionnée
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -302,27 +316,43 @@ LOGGING = {
             'style': '{',
         },
         'simple': {
-            'format': '{levelname} {message}',
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+        'debug': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'verbose' if DEBUG else 'simple',
+            'level': 'DEBUG' if DEBUG else 'INFO',
         },
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
+            'filename': LOGS_DIR / 'django.log',
+            'maxBytes': 1024*1024*10,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+        'ai_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'ai_forecasting.log',
             'maxBytes': 1024*1024*5,  # 5 MB
             'backupCount': 5,
             'formatter': 'verbose',
-        },
-        'ai_forecasting_file': {
             'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'ai_forecasting.log',  # Déplacé dans le dossier logs
-            'formatter': 'verbose',  # Utilise le même formateur
+        },
+        'error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'errors.log',
+            'maxBytes': 1024*1024*5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'ERROR',
         },
     },
     'root': {
@@ -331,79 +361,286 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'] if not DEBUG else ['console'],
-            'level': config('DJANGO_LOG_LEVEL', default='INFO'),
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
             'propagate': False,
         },
-        'bloodbank': {  # Ajustez selon le nom de votre app
-            'handlers': ['console', 'file'] if not DEBUG else ['console'],
+        'app': {  # Your app logger
+            'handlers': ['console', 'file'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
-        'forecasting.blood_demand_forecasting': {
-            'handlers': ['ai_forecasting_file', 'console'],  # Ajoute aussi la console
+        'forecasting': {  # AI forecasting logger
+            'handlers': ['console', 'ai_file'],
             'level': 'INFO',
-            'propagate': False,  # Changé à False pour éviter la duplication
+            'propagate': False,
+        },
+        'django.request': {  # Request errors
+            'handlers': ['console', 'error_file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {  # Database queries (only in debug)
+            'handlers': ['console'] if DEBUG else [],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
         },
     },
 }
-# Create logs directory if it doesn't exist
-log_dir = BASE_DIR / 'logs'
-if not log_dir.exists():
-    log_dir.mkdir(exist_ok=True)
 
-# Security configurations for production
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'default-cache',
+        'TIMEOUT': 300,  # 5 minutes default
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+            'CULL_FREQUENCY': 3,
+        }
+    },
+    'forecasting': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'forecasting-cache',
+        'TIMEOUT': 1800,  # 30 minutes for forecasts
+        'OPTIONS': {
+            'MAX_ENTRIES': 500,
+            'CULL_FREQUENCY': 4,
+        }
+    }
+}
+
+# Redis configuration (if available)
+REDIS_URL = os.getenv('REDIS_URL')
+if REDIS_URL and not DEBUG:
+    try:
+        import ssl
+
+        if REDIS_URL.startswith('rediss://'):
+            # SSL Redis configuration
+            CACHES['default'] = {
+                'BACKEND': 'django_redis.cache.RedisCache',
+                'LOCATION': REDIS_URL,
+                'OPTIONS': {
+                    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                    'CONNECTION_POOL_KWARGS': {
+                        'ssl_cert_reqs': None,
+                        'ssl_check_hostname': False,
+                        'ssl_context': ssl.create_default_context()
+                    }
+                },
+                'TIMEOUT': 300,
+            }
+        else:
+            # Non-SSL Redis
+            CACHES['default'] = {
+                'BACKEND': 'django_redis.cache.RedisCache',
+                'LOCATION': REDIS_URL,
+                'OPTIONS': {
+                    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                },
+                'TIMEOUT': 300,
+            }
+    except Exception as e:
+        print(f"Redis configuration failed, using local memory cache: {e}")
+
+# ==================== SECURITY ENHANCEMENTS ====================
+# Enhanced security settings
+
 if not DEBUG:
-    # Security headers
+    # Production security
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
-    # HTTPS settings (uncomment when you have SSL)
-    # SECURE_SSL_REDIRECT = True
-    # SESSION_COOKIE_SECURE = True
-    # CSRF_COOKIE_SECURE = True
-    # SECURE_HSTS_SECONDS = 31536000
-    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    # SECURE_HSTS_PRELOAD = True
 
-# Blood bank specific configurations
+# ==================== AI SYSTEM CONFIGURATION ====================
+# Configuration for the AI forecasting system
+
+AI_FORECASTING_CONFIG = {
+    'MAX_EXECUTION_TIME': 120,  # seconds
+    'CACHE_TIMEOUT': 1800,  # 30 minutes
+    'DEFAULT_FORECAST_DAYS': 7,
+    'MAX_FORECAST_DAYS': 30,
+    'MODELS': {
+        'RANDOM_FOREST': {
+            'enabled': True,
+            'n_estimators': 50,
+            'max_depth': 8,
+        },
+        'XGBOOST': {
+            'enabled': True,  # Will auto-detect availability
+            'n_estimators': 50,
+            'max_depth': 6,
+            'learning_rate': 0.1,
+        },
+        'ARIMA': {
+            'enabled': True,  # Will auto-detect statsmodels
+            'max_p': 3,
+            'max_d': 2,
+            'max_q': 3,
+        }
+    },
+    'BLOOD_TYPES': ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'],
+    'CONFIDENCE_THRESHOLDS': {
+        'high': 0.8,
+        'medium': 0.6,
+        'low': 0.4,
+    }
+}
+
+# ==================== BLOOD BANK SPECIFIC SETTINGS ====================
+# Enhanced blood bank configuration
+
 BLOOD_BANK_SETTINGS = {
     'LOW_STOCK_THRESHOLD': config('LOW_STOCK_THRESHOLD', default=20, cast=int),
+    'CRITICAL_STOCK_THRESHOLD': config('CRITICAL_STOCK_THRESHOLD', default=5, cast=int),
     'EXPIRY_WARNING_DAYS': config('EXPIRY_WARNING_DAYS', default=7, cast=int),
+    'EXPIRY_CRITICAL_DAYS': config('EXPIRY_CRITICAL_DAYS', default=3, cast=int),
     'AUTO_BACKUP_FREQUENCY': config('AUTO_BACKUP_FREQUENCY', default='daily'),
     'DATA_RETENTION_MONTHS': config('DATA_RETENTION_MONTHS', default=24, cast=int),
+
+    # Notification settings
     'NOTIFICATION_SETTINGS': {
         'LOW_STOCK_ALERTS': config('NOTIFY_LOW_STOCK', default=True, cast=bool),
+        'CRITICAL_STOCK_ALERTS': config('NOTIFY_CRITICAL_STOCK', default=True, cast=bool),
         'URGENT_REQUESTS': config('NOTIFY_URGENT_REQUESTS', default=True, cast=bool),
         'SYSTEM_ALERTS': config('NOTIFY_SYSTEM_ALERTS', default=True, cast=bool),
         'DAILY_REPORTS': config('NOTIFY_DAILY_REPORTS', default=False, cast=bool),
         'WEEKLY_REPORTS': config('NOTIFY_WEEKLY_REPORTS', default=True, cast=bool),
+        'AI_FORECAST_ALERTS': config('NOTIFY_AI_FORECASTS', default=True, cast=bool),
     },
+
+    # Blood type priorities
+    'BLOOD_TYPE_PRIORITIES': {
+        'O-': 'critical',  # Universal donor
+        'O+': 'high',
+        'A-': 'high',
+        'A+': 'medium',
+        'B-': 'high',
+        'B+': 'medium',
+        'AB-': 'medium',
+        'AB+': 'low',  # Universal recipient
+    },
+
+    # Integrations
     'INTEGRATIONS': {
         'DHIS2_ENABLED': config('DHIS2_ENABLED', default=False, cast=bool),
         'DHIS2_URL': config('DHIS2_URL', default=''),
-        'DHIS2_USERNAME': config('DHIS2_USERNAME', default=''),
-        'DHIS2_PASSWORD': config('DHIS2_PASSWORD', default=''),
         'HMS_ENABLED': config('HMS_ENABLED', default=False, cast=bool),
         'SMS_GATEWAY_ENABLED': config('SMS_GATEWAY_ENABLED', default=False, cast=bool),
         'LIS_ENABLED': config('LIS_ENABLED', default=False, cast=bool),
+        'AI_FORECASTING_ENABLED': config('AI_FORECASTING_ENABLED', default=True, cast=bool),
     }
 }
 
-# API Keys and external services
-API_KEYS = {
-    'WEBHOOK_URL': config('WEBHOOK_URL', default='https://api.bloodbank.com/webhook'),
-    'SMS_API_KEY': config('SMS_API_KEY', default=''),
-    'PAYMENT_GATEWAY_KEY': config('PAYMENT_GATEWAY_KEY', default=''),
+# ==================== EMAIL CONFIGURATION ====================
+# Enhanced email settings
+
+if not DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+    EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@bloodbank.com')
+
+    # Email templates
+    EMAIL_TEMPLATES = {
+        'low_stock_alert': 'emails/low_stock_alert.html',
+        'forecast_alert': 'emails/forecast_alert.html',
+        'daily_report': 'emails/daily_report.html',
+        'weekly_report': 'emails/weekly_report.html',
+    }
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# ==================== PERFORMANCE OPTIMIZATIONS ====================
+# Database and performance settings
+
+# Database connection pooling (if using PostgreSQL)
+if 'postgresql' in DATABASES['default']['ENGINE']:
+    DATABASES['default']['OPTIONS'] = {
+        'MAX_CONNS': 20,
+        'MIN_CONNS': 5,
+    }
+
+# Session optimization
+SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
+SESSION_CACHE_ALIAS = 'default'
+SESSION_COOKIE_AGE = 86400  # 24 hours
+SESSION_SAVE_EVERY_REQUEST = False  # Save only when modified
+
+# Static files optimization
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    WHITENOISE_USE_FINDERS = True
+    WHITENOISE_AUTOREFRESH = True
+
+# ==================== MONITORING AND METRICS ====================
+# System monitoring configuration
+
+MONITORING_CONFIG = {
+    'ENABLE_PERFORMANCE_TRACKING': config('ENABLE_PERFORMANCE_TRACKING', default=True, cast=bool),
+    'ENABLE_ERROR_TRACKING': config('ENABLE_ERROR_TRACKING', default=True, cast=bool),
+    'METRICS_RETENTION_DAYS': config('METRICS_RETENTION_DAYS', default=30, cast=int),
+    'HEALTH_CHECK_ENDPOINTS': [
+        '/api/health/',
+        '/api/system/health/',
+        '/health/',
+    ]
 }
 
-# File upload settings
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
-FILE_UPLOAD_PERMISSIONS = 0o644
+# ==================== DEVELOPMENT HELPERS ====================
+# Development and debugging helpers
 
-# Custom user model (if you have one)
-# AUTH_USER_MODEL = 'accounts.User'
+if DEBUG:
+    # Additional development settings
+    INTERNAL_IPS = [
+        '127.0.0.1',
+        'localhost',
+        '0.0.0.0',
+    ]
 
-print(f"Django settings loaded. DEBUG={DEBUG}, ALLOWED_HOSTS={ALLOWED_HOSTS}")
+    # Development middleware
+    DEVELOPMENT_MIDDLEWARE = [
+        'debug_toolbar.middleware.DebugToolbarMiddleware',
+    ]
+
+    # Add to existing middleware if debug toolbar is available
+    try:
+        import debug_toolbar
+
+        MIDDLEWARE.extend(DEVELOPMENT_MIDDLEWARE)
+    except ImportError:
+        pass
+
+# Print configuration summary
+print(f"""
+🩸 Blood Bank System Configuration:
+   - DEBUG: {DEBUG}
+   - Database: {DATABASES['default']['ENGINE'].split('.')[-1]}
+   - Cache Backend: {CACHES['default']['BACKEND'].split('.')[-1]}
+   - AI Forecasting: {AI_FORECASTING_CONFIG.get('MODELS', {}).get('RANDOM_FOREST', {}).get('enabled', False)}
+   - CORS Origins: {len(CORS_ALLOWED_ORIGINS)} configured
+   - Logging: {len(LOGGING['handlers'])} handlers configured
+""")
+
+
+# ==================== ERROR HANDLING ====================
+# Custom exception handling
+
+def handle_ai_system_errors():
+    """Handle AI system import errors gracefully"""
+    try:
+        import forecasting.blood_demand_forecasting
+        return True
+    except ImportError as e:
+        print(f"⚠️  AI Forecasting system not available: {e}")
+        AI_FORECASTING_CONFIG['MODELS']['RANDOM_FOREST']['enabled'] = False
+        return False
+
+
+# Initialize AI system check
+AI_SYSTEM_AVAILABLE = handle_ai_system_errors()
