@@ -2541,52 +2541,242 @@ def get_available_methods():
 
 
 @api_view(['GET'])
-def health_check(request):  # ✅ FIXED: Now accepts request parameter
+def health_check(request):
     """
-    🏥 HEALTH CHECK ENDPOINT - FIXED VERSION
-    This was the source of your TypeError - the function now properly accepts the request parameter
+    🏥 HEALTH CHECK ENDPOINT - VERSION ULTRA-AMÉLIORÉE
+    Diagnostic complet du système avec métriques avancées
     """
+    start_time = time.time()
+
     try:
-        # Test database connection
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            db_status = "connected"
+        # ==================== DATABASE CHECK ====================
+        db_status = "unknown"
+        db_info = {}
+        db_response_time = None
 
-        # Test cache
-        cache_test_key = 'health_check_test'
-        cache.set(cache_test_key, 'test_value', 30)
-        cache_status = "connected" if cache.get(cache_test_key) == 'test_value' else "error"
-
-        # Check AI system availability
         try:
-            from forecasting.blood_demand_forecasting import health_check as ai_health_check
-            ai_status = ai_health_check()
-        except ImportError:
-            ai_status = {'status': 'not_available', 'error': 'AI module not found'}
-        except Exception as e:
-            ai_status = {'status': 'error', 'error': str(e)}
+            db_start = time.time()
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1, NOW() as current_time")
+                result = cursor.fetchone()
+                db_response_time = round((time.time() - db_start) * 1000, 2)  # ms
 
-        return Response({
-            'status': 'healthy',
+                # Test plus avancé - vérifier les tables principales
+                cursor.execute("""
+                               SELECT table_name
+                               FROM information_schema.tables
+                               WHERE table_schema = 'public' LIMIT 5
+                               """)
+                tables = cursor.fetchall()
+
+            db_status = "connected"
+            db_info = {
+                'response_time_ms': db_response_time,
+                'server_time': result[1].isoformat() if result and len(result) > 1 else None,
+                'tables_count': len(tables),
+                'connection_vendor': connection.vendor,
+                'connection_params': {
+                    'engine': settings.DATABASES['default'].get('ENGINE', 'unknown'),
+                    'name': settings.DATABASES['default'].get('NAME', 'unknown')[:20] + '...',
+                    'host': settings.DATABASES['default'].get('HOST', 'localhost'),
+                    'port': settings.DATABASES['default'].get('PORT', 'default')
+                }
+            }
+
+        except Exception as db_error:
+            db_status = "error"
+            db_info = {
+                'error': str(db_error)[:200],  # Limite la longueur de l'erreur
+                'error_type': type(db_error).__name__,
+                'response_time_ms': round((time.time() - db_start) * 1000, 2) if 'db_start' in locals() else None
+            }
+
+        # ==================== CACHE CHECK ====================
+        cache_status = "unknown"
+        cache_info = {}
+
+        try:
+            cache_start = time.time()
+            cache_test_key = f'health_check_{int(time.time())}'
+            test_value = f'test_value_{int(time.time())}'
+
+            cache.set(cache_test_key, test_value, 30)
+            retrieved_value = cache.get(cache_test_key)
+            cache_response_time = round((time.time() - cache_start) * 1000, 2)
+
+            if retrieved_value == test_value:
+                cache_status = "connected"
+                cache_info = {
+                    'response_time_ms': cache_response_time,
+                    'test_successful': True,
+                    'backend': getattr(cache, '_cache', {}).get('_class', 'unknown')
+                }
+            else:
+                cache_status = "error"
+                cache_info = {
+                    'response_time_ms': cache_response_time,
+                    'test_successful': False,
+                    'expected': test_value,
+                    'received': retrieved_value
+                }
+
+            # Cleanup
+            cache.delete(cache_test_key)
+
+        except Exception as cache_error:
+            cache_status = "error"
+            cache_info = {
+                'error': str(cache_error)[:200],
+                'error_type': type(cache_error).__name__
+            }
+
+        # ==================== AI SYSTEM CHECK ====================
+        ai_status = "unknown"
+        ai_info = {}
+
+        try:
+            # Test import des modules AI
+            ai_modules = {}
+
+            try:
+                import xgboost
+                ai_modules['xgboost'] = {
+                    'available': True,
+                    'version': xgboost.__version__
+                }
+            except ImportError:
+                ai_modules['xgboost'] = {'available': False, 'error': 'Module not installed'}
+
+            try:
+                import statsmodels
+                ai_modules['statsmodels'] = {
+                    'available': True,
+                    'version': statsmodels.__version__
+                }
+            except ImportError:
+                ai_modules['statsmodels'] = {'available': False, 'error': 'Module not installed'}
+
+            try:
+                import pandas as pd
+                import numpy as np
+                ai_modules['pandas'] = {'available': True, 'version': pd.__version__}
+                ai_modules['numpy'] = {'available': True, 'version': np.__version__}
+            except ImportError as e:
+                ai_modules['data_processing'] = {'available': False, 'error': str(e)}
+
+            # Test du module AI personnalisé
+            try:
+                from forecasting.blood_demand_forecasting import health_check as ai_health_check
+                ai_custom_status = ai_health_check()
+                ai_status = "connected"
+            except ImportError:
+                ai_custom_status = {'status': 'not_available', 'error': 'AI module not found'}
+                ai_status = "not_available"
+            except Exception as e:
+                ai_custom_status = {'status': 'error', 'error': str(e)}
+                ai_status = "error"
+
+            ai_info = {
+                'custom_module': ai_custom_status,
+                'dependencies': ai_modules,
+                'python_version': sys.version.split()[0]
+            }
+
+        except Exception as ai_error:
+            ai_status = "error"
+            ai_info = {
+                'error': str(ai_error)[:200],
+                'error_type': type(ai_error).__name__
+            }
+
+        # ==================== SYSTEM METRICS ====================
+        system_info = {}
+        try:
+            # Métriques système si psutil est disponible
+            if 'psutil' in sys.modules:
+                system_info = {
+                    'cpu_percent': psutil.cpu_percent(interval=0.1),
+                    'memory_percent': psutil.virtual_memory().percent,
+                    'disk_usage_percent': psutil.disk_usage('/').percent,
+                    'load_average': os.getloadavg() if hasattr(os, 'getloadavg') else 'not_available'
+                }
+            else:
+                system_info = {'note': 'psutil not available for detailed metrics'}
+        except Exception:
+            system_info = {'error': 'Could not retrieve system metrics'}
+
+        # ==================== RESPONSE COMPILATION ====================
+        total_response_time = round((time.time() - start_time) * 1000, 2)
+
+        # Déterminer le statut global
+        overall_status = "healthy"
+        if db_status == "error":
+            overall_status = "critical"
+        elif cache_status == "error" or ai_status == "error":
+            overall_status = "degraded"
+        elif ai_status == "not_available":
+            overall_status = "partial"
+
+        response_data = {
+            'status': overall_status,
             'timestamp': timezone.now().isoformat(),
-            'version': '2.0-real-data',
-            'database': db_status,
-            'cache': cache_status,
-            'ai_system': ai_status,
-            'request_method': request.method,  # Shows we can access request now
-            'xgboost_available': ai_status.get('xgboost_available', False),
-            'statsmodels_available': ai_status.get('statsmodels_available', False)
-        }, status=status.HTTP_200_OK)
+            'version': '2.1-enhanced',
+            'response_time_ms': total_response_time,
+            'request_info': {
+                'method': request.method,
+                'path': request.path,
+                'user_agent': request.META.get('HTTP_USER_AGENT', 'unknown')[:100],
+                'remote_addr': request.META.get('REMOTE_ADDR', 'unknown')
+            },
+            'components': {
+                'database': {
+                    'status': db_status,
+                    'details': db_info
+                },
+                'cache': {
+                    'status': cache_status,
+                    'details': cache_info
+                },
+                'ai_system': {
+                    'status': ai_status,
+                    'details': ai_info
+                }
+            },
+            'system_metrics': system_info,
+            'environment': {
+                'debug_mode': settings.DEBUG,
+                'django_version': getattr(settings, 'DJANGO_VERSION', 'unknown'),
+                'python_version': sys.version.split()[0],
+                'platform': sys.platform
+            }
+        }
+
+        # Status code basé sur l'état global
+        status_code = {
+            'healthy': status.HTTP_200_OK,
+            'partial': status.HTTP_200_OK,
+            'degraded': status.HTTP_206_PARTIAL_CONTENT,
+            'critical': status.HTTP_503_SERVICE_UNAVAILABLE
+        }.get(overall_status, status.HTTP_200_OK)
+
+        return Response(response_data, status=status_code)
 
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Health check failed: {e}", exc_info=True)
+
         return Response({
             'status': 'error',
-            'error': str(e),
+            'error': str(e)[:300],  # Limite la longueur
+            'error_type': type(e).__name__,
             'timestamp': timezone.now().isoformat(),
-            'database': 'unknown',
-            'cache': 'unknown'
+            'response_time_ms': round((time.time() - start_time) * 1000, 2),
+            'fallback_info': {
+                'database': 'unknown',
+                'cache': 'unknown',
+                'ai_system': 'unknown'
+            }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 def custom_404_view(request, exception):
     """Custom 404 handler"""
