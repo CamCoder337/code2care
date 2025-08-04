@@ -2010,7 +2010,7 @@ class EnhancedBloodDemandForecaster:
                 'asymmetric': config.get('priority') in ['critical', 'high'] if 'config' in locals() else False
             }
 
-            except Exception as e:
+        except Exception as e:
             logger.error(f"❌ Erreur calcul intervalles améliorés: {e}")
             # Fallback simple
             demands = [p.get('predicted_demand', 5) for p in predictions]
