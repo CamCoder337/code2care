@@ -71,9 +71,9 @@ python manage.py create_default_superuser || echo "⚠️ create_default_superus
 echo "📊 Génération des données de production optimisée..."
 
 # Génération avec scale réduite pour Render (only if command exists)
-echo "Génération avec scale=small (optimisé pour 512MB RAM)..."
-python manage.py generate_production_data --scale=small || {
-    echo "⚠️ Erreur génération scale=small, tentative sans arguments..."
+echo "Génération avec scale=large (optimisé pour 512MB RAM)..."
+python manage.py generate_production_data --scale=large || {
+    echo "⚠️ Erreur génération scale=large, tentative sans arguments..."
     python manage.py generate_production_data || {
         echo "⚠️ generate_production_data command not found, skipping data generation..."
     }
