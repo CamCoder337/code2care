@@ -36,34 +36,80 @@ import {
   Settings
 } from "lucide-react"
 
-// Simulation d'API calls - remplacez par vos vraies fonctions API
+// Mock data pour les tests
+const mockSitesData = {
+  results: [
+    {
+      site_id: "H001",
+      nom: "Hôpital Central de Yaoundé",
+      ville: "Yaoundé",
+      type: "hospital",
+      address: "Avenue Kennedy, Yaoundé",
+      phone: "+237677123456",
+      email: "contact@hcy.cm",
+      manager: "Dr. Ngozi Mballa",
+      capacity: "500",
+      region: "Centre",
+      status: "active",
+      blood_bank: true,
+      current_patients: 350,
+      total_requests: 125,
+      last_request: "2024-01-15T10:30:00Z"
+    },
+    {
+      site_id: "C002",
+      nom: "Clinique des Spécialités",
+      ville: "Douala",
+      type: "clinic",
+      address: "Rue de la Liberté, Douala",
+      phone: "+237666789012",
+      email: "info@clinique-spec.cm",
+      manager: "Dr. Marie Foko",
+      capacity: "150",
+      region: "Littoral",
+      status: "active",
+      blood_bank: false,
+      current_patients: 89,
+      total_requests: 45,
+      last_request: "2024-01-14T15:45:00Z"
+    },
+    {
+      site_id: "CC003",
+      nom: "Centre de Collecte Nord",
+      ville: "Garoua",
+      type: "collection_center",
+      address: "Quartier Plateau, Garoua",
+      phone: "+237655345678",
+      email: "nord@collecte.cm",
+      manager: "Ahmadou Bello",
+      capacity: "100",
+      region: "Nord",
+      status: "maintenance",
+      blood_bank: true,
+      current_patients: 0,
+      total_requests: 78,
+      last_request: "2024-01-10T09:15:00Z"
+    }
+  ],
+  count: 3,
+  next: null,
+  previous: null
+}
+
+// Hook simulé pour les sites
 const useSites = (params) => {
-  const [data, setData] = useState({ results: [], count: 0, next: null, previous: null })
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState(mockSitesData)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const fetchSites = async () => {
+  const refetch = () => {
     setLoading(true)
-    try {
-      // Simuler un appel API - remplacez par votre vraie API
-      const response = await fetch(`/api/sites/?${new URLSearchParams(params)}`)
-      if (!response.ok) throw new Error('Erreur lors du chargement')
-      const result = await response.json()
-      setData(result)
-      setError(null)
-    } catch (err) {
-      setError(err.message)
-      setData({ results: [], count: 0, next: null, previous: null })
-    } finally {
+    setTimeout(() => {
       setLoading(false)
-    }
+    }, 1000)
   }
 
-  useEffect(() => {
-    fetchSites()
-  }, [JSON.stringify(params)])
-
-  return { data, loading, error, refetch: fetchSites }
+  return { data, loading, error, refetch }
 }
 
 const useCreateSite = () => {
@@ -71,19 +117,12 @@ const useCreateSite = () => {
 
   const createSite = async (siteData) => {
     setLoading(true)
-    try {
-      const response = await fetch('/api/sites/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(siteData)
-      })
-      if (!response.ok) throw new Error('Erreur lors de la création')
-      return await response.json()
-    } catch (error) {
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        setLoading(false)
+        resolve(siteData)
+      }, 1000)
+    })
   }
 
   return { createSite, loading }
@@ -94,19 +133,12 @@ const useUpdateSite = () => {
 
   const updateSite = async (siteId, siteData) => {
     setLoading(true)
-    try {
-      const response = await fetch(`/api/sites/${siteId}/`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(siteData)
-      })
-      if (!response.ok) throw new Error('Erreur lors de la mise à jour')
-      return await response.json()
-    } catch (error) {
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        setLoading(false)
+        resolve(siteData)
+      }, 1000)
+    })
   }
 
   return { updateSite, loading }
@@ -117,22 +149,18 @@ const useDeleteSite = () => {
 
   const deleteSite = async (siteId) => {
     setLoading(true)
-    try {
-      const response = await fetch(`/api/sites/${siteId}/`, {
-        method: 'DELETE'
-      })
-      if (!response.ok) throw new Error('Erreur lors de la suppression')
-    } catch (error) {
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        setLoading(false)
+        resolve()
+      }, 1000)
+    })
   }
 
   return { deleteSite, loading }
 }
 
-export function Sites() {
+export default function Sites() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedSite, setSelectedSite] = useState(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -232,19 +260,7 @@ export function Sites() {
 
   const handleExport = async () => {
     try {
-      const response = await fetch('/api/reports/export/?type=sites&format=csv')
-      if (!response.ok) throw new Error('Erreur lors de l\'export')
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `sites_report_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
+      // Simulation d'export
       showNotification("Export réussi!")
     } catch (error) {
       showNotification("Erreur lors de l'export: " + error.message, "error")
@@ -391,7 +407,7 @@ export function Sites() {
                     </div>
                     <div>
                       <Label htmlFor="region">Région *</Label>
-                      <Select value={newSite.region} onValueChange={(value) => setNewSite({...newSite, region: value})}>
+                      <Select value={newSite.region || ""} onValueChange={(value) => setNewSite({...newSite, region: value})}>
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionner une région" />
                         </SelectTrigger>
@@ -693,6 +709,10 @@ export function Sites() {
                 <table className="w-full">
                   <thead className="bg-gray-50 dark:bg-slate-700">
                     <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Site</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Type & Région</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Contact</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Capacité</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Statut</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                     </tr>
