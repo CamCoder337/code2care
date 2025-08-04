@@ -5,21 +5,50 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/lib/i18n"
-import { UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Phone, Mail, Activity, Loader2, AlertCircle } from "lucide-react"
+import {
+  UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Phone, Mail, Activity,
+  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays
+} from "lucide-react"
 import { usePatients, useCreatePatient, useUpdatePatient, useDeletePatient } from "@/lib/hooks/useApi"
 import { toast } from "sonner"
+
+interface PatientFormData {
+  patient_id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  blood_type: string
+  patient_history: string
+}
 
 export function Patients() {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingPatient, setEditingPatient] = useState<any>(null)
   const [filters, setFilters] = useState({
     blood_type: "",
     page: 1,
     page_size: 20
   })
+
+  // État du formulaire
+  const [formData, setFormData] = useState<PatientFormData>({
+    patient_id: "",
+    first_name: "",
+    last_name: "",
+    date_of_birth: "",
+    blood_type: "",
+    patient_history: ""
+  })
+
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // Construire les paramètres de requête
   const queryParams = {
@@ -38,18 +67,167 @@ export function Patients() {
     refetch
   } = usePatients(queryParams)
 
-  const createPatientMutation = useCreatePatient()
-  const updatePatientMutation = useUpdatePatient()
-  const deletePatientMutation = useDeletePatient()
+  const createPatientMutation = useCreatePatient({
+    onSuccess: () => {
+      setShowCreateModal(false)
+      resetForm()
+      refetch()
+    }
+  })
+
+  const updatePatientMutation = useUpdatePatient({
+    onSuccess: () => {
+      setShowEditModal(false)
+      setEditingPatient(null)
+      resetForm()
+      refetch()
+    }
+  })
+
+  const deletePatientMutation = useDeletePatient({
+    onSuccess: () => {
+      refetch()
+    }
+  })
 
   // Effet pour gérer les changements de recherche avec debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      setCurrentPage(1) // Reset à la page 1 lors d'une nouvelle recherche
+      setCurrentPage(1)
     }, 300)
 
     return () => clearTimeout(timer)
   }, [searchTerm])
+
+  // Génération automatique de l'ID patient
+  const generatePatientId = () => {
+    const timestamp = Date.now().toString().slice(-6)
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+    return `P${timestamp}${random}`
+  }
+
+  // Reset du formulaire
+  const resetForm = () => {
+    setFormData({
+      patient_id: "",
+      first_name: "",
+      last_name: "",
+      date_of_birth: "",
+      blood_type: "",
+      patient_history: ""
+    })
+    setFormErrors({})
+  }
+
+  // Validation du formulaire
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {}
+
+    if (!formData.patient_id.trim()) {
+      errors.patient_id = "L'ID patient est requis"
+    }
+
+    if (!formData.first_name.trim()) {
+      errors.first_name = "Le prénom est requis"
+    }
+
+    if (!formData.last_name.trim()) {
+      errors.last_name = "Le nom est requis"
+    }
+
+    if (!formData.date_of_birth) {
+      errors.date_of_birth = "La date de naissance est requise"
+    } else {
+      const birthDate = new Date(formData.date_of_birth)
+      const today = new Date()
+      if (birthDate >= today) {
+        errors.date_of_birth = "La date de naissance doit être antérieure à aujourd'hui"
+      }
+
+      // Vérifier l'âge minimum (par exemple, au moins 1 an)
+      const age = today.getFullYear() - birthDate.getFullYear()
+      if (age > 120) {
+        errors.date_of_birth = "Âge non valide"
+      }
+    }
+
+    if (!formData.blood_type) {
+      errors.blood_type = "Le groupe sanguin est requis"
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Gestion de la soumission du formulaire de création
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!validateForm()) {
+      toast.error("Veuillez corriger les erreurs du formulaire")
+      return
+    }
+
+    try {
+      await createPatientMutation.mutateAsync(formData)
+    } catch (error) {
+      console.error("Erreur lors de la création:", error)
+    }
+  }
+
+  // Gestion de la soumission du formulaire de modification
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!validateForm() || !editingPatient) {
+      toast.error("Veuillez corriger les erreurs du formulaire")
+      return
+    }
+
+    try {
+      await updatePatientMutation.mutateAsync({
+        patientId: editingPatient.patient_id,
+        patient: formData
+      })
+    } catch (error) {
+      console.error("Erreur lors de la modification:", error)
+    }
+  }
+
+  // Ouvrir le modal de création
+  const openCreateModal = () => {
+    resetForm()
+    setFormData(prev => ({
+      ...prev,
+      patient_id: generatePatientId()
+    }))
+    setShowCreateModal(true)
+  }
+
+  // Ouvrir le modal de modification
+  const openEditModal = (patient: any) => {
+    setEditingPatient(patient)
+    setFormData({
+      patient_id: patient.patient_id,
+      first_name: patient.first_name,
+      last_name: patient.last_name,
+      date_of_birth: patient.date_of_birth,
+      blood_type: patient.blood_type,
+      patient_history: patient.patient_history || ""
+    })
+    setShowEditModal(true)
+  }
+
+  // Gestion de la suppression
+  const handleDelete = async (patientId: string, patientName: string) => {
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le patient ${patientName} ?`)) {
+      try {
+        await deletePatientMutation.mutateAsync(patientId)
+      } catch (error) {
+        console.error("Erreur lors de la suppression:", error)
+      }
+    }
+  }
 
   // Calculer les statistiques à partir des données
   const getStatistics = () => {
@@ -62,16 +240,14 @@ export function Patients() {
       }
     }
 
-    // Pour les statistiques complètes, on aurait besoin d'endpoints dédiés
-    // Ici on utilise les données disponibles
     const totalPatients = patientsData.count || 0
     const activePatients = patientsData.results.length || 0
 
     return {
       totalPatients,
       activePatients,
-      transfusionsThisMonth: 0, // Nécessiterait un endpoint dédié
-      emergencies: 0 // Nécessiterait un endpoint dédié
+      transfusionsThisMonth: 0,
+      emergencies: 0
     }
   }
 
@@ -179,10 +355,7 @@ export function Patients() {
           <div className="flex flex-col sm:flex-row gap-4">
             <Button
               className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 hover:scale-105 transition-all duration-300"
-              onClick={() => {
-                // Ouvrir modal de création
-                toast.info("Fonctionnalité de création en cours de développement")
-              }}
+              onClick={openCreateModal}
             >
               <Plus className="w-5 h-5 mr-2" />
               Nouveau Patient
@@ -191,7 +364,6 @@ export function Patients() {
               variant="outline"
               className="px-6 py-3 hover:scale-105 transition-all duration-300 bg-transparent"
               onClick={() => {
-                // Export functionality
                 toast.info("Fonctionnalité d'export en cours de développement")
               }}
             >
@@ -303,12 +475,19 @@ export function Patients() {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                   Aucun patient trouvé
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
                   {searchTerm || filters.blood_type
                     ? "Aucun patient ne correspond à vos critères de recherche."
                     : "Aucun patient enregistré dans le système."
                   }
                 </p>
+                <Button
+                  onClick={openCreateModal}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Ajouter le premier patient
+                </Button>
               </div>
             ) : (
               <>
@@ -375,10 +554,7 @@ export function Patients() {
                                 size="sm"
                                 variant="outline"
                                 className="hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-transparent"
-                                onClick={() => {
-                                  setSelectedPatient(patient)
-                                  toast.info("Détails du patient")
-                                }}
+                                onClick={() => setSelectedPatient(patient)}
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
@@ -386,11 +562,17 @@ export function Patients() {
                                 size="sm"
                                 variant="outline"
                                 className="hover:bg-green-50 dark:hover:bg-green-900/20 bg-transparent"
-                                onClick={() => {
-                                  toast.info("Fonctionnalité d'édition en cours de développement")
-                                }}
+                                onClick={() => openEditModal(patient)}
                               >
                                 <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="hover:bg-red-50 dark:hover:bg-red-900/20 bg-transparent text-red-600"
+                                onClick={() => handleDelete(patient.patient_id, `${patient.first_name} ${patient.last_name}`)}
+                              >
+                                <X className="w-4 h-4" />
                               </Button>
                             </div>
                           </td>
@@ -433,19 +615,369 @@ export function Patients() {
           </CardContent>
         </Card>
 
-        {/* Patient Detail Modal */}
-        {selectedPatient && (
+        {/* Create Patient Modal */}
+        {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl font-bold">
-                      {selectedPatient.first_name} {selectedPatient.last_name}
-                    </CardTitle>
-                    <CardDescription className="text-purple-100">
-                      ID: {selectedPatient.patient_id}
-                    </CardDescription>
+                  <div className="flex items-center gap-3">
+                    <User className="w-6 h-6" />
+                    <div>
+                      <CardTitle className="text-xl font-bold">Nouveau Patient</CardTitle>
+                      <CardDescription className="text-purple-100">
+                        Ajouter un nouveau patient dans le système
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setShowCreateModal(false)}
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <form onSubmit={handleCreateSubmit} className="space-y-6">
+                  {/* ID Patient */}
+                  <div className="space-y-2">
+                    <Label htmlFor="patient_id" className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      ID Patient
+                    </Label>
+                    <Input
+                      id="patient_id"
+                      value={formData.patient_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, patient_id: e.target.value }))}
+                      placeholder="ID unique du patient"
+                      className={formErrors.patient_id ? "border-red-500" : ""}
+                    />
+                    {formErrors.patient_id && (
+                      <p className="text-sm text-red-600">{formErrors.patient_id}</p>
+                    )}
+                  </div>
+
+                  {/* Nom et Prénom */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="first_name">Prénom</Label>
+                      <Input
+                        id="first_name"
+                        value={formData.first_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                        placeholder="Prénom du patient"
+                        className={formErrors.first_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.first_name && (
+                        <p className="text-sm text-red-600">{formErrors.first_name}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name">Nom</Label>
+                      <Input
+                        id="last_name"
+                        value={formData.last_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                        placeholder="Nom de famille du patient"
+                        className={formErrors.last_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.last_name && (
+                        <p className="text-sm text-red-600">{formErrors.last_name}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Date de naissance et Groupe sanguin */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date_of_birth" className="flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        Date de naissance
+                      </Label>
+                      <Input
+                        id="date_of_birth"
+                        type="date"
+                        value={formData.date_of_birth}
+                        onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+                        className={formErrors.date_of_birth ? "border-red-500" : ""}
+                      />
+                      {formErrors.date_of_birth && (
+                        <p className="text-sm text-red-600">{formErrors.date_of_birth}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="blood_type" className="flex items-center gap-2">
+                        <Droplets className="w-4 h-4" />
+                        Groupe sanguin
+                      </Label>
+                      <select
+                        id="blood_type"
+                        value={formData.blood_type}
+                        onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
+                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
+                          formErrors.blood_type ? "border-red-500" : "border-gray-300"
+                        }`}
+                      >
+                        <option value="">Sélectionner un groupe sanguin</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                      {formErrors.blood_type && (
+                        <p className="text-sm text-red-600">{formErrors.blood_type}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Historique médical */}
+                  <div className="space-y-2">
+                    <Label htmlFor="patient_history" className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Historique médical
+                    </Label>
+                    <Textarea
+                      id="patient_history"
+                      value={formData.patient_history}
+                      onChange={(e) => setFormData(prev => ({ ...prev, patient_history: e.target.value }))}
+                      placeholder="Historique médical du patient (optionnel)"
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowCreateModal(false)}
+                      disabled={createPatientMutation.isPending}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                      disabled={createPatientMutation.isPending}
+                    >
+                      {createPatientMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Création...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Créer le patient
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Edit Patient Modal */}
+        {showEditModal && editingPatient && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Edit className="w-6 h-6" />
+                    <div>
+                      <CardTitle className="text-xl font-bold">Modifier Patient</CardTitle>
+                      <CardDescription className="text-green-100">
+                        Modifier les informations de {editingPatient.first_name} {editingPatient.last_name}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setShowEditModal(false)}
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <form onSubmit={handleEditSubmit} className="space-y-6">
+                  {/* ID Patient (lecture seule) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_patient_id" className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      ID Patient
+                    </Label>
+                    <Input
+                      id="edit_patient_id"
+                      value={formData.patient_id}
+                      disabled
+                      className="bg-gray-100 dark:bg-gray-800"
+                    />
+                    <p className="text-xs text-gray-500">L'ID patient ne peut pas être modifié</p>
+                  </div>
+
+                  {/* Nom et Prénom */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_first_name">Prénom</Label>
+                      <Input
+                        id="edit_first_name"
+                        value={formData.first_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                        placeholder="Prénom du patient"
+                        className={formErrors.first_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.first_name && (
+                        <p className="text-sm text-red-600">{formErrors.first_name}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_last_name">Nom</Label>
+                      <Input
+                        id="edit_last_name"
+                        value={formData.last_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                        placeholder="Nom de famille du patient"
+                        className={formErrors.last_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.last_name && (
+                        <p className="text-sm text-red-600">{formErrors.last_name}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Date de naissance et Groupe sanguin */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_date_of_birth" className="flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        Date de naissance
+                      </Label>
+                      <Input
+                        id="edit_date_of_birth"
+                        type="date"
+                        value={formData.date_of_birth}
+                        onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+                        className={formErrors.date_of_birth ? "border-red-500" : ""}
+                      />
+                      {formErrors.date_of_birth && (
+                        <p className="text-sm text-red-600">{formErrors.date_of_birth}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_blood_type" className="flex items-center gap-2">
+                        <Droplets className="w-4 h-4" />
+                        Groupe sanguin
+                      </Label>
+                      <select
+                        id="edit_blood_type"
+                        value={formData.blood_type}
+                        onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
+                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
+                          formErrors.blood_type ? "border-red-500" : "border-gray-300"
+                        }`}
+                      >
+                        <option value="">Sélectionner un groupe sanguin</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                      {formErrors.blood_type && (
+                        <p className="text-sm text-red-600">{formErrors.blood_type}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Historique médical */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_patient_history" className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Historique médical
+                    </Label>
+                    <Textarea
+                      id="edit_patient_history"
+                      value={formData.patient_history}
+                      onChange={(e) => setFormData(prev => ({ ...prev, patient_history: e.target.value }))}
+                      placeholder="Historique médical du patient (optionnel)"
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowEditModal(false)}
+                      disabled={updatePatientMutation.isPending}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                      disabled={updatePatientMutation.isPending}
+                    >
+                      {updatePatientMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Modification...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Sauvegarder
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Patient Detail Modal */}
+        {selectedPatient && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      {getPatientInitials(selectedPatient.first_name, selectedPatient.last_name)}
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl font-bold">
+                        {selectedPatient.first_name} {selectedPatient.last_name}
+                      </CardTitle>
+                      <CardDescription className="text-blue-100">
+                        ID: {selectedPatient.patient_id}
+                      </CardDescription>
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
@@ -453,38 +985,79 @@ export function Patients() {
                     className="text-white hover:bg-white/10"
                     onClick={() => setSelectedPatient(null)}
                   >
-                    ✕
+                    <X className="w-5 h-5" />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Groupe Sanguin
-                    </label>
-                    <p className="font-semibold">{selectedPatient.blood_type}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Âge
-                    </label>
-                    <p className="font-semibold">{selectedPatient.age} ans</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Date de Naissance
-                    </label>
-                    <p className="font-semibold">{formatDate(selectedPatient.date_of_birth)}</p>
+              <CardContent className="p-6 space-y-6">
+                {/* Informations personnelles */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Informations personnelles
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Groupe Sanguin
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Droplets className="w-4 h-4 text-red-500" />
+                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
+                          {selectedPatient.blood_type}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Âge
+                      </label>
+                      <p className="font-semibold flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        {selectedPatient.age} ans
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Date de Naissance
+                      </label>
+                      <p className="font-semibold">{formatDate(selectedPatient.date_of_birth)}</p>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    Historique Médical
-                  </label>
-                  <p className="mt-1 p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
-                    {selectedPatient.patient_history || "Aucun historique disponible"}
-                  </p>
+
+                {/* Historique médical */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Historique médical
+                  </h3>
+                  <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                    <p className="text-gray-700 dark:text-gray-300">
+                      {selectedPatient.patient_history || "Aucun historique médical disponible"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedPatient(null)
+                      openEditModal(selectedPatient)
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Modifier
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedPatient(null)}
+                  >
+                    Fermer
+                  </Button>
                 </div>
               </CardContent>
             </Card>
