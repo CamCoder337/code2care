@@ -169,9 +169,9 @@ export default function Sites() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [filterType, setFilterType] = useState("")
-  const [filterStatus, setFilterStatus] = useState("")
-  const [filterRegion, setFilterRegion] = useState("")
+  const [filterType, setFilterType] = useState("all")
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [filterRegion, setFilterRegion] = useState("all")
   const [notification, setNotification] = useState(null)
   const [newSite, setNewSite] = useState({
     site_id: "",
@@ -193,9 +193,9 @@ export default function Sites() {
     search: searchTerm,
     page: currentPage,
     page_size: pageSize,
-    ...(filterType && { type: filterType }),
-    ...(filterStatus && { status: filterStatus }),
-    ...(filterRegion && { region: filterRegion })
+    ...(filterType !== "all" && { type: filterType }),
+    ...(filterStatus !== "all" && { status: filterStatus }),
+    ...(filterRegion !== "all" && { region: filterRegion })
   }
 
   const { data: sitesData, loading, error, refetch } = useSites(queryParams)
@@ -564,7 +564,7 @@ export default function Sites() {
                     <SelectValue placeholder="Type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tous les types</SelectItem>
+                    <SelectItem value="all">Tous les types</SelectItem>
                     <SelectItem value="hospital">Hôpital</SelectItem>
                     <SelectItem value="clinic">Clinique</SelectItem>
                     <SelectItem value="collection_center">Centre de Collecte</SelectItem>
@@ -576,7 +576,7 @@ export default function Sites() {
                     <SelectValue placeholder="Statut" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tous les statuts</SelectItem>
+                    <SelectItem value="all">Tous les statuts</SelectItem>
                     <SelectItem value="active">Actif</SelectItem>
                     <SelectItem value="maintenance">Maintenance</SelectItem>
                     <SelectItem value="inactive">Inactif</SelectItem>
@@ -588,7 +588,7 @@ export default function Sites() {
                     <SelectValue placeholder="Région" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Toutes les régions</SelectItem>
+                    <SelectItem value="all">Toutes les régions</SelectItem>
                     <SelectItem value="Centre">Centre</SelectItem>
                     <SelectItem value="Littoral">Littoral</SelectItem>
                     <SelectItem value="Nord">Nord</SelectItem>
@@ -600,9 +600,9 @@ export default function Sites() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setFilterType("")
-                    setFilterStatus("")
-                    setFilterRegion("")
+                    setFilterType("all")
+                    setFilterStatus("all")
+                    setFilterRegion("all")
                     setSearchTerm("")
                   }}
                   className="bg-transparent"
