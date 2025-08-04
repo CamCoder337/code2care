@@ -32,9 +32,10 @@ interface SidebarProps {
   setActiveView: (view: string) => void
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
-export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen }: SidebarProps) {
+export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen, onCollapsedChange }: SidebarProps) {
   const { t } = useLanguage()
   const { theme, setTheme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
@@ -114,7 +115,11 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
     },
   ]
 
-  const toggleCollapse = () => setCollapsed(!collapsed)
+  const toggleCollapse = () => {
+    const newCollapsed = !collapsed
+    setCollapsed(newCollapsed)
+    onCollapsedChange?.(newCollapsed)
+  }
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark")
   const closeMobileMenu = () => setSidebarOpen(false)
 
@@ -263,77 +268,120 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
         </nav>
 
         {/* Footer */}
-        <footer className="p-4 border-t border-gray-200 dark:border-slate-700 space-y-3 flex-shrink-0">
-          {/* Language Selector */}
-          {!collapsed && (
-            <div className="mb-3">
-              <div className="flex items-center gap-2 mb-2">
+        <footer className="p-4 border-t border-gray-200 dark:border-slate-700 flex-shrink-0">
+          {collapsed ? (
+            /* Layout compact en grille 2x2 pour sidebar collapsed */
+            <div className="grid grid-cols-2 gap-1">
+              {/* Theme Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-10 p-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
+                onClick={toggleTheme}
+                title={theme === "dark" ? "Mode Clair" : "Mode Sombre"}
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4 text-yellow-500" />
+                ) : (
+                  <Moon className="w-4 h-4 text-blue-500" />
+                )}
+              </Button>
+
+              {/* Language Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-10 p-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
+                title="Langue / Language"
+              >
                 <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  {t("language")}
-                </span>
+              </Button>
+
+              {/* Settings */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-10 p-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
+                onClick={() => {
+                  setActiveView("settings")
+                  setSidebarOpen(false)
+                }}
+                title="Paramètres"
+              >
+                <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              </Button>
+
+              {/* Logout */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-10 p-0 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
+                title="Déconnexion"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            /* Layout étendu pour sidebar expanded */
+            <div className="space-y-3">
+              {/* Language Selector */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    {t("language")}
+                  </span>
+                </div>
+                <LanguageSelector />
               </div>
-              <LanguageSelector />
+
+              {/* Actions en grille 2x2 */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Theme Toggle */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex flex-col items-center gap-1 h-16 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
+                  onClick={toggleTheme}
+                >
+                  {theme === "dark" ? (
+                    <Sun className="w-5 h-5 text-yellow-500" />
+                  ) : (
+                    <Moon className="w-5 h-5 text-blue-500" />
+                  )}
+                  <span className="text-xs font-medium text-center leading-tight">
+                    {theme === "dark" ? "Clair" : "Sombre"}
+                  </span>
+                </Button>
+
+                {/* Settings */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex flex-col items-center gap-1 h-16 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
+                  onClick={() => {
+                    setActiveView("settings")
+                    setSidebarOpen(false)
+                  }}
+                >
+                  <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  <span className="text-xs font-medium text-center leading-tight">
+                    Paramètres
+                  </span>
+                </Button>
+
+                {/* Logout - Span sur 2 colonnes */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="col-span-2 flex items-center justify-center gap-2 h-12 p-2 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm font-medium">Déconnexion</span>
+                </Button>
+              </div>
             </div>
           )}
-
-          {/* Settings */}
-          <Button
-            variant="ghost"
-            className={`
-              w-full justify-start gap-3 px-3 py-2 text-gray-600 dark:text-gray-300 
-              hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 
-              transition-all duration-300
-              ${collapsed ? "justify-center px-2" : ""}
-            `}
-            onClick={() => {
-              setActiveView("settings")
-              setSidebarOpen(false)
-            }}
-            title={collapsed ? t("settings") : undefined}
-          >
-            <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            {!collapsed && <span className="font-medium text-sm">{t("settings")}</span>}
-          </Button>
-
-          {/* Theme Toggle */}
-          <Button
-            variant="ghost"
-            className={`
-              w-full justify-start gap-3 px-3 py-2 text-gray-600 dark:text-gray-300 
-              hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 
-              transition-all duration-300
-              ${collapsed ? "justify-center px-2" : ""}
-            `}
-            onClick={toggleTheme}
-            title={collapsed ? (theme === "dark" ? "Mode Clair" : "Mode Sombre") : undefined}
-          >
-            {theme === "dark" ? (
-              <Sun className="w-5 h-5 text-yellow-500" />
-            ) : (
-              <Moon className="w-5 h-5 text-blue-500" />
-            )}
-            {!collapsed && (
-              <span className="font-medium text-sm">
-                {theme === "dark" ? "Mode Clair" : "Mode Sombre"}
-              </span>
-            )}
-          </Button>
-
-          {/* Logout */}
-          <Button
-            variant="ghost"
-            className={`
-              w-full justify-start gap-3 px-3 py-2 text-red-500 dark:text-red-400 
-              hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10
-              transition-all duration-300
-              ${collapsed ? "justify-center px-2" : ""}
-            `}
-            title={collapsed ? t("logout") : undefined}
-          >
-            <LogOut className="w-5 h-5" />
-            {!collapsed && <span className="font-medium text-sm">{t("logout")}</span>}
-          </Button>
         </footer>
 
         {/* Collapse Toggle - Desktop only */}

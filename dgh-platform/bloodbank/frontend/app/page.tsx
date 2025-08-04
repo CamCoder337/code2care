@@ -58,7 +58,7 @@ function SystemHealthIndicator() {
 function AppContent() {
   const [activeView, setActiveView] = useState("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -97,14 +97,14 @@ function AppContent() {
           setActiveView={setActiveView}
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
+          onCollapsedChange={setSidebarCollapsed}
         />
 
-        {/* Main Content - Responsive margin based on sidebar state */}
+        {/* Main Content avec marge responsive synchronisée */}
         <main
           className={`
             min-h-screen transition-all duration-300 ease-in-out
-            ${collapsed ? "lg:ml-20" : "lg:ml-72"}
-            ${sidebarOpen ? "ml-0" : "ml-0"}
+            ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-72"}
           `}
         >
           <div className="w-full h-full">
