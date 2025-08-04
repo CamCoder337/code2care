@@ -48,18 +48,28 @@ class Donor(models.Model):
 
 
 class Site(models.Model):
-    """Modèle pour les sites/établissements"""
     site_id = models.CharField(max_length=50, primary_key=True)
-    nom = models.CharField(max_length=150)
-    ville = models.CharField(max_length=150)
-
-    class Meta:
-        db_table = 'site'
-        verbose_name = 'Site'
-        verbose_name_plural = 'Sites'
-
-    def __str__(self):
-        return f"{self.nom} - {self.ville}"
+    nom = models.CharField(max_length=200)
+    ville = models.CharField(max_length=100)
+    type = models.CharField(max_length=50, choices=[
+        ('hospital', 'Hôpital'),
+        ('clinic', 'Clinique'),
+        ('collection_center', 'Centre de Collecte'),
+    ], default='hospital')
+    address = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    manager = models.CharField(max_length=200, blank=True, null=True)
+    capacity = models.IntegerField(blank=True, null=True)
+    region = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=[
+        ('active', 'Actif'),
+        ('maintenance', 'Maintenance'),
+        ('inactive', 'Inactif'),
+    ], default='active')
+    blood_bank = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class Department(models.Model):
