@@ -29,10 +29,10 @@ function SystemHealthIndicator() {
       <div
         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-lg backdrop-blur-sm transition-all duration-300 ${
           isError
-            ? "bg-red-100 text-red-800 border border-red-200"
+            ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800"
             : health?.status === "healthy"
-            ? "bg-green-100 text-green-800 border border-green-200"
-            : "bg-amber-100 text-amber-800 border border-amber-200"
+            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800"
+            : "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800"
         }`}
       >
         {isError ? (
@@ -58,6 +58,7 @@ function SystemHealthIndicator() {
 function AppContent() {
   const [activeView, setActiveView] = useState("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -98,8 +99,17 @@ function AppContent() {
           setSidebarOpen={setSidebarOpen}
         />
 
-        <main className="lg:ml-72 min-h-screen transition-all duration-300 ease-in-out">
-          {renderActiveView()}
+        {/* Main Content - Responsive margin based on sidebar state */}
+        <main
+          className={`
+            min-h-screen transition-all duration-300 ease-in-out
+            ${collapsed ? "lg:ml-20" : "lg:ml-72"}
+            ${sidebarOpen ? "ml-0" : "ml-0"}
+          `}
+        >
+          <div className="w-full h-full">
+            {renderActiveView()}
+          </div>
         </main>
       </div>
     </>
