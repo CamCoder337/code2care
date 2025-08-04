@@ -22,7 +22,8 @@ import {
   LogOut,
   Menu,
   X,
-  Heart,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 
 interface SidebarProps {
@@ -35,7 +36,7 @@ interface SidebarProps {
 export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen }: SidebarProps) {
   const { t } = useLanguage()
   const { theme, setTheme } = useTheme()
-
+  const [collapsed, setCollapsed] = useState(false)
 
   const menuItems = [
     {
@@ -110,67 +111,102 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
     },
   ]
 
+  const toggleCollapse = () => setCollapsed(!collapsed)
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark")
+  const closeMobileMenu = () => setSidebarOpen(false)
+
   return (
     <>
+      {/* Mobile Menu Button */}
+      {!sidebarOpen && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-50 lg:hidden rounded-full w-10 h-10 p-0 bg-slate-800 hover:bg-slate-700 text-white border-slate-600 shadow-lg"
+          aria-label="Open menu"
+        >
+          <Menu className="w-4 h-4" />
+        </Button>
+      )}
+
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          onClick={closeMobileMenu}
+          aria-hidden="true"
         />
       )}
 
-      {/* Mobile Toggle Button */}
-      <Button
-        className="fixed top-4 left-4 z-50 lg:hidden bg-slate-800 hover:bg-slate-700 text-white p-2"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-      >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </Button>
-
       {/* Sidebar */}
-      <div
-        className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-r border-slate-700 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+      <aside
+        className={`
+          ${collapsed ? "w-20" : "w-72"}
+          fixed h-[100vh] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-r border-slate-700 shadow-2xl transition-all duration-300 z-50 top-0 left-0
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+          flex flex-col
+        `}
+        aria-label="Sidebar"
       >
-        <div className="flex flex-col h-full">
-          {/* Header avec Logo HIGH5 */}
-          <div className="p-4 border-b border-gray-200/50 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-teal-500 to-green-500 rounded-xl shadow-lg flex items-center justify-center transform hover:scale-105 transition-all duration-300">
-                  <Image
-                    src="/high5-logo.png"
-                    alt="HIGH5 Logo"
-                    width={32}
-                    height={32}
-                    className="w-8 h-8 object-contain filter brightness-0 invert"
-                  />
-                </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse" />
+        {/* Header */}
+        <header className="p-4 border-b border-gray-200/50 dark:border-gray-700/50 flex-shrink-0 relative">
+          <div className="flex items-center justify-center mb-4">
+            <div className="relative flex-shrink-0">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-teal-500 to-green-500 rounded-xl shadow-lg flex items-center justify-center transform hover:scale-105 transition-all duration-300">
+                <Image
+                  src="/high5-logo.png"
+                  alt="HIGH5 Logo"
+                  width={32}
+                  height={32}
+                  className="w-8 h-8 object-contain filter brightness-0 invert"
+                  priority
+                />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">HIGH5</h1>
-                <p className="text-sm text-gray-400">Blood Bank System</p>
-                <p className="text-xs text-gray-500">République du Cameroun</p>
-              </div>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse" />
             </div>
+          </div>
 
-            {/* Sélecteur de Langue */}
-            <div className="mb-4">
+          {!collapsed && (
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-white">HIGH5</h1>
+              <p className="text-sm text-gray-400">Blood Bank System</p>
+              <p className="text-xs text-gray-500">République du Cameroun</p>
+            </div>
+          )}
+
+          {/* Mobile Close Button */}
+          {sidebarOpen && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={closeMobileMenu}
+              className="absolute top-4 right-4 z-50 lg:hidden rounded-full w-10 h-10 p-0 bg-slate-800 hover:bg-slate-700 text-white border-slate-600 shadow-lg"
+              aria-label="Close menu"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+
+          {/* Language Selector - Only when not collapsed */}
+          {!collapsed && (
+            <div className="mt-4">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
                 {t("language")} / LANGUAGE
               </p>
               <LanguageSelector />
             </div>
+          )}
+        </header>
 
-            {/* Profil Utilisateur */}
-            <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                BM
-              </div>
-              <div className="flex-1">
+        {/* User Profile */}
+        <section className="p-4 border-b border-slate-700 flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+              BM
+            </div>
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white">Blood Manager</p>
                 <p className="text-xs text-gray-400">Administrator</p>
                 <div className="flex items-center gap-1 mt-1">
@@ -178,69 +214,108 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                   <span className="text-xs text-green-400">En ligne</span>
                 </div>
               </div>
-            </div>
+            )}
           </div>
+        </section>
 
-          {/* Navigation */}
-          <div className="flex-1 overflow-y-auto py-4">
-            <div className="px-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">NAVIGATION</p>
-              <nav className="space-y-2">
-                {menuItems.map((item) => {
-                  const Icon = item.icon
-                  const isActive = activeView === item.id
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-4 min-h-0" aria-label="Main navigation">
+          <div className="px-4">
+            {!collapsed && (
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                NAVIGATION
+              </p>
+            )}
+            <ul className="space-y-2">
+              {menuItems.map((item, index) => {
+                const Icon = item.icon
+                const isActive = activeView === item.id
 
-                  return (
+                return (
+                  <li key={item.id}>
                     <Button
-                      key={item.id}
                       variant="ghost"
-                      className={`w-full justify-start gap-3 px-3 py-3 h-auto text-left transition-all duration-200 ${
-                        isActive
-                          ? `${item.bgColor} ${item.color} shadow-lg scale-105`
-                          : "text-gray-300 hover:text-white hover:bg-slate-700/50"
-                      }`}
+                      className={`
+                        w-full justify-start gap-3 px-3 py-3 h-auto transition-all duration-200
+                        ${
+                          isActive
+                            ? `${item.bgColor} ${item.color} shadow-lg scale-105`
+                            : "text-gray-300 hover:text-white hover:bg-slate-700/50"
+                        }
+                        ${collapsed ? "justify-center px-2" : ""}
+                      `}
+                      style={{ animationDelay: `${index * 0.1}s` }}
                       onClick={() => {
                         setActiveView(item.id)
-                        setSidebarOpen(false) // Close mobile sidebar after selection
+                        setSidebarOpen(false)
                       }}
+                      aria-current={isActive ? "page" : undefined}
+                      title={collapsed ? item.label : undefined}
                     >
-                      <Icon className={`w-5 h-5 ${isActive ? item.color : "text-gray-400"}`} />
-                      <span className="font-medium">{item.label}</span>
-                      {isActive && <div className="ml-auto w-2 h-2 bg-current rounded-full animate-pulse" />}
+                      <Icon className={`w-5 h-5 ${isActive ? item.color : "text-gray-400"} flex-shrink-0`} />
+                      {!collapsed && (
+                        <>
+                          <span className="font-medium">{item.label}</span>
+                          {isActive && <div className="ml-auto w-2 h-2 bg-current rounded-full animate-pulse" />}
+                        </>
+                      )}
                     </Button>
-                  )
-                })}
-              </nav>
-            </div>
+                  </li>
+                )
+              })}
+            </ul>
           </div>
+        </nav>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-slate-700 space-y-3">
-            {/* Mode Sombre Toggle */}
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-300 group"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? (
-                <Sun className="w-5 h-5 text-yellow-500 group-hover:text-yellow-600" />
-              ) : (
-                <Moon className="w-5 h-5 text-blue-500 group-hover:text-blue-600" />
-              )}
-              <span className="font-medium text-sm">{theme === "dark" ? "Mode Clair" : "Mode Sombre"}</span>
-            </Button>
+        {/* Footer */}
+        <footer className="p-4 border-t border-slate-700 space-y-3 flex-shrink-0">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            className={`
+              w-full justify-start gap-3 px-3 py-2 text-gray-300 hover:text-white hover:bg-slate-700/50 transition-all duration-300
+              ${collapsed ? "justify-center px-2" : ""}
+            `}
+            onClick={toggleTheme}
+            title={collapsed ? (theme === "dark" ? "Mode Clair" : "Mode Sombre") : undefined}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-5 h-5 text-yellow-500" />
+            ) : (
+              <Moon className="w-5 h-5 text-blue-500" />
+            )}
+            {!collapsed && (
+              <span className="font-medium text-sm">
+                {theme === "dark" ? "Mode Clair" : "Mode Sombre"}
+              </span>
+            )}
+          </Button>
 
-            {/* Déconnexion */}
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">{t("logout")}</span>
-            </Button>
-          </div>
-        </div>
-      </div>
+          {/* Logout */}
+          <Button
+            variant="ghost"
+            className={`
+              w-full justify-start gap-3 px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10
+              ${collapsed ? "justify-center px-2" : ""}
+            `}
+            title={collapsed ? t("logout") : undefined}
+          >
+            <LogOut className="w-5 h-5" />
+            {!collapsed && <span className="font-medium">{t("logout")}</span>}
+          </Button>
+        </footer>
+
+        {/* Collapse Toggle - Desktop only */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="absolute -right-3 top-20 rounded-full w-6 h-6 p-0 bg-slate-800 hover:bg-slate-700 border-slate-600 text-white hidden lg:flex shadow-lg"
+          onClick={toggleCollapse}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        </Button>
+      </aside>
     </>
   )
 }
