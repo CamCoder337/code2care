@@ -48,43 +48,225 @@ class Donor(models.Model):
 
 
 class Site(models.Model):
-    site_id = models.CharField(max_length=50, primary_key=True)
-    nom = models.CharField(max_length=200)
-    ville = models.CharField(max_length=100)
-    type = models.CharField(max_length=50, choices=[
+    """Modèle pour les sites (hôpitaux, cliniques, centres de collecte)"""
+    TYPE_CHOICES = [
         ('hospital', 'Hôpital'),
         ('clinic', 'Clinique'),
         ('collection_center', 'Centre de Collecte'),
-    ], default='hospital')
-    address = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    email = models.EmailField(blank=True, null=True)
-    manager = models.CharField(max_length=200, blank=True, null=True)
-    capacity = models.IntegerField(blank=True, null=True)
-    region = models.CharField(max_length=100, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=[
+    ]
+
+    STATUS_CHOICES = [
         ('active', 'Actif'),
         ('maintenance', 'Maintenance'),
         ('inactive', 'Inactif'),
-    ], default='active')
-    blood_bank = models.BooleanField(default=False)
+    ]
+
+    site_id = models.CharField(max_length=50, primary_key=True)
+    nom = models.CharField(max_length=200, verbose_name="Nom du site")
+    ville = models.CharField(max_length=100)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='hospital')
+    address = models.TextField(blank=True, null=True, verbose_name="Adresse")
+    phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Téléphone")
+    email = models.EmailField(blank=True, null=True)
+    manager = models.CharField(max_length=200, blank=True, null=True, verbose_name="Responsable")
+    capacity = models.IntegerField(blank=True, null=True, verbose_name="Capacité totale")
+    region = models.CharField(max_length=100, blank=True, null=True, verbose_name="Région")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    blood_bank = models.BooleanField(default=False, verbose_name="Dispose d'une banque de sang")
+
+    # Statistiques automatiques
+    current_patients = models.IntegerField(default=0, verbose_name="Patients actuels")
+    total_requests = models.IntegerField(default=0, verbose_name="Total des demandes")
+    last_request = models.DateTimeField(blank=True, null=True, verbose_name="Dernière demande")
+
+    # Méta-données
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        db_table = 'site'
+        verbose_name = 'Site'
+        verbose_name_plural = 'Sites'
+        ordering = ['nom']
+
+    def __str__(self):
+        return f"{self.nom} ({self.get_type_display()})"
+
+    @property
+    def departments_count(self):
+        """Nombre de départements dans ce site"""
+        return self.departments.count()
+
+    @property
+    def active_departments_count(self):
+        """Nombre de départements actifs"""
+        return self.departments.filter(is_active=True).count()
+
+    @property
+    def occupancy_rate(self):
+        """Taux d'occupation en pourcentage"""
+        if self.capacity and self.capacity > 0:
+            return round((self.current_patients / self.capacity) * 100, 1)
+        return 0
+
 
 class Department(models.Model):
-    """Modèle pour les départements/services"""
+    """Modèle pour les départements/services dans chaque site"""
+    DEPARTMENT_TYPE_CHOICES = [
+        ('emergency', 'Urgences'),
+        ('surgery', 'Chirurgie'),
+        ('cardiology', 'Cardiologie'),
+        ('oncology', 'Oncologie'),
+        ('pediatrics', 'Pédiatrie'),
+        ('gynecology', 'Gynécologie'),
+        ('orthopedics', 'Orthopédie'),
+        ('neurology', 'Neurologie'),
+        ('internal_medicine', 'Médecine Interne'),
+        ('intensive_care', 'Soins Intensifs'),
+        ('maternity', 'Maternité'),
+        ('general', 'Médecine Générale'),
+        ('laboratory', 'Laboratoire'),
+        ('radiology', 'Radiologie'),
+        ('blood_bank', 'Banque de Sang'),
+        ('other', 'Autre'),
+    ]
+
     department_id = models.CharField(max_length=50, primary_key=True)
-    name = models.CharField(max_length=50)
-    description = models.TextField(max_length=60, blank=True)
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.CASCADE,
+        related_name='departments',
+        db_column='site_id',
+        verbose_name="Site"
+    )
+    name = models.CharField(max_length=150, verbose_name="Nom du département")
+    department_type = models.CharField(
+        max_length=50,
+        choices=DEPARTMENT_TYPE_CHOICES,
+        default='general',
+        verbose_name="Type de département"
+    )
+    description = models.TextField(max_length=500, blank=True, verbose_name="Description")
+    head_of_department = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        verbose_name="Chef de service"
+    )
+
+    # Contact et localisation
+    phone_extension = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        verbose_name="Extension téléphonique"
+    )
+    email = models.EmailField(blank=True, null=True)
+    floor = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name="Étage"
+    )
+    wing = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="Aile/Secteur"
+    )
+
+    # Capacité et ressources
+    bed_capacity = models.IntegerField(
+        blank=True,
+        null=True,
+        verbose_name="Nombre de lits"
+    )
+    current_occupancy = models.IntegerField(
+        default=0,
+        verbose_name="Occupation actuelle"
+    )
+    staff_count = models.IntegerField(
+        default=0,
+        verbose_name="Nombre de personnel"
+    )
+
+    # Consommation de sang
+    monthly_blood_usage = models.IntegerField(
+        default=0,
+        verbose_name="Consommation mensuelle (unités)"
+    )
+    blood_type_priority = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Groupes sanguins prioritaires"
+    )
+
+    # Statut et méta-données
+    is_active = models.BooleanField(default=True, verbose_name="Actif")
+    is_emergency_department = models.BooleanField(
+        default=False,
+        verbose_name="Service d'urgence"
+    )
+    requires_blood_products = models.BooleanField(
+        default=True,
+        verbose_name="Nécessite des produits sanguins"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'department'
         verbose_name = 'Département'
         verbose_name_plural = 'Départements'
+        ordering = ['site__nom', 'name']
+        # Contrainte d'unicité pour éviter les doublons dans un même site
+        constraints = [
+            models.UniqueConstraint(
+                fields=['site', 'name'],
+                name='unique_department_per_site'
+            )
+        ]
 
     def __str__(self):
-        return self.name
+        return f"{self.name} - {self.site.nom}"
+
+    @property
+    def occupancy_rate(self):
+        """Taux d'occupation du département"""
+        if self.bed_capacity and self.bed_capacity > 0:
+            return round((self.current_occupancy / self.bed_capacity) * 100, 1)
+        return 0
+
+    @property
+    def full_contact(self):
+        """Contact complet du département"""
+        contact = self.site.phone or ""
+        if self.phone_extension:
+            contact += f" ext. {self.phone_extension}"
+        return contact
+
+    @property
+    def location_info(self):
+        """Informations de localisation"""
+        location_parts = []
+        if self.floor:
+            location_parts.append(f"Étage {self.floor}")
+        if self.wing:
+            location_parts.append(f"Aile {self.wing}")
+        return " - ".join(location_parts) if location_parts else ""
+
+    def get_blood_requests_count(self):
+        """Nombre de demandes de sang du département"""
+        return self.bloodrequest_set.count()
+
+    def get_monthly_requests_count(self):
+        """Nombre de demandes ce mois"""
+        from datetime import date, timedelta
+        current_month = date.today().replace(day=1)
+        return self.bloodrequest_set.filter(
+            request_date__gte=current_month
+        ).count()
 
 
 class Patient(models.Model):
