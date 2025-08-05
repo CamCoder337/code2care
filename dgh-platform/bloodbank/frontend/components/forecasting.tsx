@@ -770,7 +770,7 @@ export default function EnhancedForecastingSystem() {
         if (!forecastData?.method_used) return "N/A"
         const method = availableMethods.find(m => m.value === forecastData.method_used)
         return method && method.name ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
-               forecastData.method_used.toUpperCase().replace('_', ' ')
+               forecastData.method_used ? forecastData.method_used.toUpperCase().replace('_', ' ') : 'UNKNOWN'
       })(),
       icon: Brain,
       color: "text-purple-600 dark:text-purple-400",
