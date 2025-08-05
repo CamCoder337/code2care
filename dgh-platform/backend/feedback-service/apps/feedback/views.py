@@ -212,28 +212,52 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         """Création de rendez-vous - réservé aux professionnels uniquement"""
         # Vérifier que seuls les professionnels peuvent créer des rendez-vous
         user_type = request.headers.get('X-User-Type')
-        if user_type != 'professional':
-            return Response(
-                {'error': 'Seuls les professionnels peuvent créer des rendez-vous'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        # Support auto-assignation professional_id depuis headers
         user_id = request.headers.get('X-User-ID')
         
-        validated_data = serializer.validated_data.copy()
+        # Logging pour debugging si nécessaire
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Appointment creation attempt - User Type: {user_type}, User ID: {user_id}")
         
-        if user_id and 'professional_id' not in validated_data:
-            validated_data['professional_id'] = user_id
+        if user_type not in ['professional', 'admin']:
+            return Response({
+                'error': 'Seuls les professionnels et admins peuvent créer des rendez-vous',
+                'debug_info': {
+                    'received_user_type': user_type,
+                    'expected_user_types': ['professional', 'admin'],
+                    'available_headers': list(request.headers.keys())
+                }
+            }, status=status.HTTP_403_FORBIDDEN)
         
-        appointment = Appointment.objects.create(**validated_data)
-        
-        response_data = AppointmentSerializer(appointment).data
-        headers = self.get_success_headers(response_data)
-        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Support auto-assignation professional_id depuis headers
+            validated_data = serializer.validated_data.copy()
+            
+            if user_id and 'professional_id' not in validated_data:
+                validated_data['professional_id'] = user_id
+            
+            appointment = Appointment.objects.create(**validated_data)
+            
+            response_data = AppointmentSerializer(appointment).data
+            headers = self.get_success_headers(response_data)
+            return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+            
+        except Exception as e:
+            logger.error(f"Error creating appointment: {str(e)}")
+            logger.error(f"Request data: {request.data}")
+            logger.error(f"Validated data: {serializer.validated_data if 'serializer' in locals() else 'N/A'}")
+            return Response({
+                'error': 'Erreur lors de la création du rendez-vous',
+                'details': str(e),
+                'debug_info': {
+                    'user_type': user_type,
+                    'user_id': user_id,
+                    'request_data': request.data
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['get'])
     def upcoming(self, request):

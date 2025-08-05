@@ -63,7 +63,7 @@ class Patient(models.Model):
 class Professional(models.Model):
     """Profil Professional selon le MCD"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
-    professional_id = models.CharField(max_length=50, unique=True, db_index=True, blank=True)
+    professional_id = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     gender = models.CharField(max_length=10, choices=[
@@ -77,8 +77,6 @@ class Professional(models.Model):
     license_number = models.CharField(max_length=50, unique=True, blank=True)
     
     def save(self, *args, **kwargs):
-        if not self.professional_id:
-            self.professional_id = f"PRO{str(self.user.id)[:8]}"
         super().save(*args, **kwargs)
 
     class Meta:
