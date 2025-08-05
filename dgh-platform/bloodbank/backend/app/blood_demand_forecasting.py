@@ -16,6 +16,7 @@ import logging
 from scipy import stats
 from scipy.signal import savgol_filter
 import math
+from django.db.models import Min
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
