@@ -17,48 +17,39 @@ export PYTHONHASHSEED=0
 export PYTHONOPTIMIZE=1
 
 # ==================== INSTALLATION SÉQUENTIELLE DES DÉPENDANCES ====================
-echo "📦 Installation des dépendances critiques..."
+echo "📦 Installation des dépendances avec optimisations mémoire..."
+
+# Mise à jour pip avec cache limité
 pip install --upgrade pip --no-cache-dir
 
-# 1. DÉPENDANCE CRITIQUE FIRST
-echo "  🔑 Installing python-decouple (CRITICAL)..."
-pip install --no-cache-dir python-decouple==3.8
+# Installation par chunks pour économiser la mémoire
+echo "  - Installing core dependencies..."
+pip install --no-cache-dir Django==5.2.4 djangorestframework==3.16.0 gunicorn==23.0.0
 
-# 2. CORE DJANGO
-echo "  🐍 Installing Django core..."
-pip install --no-cache-dir Django==5.2.4
-pip install --no-cache-dir djangorestframework==3.16.0
-pip install --no-cache-dir gunicorn==23.0.0
+echo "  - Installing database dependencies..."
+pip install --no-cache-dir psycopg2==2.9.10 dj-database-url==3.0.1
 
-# 3. DATABASE
-echo "  🗄️ Installing database dependencies..."
-pip install --no-cache-dir psycopg2==2.9.10
-pip install --no-cache-dir dj-database-url==3.0.1
+echo "  - Installing cache and optimization..."
+pip install --no-cache-dir django-redis==6.0.0 django-cors-headers==4.7.0 whitenoise==6.9.0
 
-# 4. MIDDLEWARE & CACHE
-echo "  ⚡ Installing cache and middleware..."
-pip install --no-cache-dir django-redis==6.0.0
-pip install --no-cache-dir django-cors-headers==4.7.0
-pip install --no-cache-dir whitenoise==6.9.0
+echo "  - Installing ML dependencies (lightweight)..."
+pip install --no-cache-dir pandas==2.3.1 numpy==2.3.2 scikit-learn==1.7.1
 
-# 5. DJANGO EXTENSIONS
-echo "  🔧 Installing Django extensions..."
-pip install --no-cache-dir django-filter==23.6.0
-pip install --no-cache-dir django-extensions==3.2.3
+echo "  - Installing optional ML (if memory permits)..."
+pip install --no-cache-dir statsmodels==0.14.5 || echo "statsmodels skipped due to memory constraints"
+pip install --no-cache-dir xgboost==3.0.3 || echo "xgboost skipped due to memory constraints"
 
-# 6. MACHINE LEARNING (avec gestion d'erreurs)
-echo "  🤖 Installing ML dependencies..."
-pip install --no-cache-dir pandas==2.3.1
-pip install --no-cache-dir numpy==2.3.2
-pip install --no-cache-dir scikit-learn==1.7.1
+echo "  - Installing remaining dependencies..."
+pip install --no-cache-dir -r requirements.txt || echo "Some optional dependencies skipped"
 
-# 7. UTILITAIRES
-echo "  🛠️ Installing utilities..."
-pip install --no-cache-dir python-dateutil==2.9.0
-pip install --no-cache-dir pytz==2024.2
+# ==================== OPTIMISATION PYTHON ====================
+echo "🔧 Optimisation Python..."
 
 # Nettoyer le cache pip
 pip cache purge
+
+# Compiler les bytecodes Python pour optimiser le démarrage
+python -m compileall . -q || true
 
 # ==================== VÉRIFICATION DE DJANGO ====================
 echo "🔍 Vérification de Django..."
