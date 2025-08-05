@@ -2,7 +2,25 @@
 import axios, { AxiosError, AxiosResponse } from 'axios'
 
 // Configuration de l'API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const getApiBaseUrl = () => {
+  // En production sur Vercel
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://your-django-api-url.com' // Remplacez par votre vraie URL API Django
+  }
+
+  // En développement local
+  if (process.env.NODE_ENV === 'development') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  }
+
+  // Fallback
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+}
+
+
+const API_BASE_URL = getApiBaseUrl()
+
+console.log('🔗 API Base URL:', API_BASE_URL)
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,15 +30,65 @@ const api = axios.create({
     'Accept': 'application/json',
   },
 })
-
-// Intercepteur pour les erreurs
+// Intercepteur amélioré pour les erreurs
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
-    console.error('API Error:', error.response?.data || error.message)
+    // Log d'erreur détaillé
+    console.error('🚨 API Error Details:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    })
+
+    // Gestion spécifique des erreurs réseau
+    if (!error.response) {
+      console.error('🌐 Network error - API might be unreachable')
+      error.message = 'Erreur de connexion - Vérifiez que l\'API est accessible'
+    }
+
     return Promise.reject(error)
   }
 )
+
+// Intercepteur pour les requêtes (debugging)
+api.interceptors.request.use(
+  (config) => {
+    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.url}`)
+    return config
+  },
+  (error) => {
+    console.error('📤 Request Error:', error)
+    return Promise.reject(error)
+  }
+)
+
+// Test de connectivité
+export const testApiConnection = async () => {
+  try {
+    console.log('🔍 Testing API connection to:', API_BASE_URL)
+    const response = await api.get('/health/')
+    console.log('✅ API Connection successful:', response.data)
+    return { success: true, data: response.data }
+  } catch (error: any) {
+    console.error('❌ API Connection failed:', error)
+    return {
+      success: false,
+      error: error.message,
+      details: {
+        url: API_BASE_URL,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      }
+    }
+  }
+}
+
+// Export de la configuration
+export { API_BASE_URL }
 
 // ======================
 // TYPES
