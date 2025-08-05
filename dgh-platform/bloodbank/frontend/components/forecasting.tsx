@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -6,97 +6,377 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
-  Brain,
-  BarChart3,
-  Calendar,
-  Target,
-  AlertCircle,
-  Download,
-  Sparkles,
-  Activity,
-  Clock,
-  Lightbulb,
-  Settings,
-  Database,
-  Cpu,
-  CheckCircle,
-  AlertTriangle,
-  RefreshCw,
-  Zap,
-  TrendingUp,
-  TrendingDown,
-  Wifi,
-  WifiOff,
-  Server,
-  Shield,
-  Package,
-  Timer,
-  Gauge,
-  Info
+  Brain, BarChart3, Calendar, Target, AlertCircle, Sparkles, Activity, Clock,
+  Lightbulb, Settings, Database, Cpu, CheckCircle, AlertTriangle, RefreshCw,
+  Zap, TrendingUp, TrendingDown, WifiOff, Server, Shield, Package, Timer,
+  Gauge, Info, PlayCircle, Wifi, Download
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart, ReferenceLine, ComposedChart, Bar } from 'recharts'
 
-// Configuration API pour les vraies données
+// ==================== CONFIGURATION ET CONSTANTES ====================
 const API_CONFIG = {
-  baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
-  timeout: 15000, // Augmenté car les vrais modèles prennent plus de temps
+  baseUrl: 'http://localhost:8000/api/v1',
+  timeout: 25000,
   retryAttempts: 3,
   retryDelay: 2000
 }
 
-// Méthodes disponibles avec descriptions détaillées
-const FORECASTING_METHODS = [
-  {
-    value: 'auto',
-    label: '🤖 Auto-Sélection Intelligente',
-    description: 'Analyse automatique des données pour choisir la meilleure méthode',
-    recommended: true,
-    complexity: 'Adaptative',
-    accuracy: 'Optimale'
-  },
-  {
-    value: 'stl_arima',
-    label: '🔬 STL + ARIMA',
-    description: 'Décomposition saisonnière + modèle statistique avancé',
-    recommended: false,
-    complexity: 'Élevée',
-    accuracy: 'Très Haute',
-    bestFor: 'Données avec forte saisonnalité'
-  },
-  {
-    value: 'random_forest',
-    label: '🌲 Random Forest',
-    description: 'Apprentissage automatique robuste et stable',
-    recommended: false,
-    complexity: 'Moyenne',
-    accuracy: 'Haute',
-    bestFor: 'Données stables et générales'
-  },
-  {
-    value: 'xgboost',
-    label: '⚡ XGBoost',
-    description: 'Gradient boosting haute performance',
-    recommended: false,
-    complexity: 'Élevée',
-    accuracy: 'Très Haute',
-    bestFor: 'Données complexes avec tendances'
-  },
-  {
-    value: 'arima',
-    label: '📈 ARIMA Classique',
-    description: 'Modèle statistique de séries temporelles traditionnel',
-    recommended: false,
-    complexity: 'Moyenne',
-    accuracy: 'Haute',
-    bestFor: 'Tendances claires et linéaires'
-  }
-]
+const ERROR_TYPES = {
+  CONNECTION_FAILED: 'CONNECTION_FAILED',
+  TIMEOUT: 'TIMEOUT',
+  SERVER_ERROR: 'SERVER_ERROR',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  INSUFFICIENT_DATA: 'INSUFFICIENT_DATA'
+}
 
-export default function RealDataForecastingSystem() {
+// ==================== API CLIENT INTÉGRÉ ====================
+class EnhancedBloodForecastAPI {
+  constructor(config = {}) {
+    this.baseURL = config.baseURL || API_CONFIG.baseUrl
+    this.timeout = config.timeout || API_CONFIG.timeout
+    this.retryAttempts = config.retryAttempts || API_CONFIG.retryAttempts
+    this.retryDelay = config.retryDelay || API_CONFIG.retryDelay
+
+    this.methodsCache = null
+    this.methodsCacheExpiry = null
+    this.cacheValidityMs = 5 * 60 * 1000
+  }
+
+  async delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  isMethodsCacheValid() {
+    return this.methodsCache &&
+           this.methodsCacheExpiry &&
+           Date.now() < this.methodsCacheExpiry
+  }
+
+  async makeRequest(endpoint, options = {}) {
+    const url = `${this.baseURL}${endpoint}`
+    const defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...options.headers
+      },
+      timeout: this.timeout,
+      ...options
+    }
+
+    let lastError = null
+
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout)
+
+        const response = await fetch(url, {
+          ...defaultOptions,
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(`HTTP ${response.status}: ${errorData.message || errorData.detail || response.statusText}`)
+        }
+
+        const data = await response.json()
+        return data
+
+      } catch (error) {
+        lastError = error
+
+        if (attempt < this.retryAttempts) {
+          await this.delay(this.retryDelay * attempt)
+        }
+      }
+    }
+
+    throw lastError
+  }
+
+  async checkHealth() {
+    try {
+      const data = await this.makeRequest('/health/')
+      return {
+        status: 'healthy',
+        isConnected: true,
+        version: data.version || '2.0',
+        database_status: data.database_status || data.database || 'connected',
+        models_available: {
+          xgboost: data.xgboost_available || false,
+          statsmodels: data.statsmodels_available || false,
+          prophet: data.prophet_available || false,
+          sklearn: data.sklearn_available || true
+        },
+        ...data
+      }
+    } catch (error) {
+      return {
+        status: 'error',
+        isConnected: false,
+        error: error.message,
+        models_available: {}
+      }
+    }
+  }
+
+  async getAvailableMethods(forceRefresh = false) {
+    try {
+      if (!forceRefresh && this.isMethodsCacheValid()) {
+        return this.methodsCache
+      }
+
+      const data = await this.makeRequest('/available-methods/')
+
+      const structuredData = {
+        available_methods: data.available_methods || data.methods || [],
+        system_capabilities: data.system_capabilities || {},
+        recommended_method: data.recommended_method || 'auto',
+        method_details: data.method_details || {},
+        performance_tiers: data.performance_tiers || {
+          premium: [],
+          professional: [],
+          standard: ['auto', 'random_forest'],
+          basic: ['linear_regression']
+        },
+        total_methods: (data.available_methods || data.methods || []).length
+      }
+
+      this.methodsCache = structuredData
+      this.methodsCacheExpiry = Date.now() + this.cacheValidityMs
+
+      return structuredData
+
+    } catch (error) {
+      const fallbackData = {
+        available_methods: [
+          {
+            value: 'auto',
+            label: '🤖 Auto-Sélection Intelligente',
+            description: 'Sélection automatique du meilleur modèle',
+            recommended: true,
+            available: true,
+            confidence_expected: '75-90%',
+            tier: 'standard'
+          },
+          {
+            value: 'linear_regression',
+            label: '📈 Régression Linéaire',
+            description: 'Modèle simple et rapide',
+            available: true,
+            confidence_expected: '60-75%',
+            tier: 'basic'
+          },
+          {
+            value: 'random_forest',
+            label: '🌲 Random Forest',
+            description: 'Apprentissage automatique robuste',
+            available: true,
+            confidence_expected: '70-85%',
+            tier: 'standard'
+          }
+        ],
+        system_capabilities: {},
+        recommended_method: 'auto',
+        method_details: {},
+        performance_tiers: {
+          premium: [],
+          professional: [],
+          standard: ['auto', 'random_forest'],
+          basic: ['linear_regression']
+        },
+        total_methods: 3,
+        error: error.message
+      }
+
+      return fallbackData
+    }
+  }
+
+  async generateForecast(params) {
+    try {
+      const requestData = {
+        blood_type: params.bloodType || 'O+',
+        days_ahead: parseInt(params.timeRange) || 7,
+        method: params.method || 'auto',
+        force_retrain: params.forceRetrain || false,
+        include_confidence_intervals: true,
+        include_feature_importance: true,
+        include_model_metrics: true
+      }
+
+      const data = await this.makeRequest('/forecast/', {
+        method: 'POST',
+        body: JSON.stringify(requestData)
+      })
+
+      const enrichedData = {
+        ...data,
+        generated_at: new Date().toISOString(),
+        request_params: requestData,
+
+        predictions: (data.predictions || []).map((pred, index) => ({
+          ...pred,
+          predicted_demand: Math.round(pred.predicted_demand || 0),
+          confidence: pred.confidence || 0,
+          date: pred.date,
+          lower_bound: pred.lower_bound || (pred.predicted_demand * 0.8),
+          upper_bound: pred.upper_bound || (pred.predicted_demand * 1.2),
+          day_index: index + 1
+        })),
+
+        summary_metrics: this.calculateSummaryMetrics(data.predictions || [])
+      }
+
+      return enrichedData
+
+    } catch (error) {
+      throw new Error(`Erreur génération prévision: ${error.message}`)
+    }
+  }
+
+  calculateSummaryMetrics(predictions) {
+    if (!predictions || predictions.length === 0) {
+      return {
+        total_demand: 0,
+        average_confidence: 0,
+        high_demand_days: 0,
+        max_demand: 0,
+        trend: 'stable'
+      }
+    }
+
+    const totalDemand = predictions.reduce((sum, p) => sum + (p.predicted_demand || 0), 0)
+    const avgConfidence = predictions.reduce((sum, p) => sum + (p.confidence || 0), 0) / predictions.length
+    const highDemandDays = predictions.filter(p => (p.predicted_demand || 0) > 15).length
+    const maxDemand = Math.max(...predictions.map(p => p.predicted_demand || 0))
+
+    const firstWeek = predictions.slice(0, Math.min(3, predictions.length))
+    const lastWeek = predictions.slice(-Math.min(3, predictions.length))
+    const firstAvg = firstWeek.reduce((sum, p) => sum + (p.predicted_demand || 0), 0) / firstWeek.length
+    const lastAvg = lastWeek.reduce((sum, p) => sum + (p.predicted_demand || 0), 0) / lastWeek.length
+
+    let trend = 'stable'
+    if (lastAvg > firstAvg * 1.1) trend = 'croissante'
+    else if (lastAvg < firstAvg * 0.9) trend = 'décroissante'
+
+    return {
+      total_demand: Math.round(totalDemand),
+      average_confidence: Math.round(avgConfidence * 100),
+      high_demand_days: highDemandDays,
+      max_demand: Math.round(maxDemand),
+      trend
+    }
+  }
+
+  async getSystemMetrics() {
+    try {
+      const data = await this.makeRequest('/system/metrics/')
+      return {
+        dataFreshness: data.data_freshness || 'unknown',
+        lastDataUpdate: data.last_data_update,
+        availableDataPoints: data.available_data_points || 0,
+        modelAccuracy: data.model_accuracy,
+        processingSpeed: data.processing_speed,
+        ...data
+      }
+    } catch (error) {
+      return {
+        dataFreshness: 'unknown',
+        availableDataPoints: 0,
+        error: error.message
+      }
+    }
+  }
+
+  clearCache() {
+    this.methodsCache = null
+    this.methodsCacheExpiry = null
+  }
+}
+
+// ==================== GESTIONNAIRE D'ERREURS ====================
+class ForecastingErrorHandler {
+  static handleAPIError(error, context = {}) {
+    const errorInfo = {
+      timestamp: new Date().toISOString(),
+      context,
+      original_error: error.message
+    }
+
+    if (error.message.includes('timeout') || error.message.includes('aborted')) {
+      return {
+        ...errorInfo,
+        type: ERROR_TYPES.TIMEOUT,
+        user_message: 'La requête prend trop de temps. Vérifiez votre connexion.',
+        retry_recommended: true
+      }
+    }
+
+    if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+      return {
+        ...errorInfo,
+        type: ERROR_TYPES.SERVER_ERROR,
+        user_message: 'Erreur serveur. Vérifiez que tous les services sont démarrés.',
+        retry_recommended: true
+      }
+    }
+
+    if (error.message.includes('insufficient') || error.message.includes('data')) {
+      return {
+        ...errorInfo,
+        type: ERROR_TYPES.INSUFFICIENT_DATA,
+        user_message: 'Données insuffisantes pour générer une prévision fiable.',
+        retry_recommended: false
+      }
+    }
+
+    return {
+      ...errorInfo,
+      type: ERROR_TYPES.CONNECTION_FAILED,
+      user_message: 'Impossible de se connecter au serveur.',
+      retry_recommended: true
+    }
+  }
+
+  static getErrorRecommendations(errorType) {
+    const recommendations = {
+      [ERROR_TYPES.CONNECTION_FAILED]: [
+        'Vérifiez que le serveur Django est démarré',
+        'Contrôlez l\'URL de l\'API dans la configuration',
+        'Vérifiez votre connexion réseau'
+      ],
+      [ERROR_TYPES.TIMEOUT]: [
+        'Le modèle IA prend du temps - c\'est normal pour les premières prévisions',
+        'Essayez avec un horizon temporel plus court',
+        'Vérifiez les performances du serveur'
+      ],
+      [ERROR_TYPES.SERVER_ERROR]: [
+        'Consultez les logs Django pour plus de détails',
+        'Vérifiez que toutes les dépendances IA sont installées',
+        'Redémarrez le serveur Django si nécessaire'
+      ],
+      [ERROR_TYPES.INSUFFICIENT_DATA]: [
+        'Ajoutez plus de transactions dans la base de données',
+        'Essayez avec un autre groupe sanguin',
+        'Utilisez la méthode "auto" qui gère mieux les données limitées'
+      ]
+    }
+
+    return recommendations[errorType] || ['Contactez le support technique']
+  }
+}
+
+// ==================== COMPOSANT PRINCIPAL ====================
+export default function EnhancedForecastingSystem() {
   // États principaux
   const [timeRange, setTimeRange] = useState("7")
   const [bloodType, setBloodType] = useState("O+")
-  const [method, setMethod] = useState("auto")
+  const [selectedMethod, setSelectedMethod] = useState("auto")
   const [isGenerating, setIsGenerating] = useState(false)
   const [forecastData, setForecastData] = useState(null)
   const [error, setError] = useState(null)
@@ -114,6 +394,9 @@ export default function RealDataForecastingSystem() {
     modelsAvailable: {}
   })
 
+  const [availableMethods, setAvailableMethods] = useState([])
+  const [isLoadingMethods, setIsLoadingMethods] = useState(true)
+  const [systemCapabilities, setSystemCapabilities] = useState({})
   const [systemMetrics, setSystemMetrics] = useState({
     dataFreshness: 'unknown',
     lastDataUpdate: null,
@@ -122,11 +405,62 @@ export default function RealDataForecastingSystem() {
     processingSpeed: null
   })
 
-  // Fonction utilitaire pour les délais
-  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+  // Instance API
+  const api = useMemo(() => new EnhancedBloodForecastAPI(), [])
 
-  // Vérification complète de l'API avec informations système
-  const checkApiHealth = async (showLoading = true) => {
+  // Récupération des méthodes disponibles
+  const fetchAvailableMethods = useCallback(async () => {
+    setIsLoadingMethods(true)
+    try {
+      const data = await api.getAvailableMethods()
+
+      setAvailableMethods(data.available_methods || [])
+      setSystemCapabilities(data.system_capabilities || {})
+
+      setApiStatus(prev => ({
+        ...prev,
+        modelsAvailable: {
+          xgboost: data.system_capabilities?.xgboost_available || false,
+          statsmodels: data.system_capabilities?.statsmodels_available || false,
+          prophet: data.system_capabilities?.prophet_available || false,
+          sklearn: data.system_capabilities?.sklearn_available || false
+        }
+      }))
+
+      if (data.recommended_method && data.recommended_method !== selectedMethod) {
+        setSelectedMethod(data.recommended_method)
+      }
+
+      return data
+    } catch (error) {
+      console.error('❌ Erreur récupération méthodes:', error)
+      setAvailableMethods([
+        {
+          value: 'auto',
+          label: '🤖 Auto-Sélection',
+          description: 'Sélection automatique du meilleur modèle',
+          recommended: true,
+          available: true,
+          confidence_expected: '75-90%',
+          tier: 'standard'
+        },
+        {
+          value: 'linear_regression',
+          label: '📈 Régression Linéaire',
+          description: 'Modèle simple et rapide',
+          available: true,
+          confidence_expected: '60-75%',
+          tier: 'basic'
+        }
+      ])
+      return null
+    } finally {
+      setIsLoadingMethods(false)
+    }
+  }, [api, selectedMethod])
+
+  // Vérification de l'API
+  const checkApiHealth = useCallback(async (showLoading = true) => {
     if (showLoading) {
       setApiStatus(prev => ({ ...prev, isChecking: true, error: null }))
     }
@@ -134,48 +468,29 @@ export default function RealDataForecastingSystem() {
     const startTime = Date.now()
 
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout)
+      const healthData = await api.checkHealth()
+      const responseTime = Date.now() - startTime
 
-      const response = await fetch(`${API_CONFIG.baseUrl}/health/`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Use-AI-System': 'true'
-        }
+      setApiStatus({
+        isConnected: healthData.isConnected,
+        isChecking: false,
+        lastCheck: new Date(),
+        responseTime,
+        error: healthData.error || null,
+        version: healthData.version || '2.0',
+        databaseStatus: healthData.database_status || 'unknown',
+        modelsAvailable: healthData.models_available || {}
       })
 
-      clearTimeout(timeoutId)
-      const responseTime = Date.now() - startTime
-
-      if (response.ok) {
-        const healthData = await response.json()
-
-        setApiStatus({
-          isConnected: true,
-          isChecking: false,
-          lastCheck: new Date(),
-          responseTime,
-          error: null,
-          version: healthData.version || '2.0',
-          databaseStatus: healthData.database || 'connected',
-          modelsAvailable: {
-            xgboost: healthData.xgboost_available || false,
-            statsmodels: healthData.statsmodels_available || false
-          }
-        })
-
-        // Récupérer les métriques système
-        await fetchSystemMetrics()
-        return true
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      if (healthData.isConnected) {
+        await fetchAvailableMethods()
+        const metrics = await api.getSystemMetrics()
+        setSystemMetrics(metrics)
       }
+
+      return healthData.isConnected
     } catch (error) {
       const responseTime = Date.now() - startTime
-      console.error('API Health Check failed:', error.message)
 
       setApiStatus({
         isConnected: false,
@@ -189,79 +504,9 @@ export default function RealDataForecastingSystem() {
       })
       return false
     }
-  }
+  }, [api, fetchAvailableMethods])
 
-  // Récupération des métriques système
-  const fetchSystemMetrics = async () => {
-    try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/system/metrics/`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (response.ok) {
-        const metrics = await response.json()
-        setSystemMetrics(metrics)
-      }
-    } catch (error) {
-      console.error('Erreur récupération métriques:', error)
-    }
-  }
-
-  // Appel API pour génération de prévision avec vraies données
-  const callRealDataForecastApi = async (config) => {
-    const startTime = Date.now()
-
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout)
-
-      const requestBody = {
-        blood_type: config.bloodType,
-        days_ahead: parseInt(config.timeRange),
-        method: config.method,
-        force_retrain: config.forceRetrain || false
-      }
-
-      console.log('📡 Envoi requête prévision (vraies données):', requestBody)
-
-      const response = await fetch(`${API_CONFIG.baseUrl}/forecast/`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Use-AI-System': 'true', // IMPORTANT : Active le système IA
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(`API Error ${response.status}: ${errorData.message || errorData.detail || response.statusText}`)
-      }
-
-      const data = await response.json()
-      const generationTime = Date.now() - startTime
-
-      console.log('✅ Données de prévision reçues:', data)
-
-      return {
-        ...data,
-        generation_time_ms: generationTime,
-        generated_at: new Date().toISOString()
-      }
-
-    } catch (error) {
-      console.error('❌ Erreur appel API prévision:', error)
-      throw error
-    }
-  }
-
-  // Génération principale de prévision
+  // Génération de prévision
   const handleGenerateForecast = async () => {
     if (!apiStatus.isConnected) {
       setError('❌ API non connectée. Vérifiez la connexion à la base de données.')
@@ -273,10 +518,10 @@ export default function RealDataForecastingSystem() {
     setForecastData(null)
 
     try {
-      const data = await callRealDataForecastApi({
+      const data = await api.generateForecast({
         bloodType,
         timeRange,
-        method,
+        method: selectedMethod,
         forceRetrain
       })
 
@@ -285,45 +530,64 @@ export default function RealDataForecastingSystem() {
       }
 
       setForecastData(data)
-      console.log('🎯 Prévision générée avec succès')
 
-      // Réinitialiser le flag de réentraînement
       if (forceRetrain) {
         setForceRetrain(false)
       }
 
     } catch (error) {
-      console.error('💥 Échec génération prévision:', error)
-      setError(`Erreur génération: ${error.message}`)
-
-      if (error.message.includes('insufficient')) {
-        setError(`❌ Données insuffisantes pour ${bloodType}. Vérifiez que des transactions existent en base de données.`)
-      }
+      const errorInfo = ForecastingErrorHandler.handleAPIError(error)
+      setError(errorInfo.user_message)
     } finally {
       setIsGenerating(false)
     }
   }
 
-  // Forcer le réentraînement
+  // Forcer réentraînement
   const handleForceRetrain = () => {
     setForceRetrain(true)
     handleGenerateForecast()
   }
 
-  // Vérification périodique de l'API
+  // Calcul de précision
+  const calculatePrecision = useMemo(() => {
+    if (!forecastData) return null
+
+    if (forecastData.quality_metrics?.prediction_confidence) {
+      return Math.round(forecastData.quality_metrics.prediction_confidence * 100)
+    }
+
+    if (forecastData.model_performance) {
+      const mapeValues = Object.values(forecastData.model_performance)
+      if (mapeValues.length > 0 && mapeValues[0]?.mape !== undefined) {
+        const mape = mapeValues[0].mape
+        return Math.max(0, Math.round(100 - mape))
+      }
+    }
+
+    if (forecastData.predictions && Array.isArray(forecastData.predictions)) {
+      const avgConfidence = forecastData.predictions.reduce((acc, pred) =>
+        acc + (pred.confidence || 0), 0) / forecastData.predictions.length
+      return Math.round(avgConfidence * 100)
+    }
+
+    return null
+  }, [forecastData])
+
+  // Initialisation
   useEffect(() => {
     checkApiHealth()
 
     const interval = setInterval(() => {
       if (!isGenerating) {
-        checkApiHealth(false) // Sans loading pour les vérifications automatiques
+        checkApiHealth(false)
       }
-    }, 45000) // Vérifier toutes les 45 secondes
+    }, 60000)
 
     return () => clearInterval(interval)
-  }, [isGenerating])
+  }, [checkApiHealth, isGenerating])
 
-  // Transformation des données pour le graphique
+  // Données pour graphique
   const chartData = useMemo(() => {
     if (!forecastData?.predictions || !Array.isArray(forecastData.predictions)) {
       return []
@@ -334,16 +598,16 @@ export default function RealDataForecastingSystem() {
         day: '2-digit',
         month: '2-digit'
       }),
-      demand: pred.predicted_demand || 0,
+      demand: Math.round(pred.predicted_demand || 0),
       confidence: Math.round((pred.confidence || 0) * 100),
-      lower: pred.lower_bound || (pred.predicted_demand * 0.8),
-      upper: pred.upper_bound || (pred.predicted_demand * 1.2),
+      lower: Math.round(pred.lower_bound || (pred.predicted_demand * 0.8)),
+      upper: Math.round(pred.upper_bound || (pred.predicted_demand * 1.2)),
       day: `Jour ${index + 1}`
     }))
   }, [forecastData])
 
   // Métriques système enrichies
-  const enrichedSystemMetrics = [
+  const enrichedSystemMetrics = useMemo(() => [
     {
       label: "Base de Données",
       value: apiStatus.databaseStatus === 'connected' ? "Connectée" : "Déconnectée",
@@ -354,57 +618,78 @@ export default function RealDataForecastingSystem() {
     },
     {
       label: "Précision du Modèle",
-      value: forecastData?.model_performance ?
-        `${(100 - (forecastData.model_performance[Object.keys(forecastData.model_performance)[0]]?.mape || 50)).toFixed(1)}%` :
-        "N/A",
+      value: calculatePrecision ? `${calculatePrecision}%` : "N/A",
       icon: Target,
-      color: "text-blue-600 dark:text-blue-400",
-      trend: forecastData?.quality_metrics?.training_accuracy ?
-        `MAPE: ${forecastData.quality_metrics.training_accuracy.toFixed(1)}%` : "N/A",
-      description: "Précision calculée sur vraies données historiques"
+      color: calculatePrecision > 80 ? "text-green-600 dark:text-green-400" :
+             calculatePrecision > 60 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400",
+      trend: forecastData?.model_performance ?
+        `MAPE: ${Object.values(forecastData.model_performance)[0]?.mape?.toFixed(1) || 'N/A'}%` : "N/A",
+      description: "Précision calculée sur données historiques réelles"
     },
     {
       label: "Méthode IA Active",
-      value: forecastData?.method_used?.toUpperCase().replace('_', ' ') || "N/A",
+      value: (() => {
+        if (!forecastData?.method_used) return "N/A"
+        const method = availableMethods.find(m => m.value === forecastData.method_used)
+        return method ? method.label.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+               forecastData.method_used.toUpperCase().replace('_', ' ')
+      })(),
       icon: Brain,
       color: "text-purple-600 dark:text-purple-400",
-      trend: forecastData?.data_source === 'real_database' ? "Données Réelles" : "N/A",
+      trend: forecastData?.data_source === 'real_database' ? "Données Réelles" :
+             forecastData?.data_source === 'enhanced_real_database' ? "Données Enrichies" : "N/A",
       description: "Algorithme sélectionné automatiquement"
     },
     {
       label: "Données Disponibles",
-      value: systemMetrics.availableDataPoints ? `${systemMetrics.availableDataPoints} pts` : "N/A",
+      value: forecastData?.data_points_used ? `${forecastData.data_points_used} pts` :
+             systemMetrics.availableDataPoints ? `${systemMetrics.availableDataPoints} pts` : "N/A",
       icon: Activity,
       color: "text-teal-600 dark:text-teal-400",
-      trend: systemMetrics.dataFreshness || "Inconnue",
-      description: "Points de données historiques en base"
+      trend: forecastData?.quality_metrics?.data_freshness || systemMetrics.dataFreshness || "Inconnue",
+      description: "Points de données historiques utilisés"
     }
-  ]
+  ], [apiStatus, calculatePrecision, forecastData, availableMethods, systemMetrics])
 
-  // Alertes critiques basées sur les vraies prédictions
+  // Méthodes organisées
+  const organizedMethods = useMemo(() => {
+    const categories = {
+      premium: { label: "Premium", methods: [], icon: "⭐" },
+      professional: { label: "Professionnel", methods: [], icon: "🚀" },
+      standard: { label: "Standard", methods: [], icon: "✅" },
+      basic: { label: "Basique", methods: [], icon: "📊" }
+    }
+
+    availableMethods.forEach(method => {
+      const tier = method.tier || 'standard'
+      if (categories[tier]) {
+        categories[tier].methods.push(method)
+      }
+    })
+
+    return categories
+  }, [availableMethods])
+
+  // Alertes critiques
   const criticalAlerts = useMemo(() => {
     if (!forecastData?.predictions || !Array.isArray(forecastData.predictions)) {
       return []
     }
 
     const alerts = []
-
-    // Analyser les prédictions
     const highDemandDays = forecastData.predictions.filter(pred => pred.predicted_demand > 15)
     const lowConfidenceDays = forecastData.predictions.filter(pred => pred.confidence < 0.6)
 
-    // Alertes demande élevée
     if (highDemandDays.length > 0) {
       alerts.push({
         type: 'high_demand',
         severity: 'critical',
         message: `${highDemandDays.length} jour(s) avec forte demande prédite`,
-        details: highDemandDays.map(d => `${new Date(d.date).toLocaleDateString()}: ${d.predicted_demand} unités`),
+        details: highDemandDays.map(d => `${new Date(d.date).toLocaleDateString()}: ${Math.round(d.predicted_demand)} unités`),
         action: 'Prévoir stock supplémentaire'
       })
     }
 
-    // Alertes confiance faible
     if (lowConfidenceDays.length > 2) {
       alerts.push({
         type: 'low_confidence',
@@ -415,7 +700,6 @@ export default function RealDataForecastingSystem() {
       })
     }
 
-    // Alerte stock critique si disponible
     if (forecastData.contextual_insights?.stock_days_remaining < 3) {
       alerts.push({
         type: 'critical_stock',
@@ -426,18 +710,8 @@ export default function RealDataForecastingSystem() {
       })
     }
 
-    return alerts.slice(0, 3) // Limiter à 3 alertes max
+    return alerts.slice(0, 3)
   }, [forecastData])
-
-  // Méthodes disponibles filtrées selon l'API
-  const availableMethods = useMemo(() => {
-    return FORECASTING_METHODS.filter(method => {
-      if (method.value === 'auto' || method.value === 'random_forest') return true
-      if (method.value === 'xgboost') return apiStatus.modelsAvailable.xgboost
-      if (method.value === 'arima' || method.value === 'stl_arima') return apiStatus.modelsAvailable.statsmodels
-      return false
-    })
-  }, [apiStatus.modelsAvailable])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -478,11 +752,17 @@ export default function RealDataForecastingSystem() {
               )}
               <div className="flex items-center">
                 <Badge variant="outline" className={`${
-                  forecastData?.data_source === 'real_database' 
+                  forecastData?.data_source?.includes('real') 
                     ? 'bg-green-50 text-green-700 border-green-200' 
                     : 'bg-gray-50 text-gray-700 border-gray-200'
                 }`}>
-                  {forecastData?.data_source === 'real_database' ? '✅ Données Réelles' : '⏳ En Attente'}
+                  {forecastData?.data_source?.includes('real') ? '✅ Données Réelles' : '⏳ En Attente'}
+                </Badge>
+              </div>
+              <div className="flex items-center">
+                <Badge variant="outline" className="border-purple-200 text-purple-700">
+                  <Brain className="w-3 h-3 mr-1" />
+                  {availableMethods.length} Méthodes IA
                 </Badge>
               </div>
             </div>
@@ -598,7 +878,7 @@ export default function RealDataForecastingSystem() {
               Configuration des Prévisions IA
             </CardTitle>
             <CardDescription className="text-slate-600 dark:text-slate-400">
-              Paramètres de prédiction basés sur vos données réelles de transactions
+              Paramètres de prédiction avec {availableMethods.length} méthodes IA disponibles
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -638,46 +918,76 @@ export default function RealDataForecastingSystem() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">
+                <label className="text-sm font-medium mb-2 block flex items-center">
                   Algorithme IA
-                  <Info className="w-3 h-3 inline ml-1 text-gray-400" />
+                  <Info className="w-3 h-3 ml-1 text-gray-400" />
+                  {isLoadingMethods && (
+                    <RefreshCw className="w-3 h-3 ml-2 animate-spin text-blue-500" />
+                  )}
                 </label>
-                <Select value={method} onValueChange={setMethod}>
+                <Select value={selectedMethod} onValueChange={setSelectedMethod}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Chargement des méthodes..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableMethods.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{m.label}</span>
-                          {m.recommended && (
-                            <Badge variant="secondary" className="ml-2 text-xs">
-                              Recommandé
-                            </Badge>
-                          )}
+                    {Object.entries(organizedMethods).map(([tier, category]) => {
+                      if (category.methods.length === 0) return null
+                      return (
+                        <div key={tier}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
+                            {category.icon} {category.label} ({category.methods.length})
+                          </div>
+                          {category.methods.map((method) => (
+                            <SelectItem
+                              key={method.value}
+                              value={method.value}
+                              className={`${!method.available ? 'opacity-50' : ''}`}
+                              disabled={!method.available}
+                            >
+                              <div className="flex items-center justify-between w-full">
+                                <span className="flex-1">{method.label}</span>
+                                <div className="flex items-center space-x-1 ml-2">
+                                  {method.recommended && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Recommandé
+                                    </Badge>
+                                  )}
+                                  {method.confidence_expected && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {method.confidence_expected}
+                                    </Badge>
+                                  )}
+                                  {!method.available && (
+                                    <Badge variant="outline" className="text-xs text-red-500 border-red-200">
+                                      Indisponible
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
                         </div>
-                      </SelectItem>
-                    ))}
+                      )
+                    })}
                   </SelectContent>
                 </Select>
-                {method !== 'auto' && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {availableMethods.find(m => m.value === method)?.description}
-                  </p>
-                )}
               </div>
 
               <div className="flex items-end">
                 <Button
                   onClick={handleGenerateForecast}
-                  disabled={isGenerating || !apiStatus.isConnected}
+                  disabled={isGenerating || !apiStatus.isConnected || isLoadingMethods}
                   className="w-full bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600"
                 >
                   {isGenerating ? (
                     <>
                       <Timer className="w-4 h-4 mr-2 animate-pulse" />
                       Analyse en cours...
+                    </>
+                  ) : isLoadingMethods ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Chargement...
                     </>
                   ) : (
                     <>
@@ -689,39 +999,47 @@ export default function RealDataForecastingSystem() {
               </div>
             </div>
 
-            {/* Informations sur la méthode sélectionnée */}
-            {method !== 'auto' && (
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                {(() => {
-                  const selectedMethod = availableMethods.find(m => m.value === method)
-                  return selectedMethod ? (
-                    <div className="text-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-blue-800 dark:text-blue-200">
-                          {selectedMethod.label}
-                        </span>
-                        <div className="flex space-x-2">
-                          <Badge variant="outline" className="text-xs">
-                            {selectedMethod.complexity}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {selectedMethod.accuracy}
-                          </Badge>
-                        </div>
-                      </div>
-                      <p className="text-blue-700 dark:text-blue-300 mb-1">
-                        {selectedMethod.description}
-                      </p>
-                      {selectedMethod.bestFor && (
-                        <p className="text-xs text-blue-600 dark:text-blue-400">
-                          <strong>Optimal pour:</strong> {selectedMethod.bestFor}
-                        </p>
-                      )}
-                    </div>
-                  ) : null
-                })()}
+            {/* Indicateurs de capacités système */}
+            <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+              <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center">
+                <Server className="w-4 h-4 mr-2" />
+                Capacités du Système IA
+              </h5>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    apiStatus.modelsAvailable.xgboost ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
+                  <span className={apiStatus.modelsAvailable.xgboost ? 'text-green-700' : 'text-red-700'}>
+                    XGBoost
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    apiStatus.modelsAvailable.statsmodels ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
+                  <span className={apiStatus.modelsAvailable.statsmodels ? 'text-green-700' : 'text-red-700'}>
+                    ARIMA/STL
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    apiStatus.modelsAvailable.prophet ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
+                  <span className={apiStatus.modelsAvailable.prophet ? 'text-green-700' : 'text-red-700'}>
+                    Prophet
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    apiStatus.modelsAvailable.sklearn ? 'bg-green-500' : 'bg-red-500'
+                  }`}></div>
+                  <span className={apiStatus.modelsAvailable.sklearn ? 'text-green-700' : 'text-red-700'}>
+                    Scikit-Learn
+                  </span>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
@@ -792,15 +1110,19 @@ export default function RealDataForecastingSystem() {
                 </div>
                 <div className="flex items-center space-x-3">
                   <Badge className={`${
-                    forecastData.data_source === 'real_database'
+                    forecastData.data_source?.includes('real')
                       ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
                       : 'bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200'
                   }`}>
-                    {forecastData.method_used?.toUpperCase().replace('_', ' ') || 'UNKNOWN'}
+                    {(() => {
+                      const method = availableMethods.find(m => m.value === forecastData.method_used)
+                      return method ? method.label.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                             forecastData.method_used?.toUpperCase().replace('_', ' ') || 'UNKNOWN'
+                    })()}
                   </Badge>
-                  {forecastData.quality_metrics?.prediction_confidence && (
+                  {calculatePrecision && (
                     <Badge variant="outline" className="border-blue-300 text-blue-700">
-                      Confiance: {Math.round(forecastData.quality_metrics.prediction_confidence * 100)}%
+                      Précision: {calculatePrecision}%
                     </Badge>
                   )}
                 </div>
@@ -808,15 +1130,10 @@ export default function RealDataForecastingSystem() {
               <CardDescription className="flex items-center justify-between">
                 <span>
                   Prédictions générées le {new Date(forecastData.generated_at).toLocaleString()}
-                  {forecastData.data_source === 'real_database' && (
+                  {forecastData.data_source?.includes('real') && (
                     <span className="text-green-600 ml-2">• Basé sur vos vraies données</span>
                   )}
                 </span>
-                {forecastData.generation_time_ms && (
-                  <span className="text-xs text-muted-foreground">
-                    Généré en {(forecastData.generation_time_ms / 1000).toFixed(2)}s
-                  </span>
-                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -856,6 +1173,8 @@ export default function RealDataForecastingSystem() {
                     formatter={(value, name) => {
                       if (name === 'demand') return [`${value} unités`, 'Demande Prédite']
                       if (name === 'confidence') return [`${value}%`, 'Confiance']
+                      if (name === 'lower') return [`${value} unités`, 'Borne Inférieure']
+                      if (name === 'upper') return [`${value} unités`, 'Borne Supérieure']
                       return [value, name]
                     }}
                     labelFormatter={(label) => `Date: ${label}`}
@@ -954,11 +1273,11 @@ export default function RealDataForecastingSystem() {
                 Prêt pour l'Analyse IA
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-md mb-4">
-                Cliquez sur "Générer Prévision" pour analyser vos données de transactions et obtenir des prédictions personnalisées.
+                {availableMethods.length} méthodes IA disponibles. Cliquez sur "Générer Prévision" pour analyser vos données.
               </p>
               <Button
                 onClick={handleGenerateForecast}
-                disabled={!apiStatus.isConnected}
+                disabled={!apiStatus.isConnected || isLoadingMethods}
                 className="bg-gradient-to-r from-blue-500 to-teal-500"
               >
                 <Sparkles className="w-4 h-4 mr-2" />
@@ -968,7 +1287,7 @@ export default function RealDataForecastingSystem() {
           </Card>
         )}
 
-        {/* Détails des prédictions enrichis */}
+        {/* Détails des prédictions */}
         {forecastData?.predictions && Array.isArray(forecastData.predictions) && (
           <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-0 shadow-lg">
             <CardHeader>
@@ -978,41 +1297,20 @@ export default function RealDataForecastingSystem() {
                   Analyse Détaillée des Prédictions
                 </div>
                 <div className="flex items-center space-x-2">
-                  {forecastData.contextual_insights?.current_stock && (
-                    <Badge variant="outline" className="border-blue-300 text-blue-700">
-                      <Package className="w-3 h-3 mr-1" />
-                      Stock: {forecastData.contextual_insights.current_stock} unités
-                    </Badge>
-                  )}
-                  {forecastData.contextual_insights?.stock_days_remaining && (
-                    <Badge variant="outline" className={`${
-                      forecastData.contextual_insights.stock_days_remaining < 3
-                        ? 'border-red-300 text-red-700 bg-red-50'
-                        : forecastData.contextual_insights.stock_days_remaining < 7
-                        ? 'border-yellow-300 text-yellow-700 bg-yellow-50'
-                        : 'border-green-300 text-green-700 bg-green-50'
-                    }`}>
-                      <Timer className="w-3 h-3 mr-1" />
-                      {forecastData.contextual_insights.stock_days_remaining} jours restants
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className="border-purple-300 text-purple-700">
+                    <Target className="w-3 h-3 mr-1" />
+                    Précision: {calculatePrecision || 'N/A'}%
+                  </Badge>
                 </div>
               </CardTitle>
               <CardDescription>
-                <div className="flex items-center justify-between">
-                  <span>Prédictions détaillées avec analyse de confiance et recommandations</span>
-                  {forecastData.model_performance && (
-                    <span className="text-sm">
-                      Précision modèle: {(100 - (Object.values(forecastData.model_performance)[0]?.mape || 50)).toFixed(1)}%
-                    </span>
-                  )}
-                </div>
+                Prédictions détaillées avec analyse de confiance et recommandations
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {forecastData.predictions.map((prediction, index) => {
-                  const demand = prediction.predicted_demand || 0
+                  const demand = Math.round(prediction.predicted_demand || 0)
                   const confidence = prediction.confidence || 0
                   const isHighDemand = demand > 15
                   const isMediumDemand = demand > 8 && demand <= 15
@@ -1067,7 +1365,7 @@ export default function RealDataForecastingSystem() {
                             <div className="flex items-center space-x-2">
                               {(prediction.lower_bound !== undefined && prediction.upper_bound !== undefined) && (
                                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  [{prediction.lower_bound}-{prediction.upper_bound}]
+                                  [{Math.round(prediction.lower_bound)}-{Math.round(prediction.upper_bound)}]
                                 </span>
                               )}
                               <span className="font-semibold text-blue-600 dark:text-blue-400">
@@ -1114,32 +1412,6 @@ export default function RealDataForecastingSystem() {
                               </div>
                             </div>
                           </div>
-
-                          {/* Détails techniques de la méthode */}
-                          {prediction.method_details && (
-                            <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
-                              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                {prediction.seasonal_component !== undefined && (
-                                  <div className="flex justify-between">
-                                    <span>Composante saisonnière:</span>
-                                    <span className="font-mono">{prediction.seasonal_component}</span>
-                                  </div>
-                                )}
-                                {prediction.trend_component !== undefined && (
-                                  <div className="flex justify-between">
-                                    <span>Tendance:</span>
-                                    <span className="font-mono">{prediction.trend_component}</span>
-                                  </div>
-                                )}
-                                {prediction.method_details.features_used && (
-                                  <div className="flex justify-between">
-                                    <span>Features utilisées:</span>
-                                    <span className="font-mono">{prediction.method_details.features_used}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
 
                           {/* Analyse contextuelle du jour */}
                           <div className="pt-2 border-t border-slate-200 dark:border-slate-600">
@@ -1200,6 +1472,40 @@ export default function RealDataForecastingSystem() {
                   )
                 })}
               </div>
+
+              {/* Résumé des prédictions */}
+              <div className="mt-6 p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-slate-700 rounded-lg">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-3 flex items-center">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Résumé de la Période
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {Math.round(forecastData.predictions.reduce((acc, p) => acc + (p.predicted_demand || 0), 0))}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">Total Demande</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {Math.round(forecastData.predictions.reduce((acc, p) => acc + (p.confidence || 0), 0) / forecastData.predictions.length * 100)}%
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">Confiance Moyenne</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {forecastData.predictions.filter(p => p.predicted_demand > 15).length}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">Jours Critiques</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {Math.round(Math.max(...forecastData.predictions.map(p => p.predicted_demand || 0)))}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">Pic Maximum</div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1215,7 +1521,7 @@ export default function RealDataForecastingSystem() {
                   Insights IA Avancés
                 </CardTitle>
                 <CardDescription>
-                  Analyse intelligente basée sur vos données réelles
+                  Analyse intelligente basée sur {forecastData.data_points_used || 'vos'} points de données réelles
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1232,7 +1538,7 @@ export default function RealDataForecastingSystem() {
                       return maxPred ? (
                         <>
                           Le {new Date(maxPred.date).toLocaleDateString('fr-FR')} avec{' '}
-                          <strong>{maxPred.predicted_demand} unités</strong>
+                          <strong>{Math.round(maxPred.predicted_demand)} unités</strong>
                           {' '}(confiance: {Math.round(maxPred.confidence * 100)}%)
                         </>
                       ) : 'Aucun pic significatif détecté'
@@ -1258,9 +1564,6 @@ export default function RealDataForecastingSystem() {
                         <>
                           Tendance <strong>{trend}</strong>
                           {change > 0 && ` (${change > firstDemand * 0.1 ? 'significative' : 'légère'})`}
-                          {forecastData.contextual_insights?.recent_trend && (
-                            <> • Tendance récente: {forecastData.contextual_insights.recent_trend.toFixed(1)} unités/jour</>
-                          )}
                         </>
                       )
                     })()}
@@ -1280,47 +1583,60 @@ export default function RealDataForecastingSystem() {
                         (forecastData.predictions?.length || 1) * 100)}%
                       </span>
                     </div>
+                    <div className="flex justify-between">
+                      <span>Précision calculée:</span>
+                      <span className="font-semibold">
+                        {calculatePrecision || 'N/A'}%
+                      </span>
+                    </div>
                     {forecastData.model_performance && (
                       <div className="flex justify-between">
-                        <span>Précision MAPE:</span>
+                        <span>Erreur MAPE:</span>
                         <span className="font-semibold">
                           {Object.values(forecastData.model_performance)[0]?.mape?.toFixed(1) || 'N/A'}%
                         </span>
                       </div>
                     )}
-                    {forecastData.quality_metrics?.data_freshness && (
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/50 dark:to-blue-950/50 rounded-lg">
+                  <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-2 flex items-center">
+                    <Brain className="w-4 h-4 mr-2" />
+                    Méthode IA Utilisée
+                  </h4>
+                  <div className="text-sm text-indigo-700 dark:text-indigo-300 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Algorithme:</span>
+                      <span className="font-semibold">
+                        {(() => {
+                          const method = availableMethods.find(m => m.value === forecastData.method_used)
+                          return method ? method.label.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                                 forecastData.method_used?.toUpperCase().replace('_', ' ') || 'N/A'
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Source des données:</span>
+                      <span className="font-semibold">
+                        {forecastData.data_source?.includes('real') ? 'Base de données réelle' :
+                         forecastData.data_source?.includes('enhanced') ? 'Données enrichies' : 'N/A'}
+                      </span>
+                    </div>
+                    {forecastData.data_points_used && (
                       <div className="flex justify-between">
-                        <span>Fraîcheur des données:</span>
-                        <span className="font-semibold">{forecastData.quality_metrics.data_freshness}</span>
+                        <span>Points utilisés:</span>
+                        <span className="font-semibold">{forecastData.data_points_used} points</span>
+                      </div>
+                    )}
+                    {forecastData.generation_time_ms && (
+                      <div className="flex justify-between">
+                        <span>Temps de génération:</span>
+                        <span className="font-semibold">{(forecastData.generation_time_ms / 1000).toFixed(2)}s</span>
                       </div>
                     )}
                   </div>
                 </div>
-
-                {forecastData.contextual_insights && (
-                  <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/50 dark:to-blue-950/50 rounded-lg">
-                    <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-2 flex items-center">
-                      <Package className="w-4 h-4 mr-2" />
-                      Contexte Stock
-                    </h4>
-                    <div className="text-sm text-indigo-700 dark:text-indigo-300 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Stock actuel:</span>
-                        <span className="font-semibold">{forecastData.contextual_insights.current_stock} unités</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Durée estimée:</span>
-                        <span className={`font-semibold ${
-                          forecastData.contextual_insights.stock_days_remaining < 3 ? 'text-red-600' :
-                          forecastData.contextual_insights.stock_days_remaining < 7 ? 'text-orange-600' :
-                          'text-green-600'
-                        }`}>
-                          {forecastData.contextual_insights.stock_days_remaining} jours
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -1332,145 +1648,64 @@ export default function RealDataForecastingSystem() {
                   Recommandations Intelligentes
                 </CardTitle>
                 <CardDescription>
-                  Actions suggérées basées sur l'analyse IA
+                  Actions suggérées basées sur l'analyse IA ({forecastData.method_used || 'méthode avancée'})
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {forecastData.optimization_recommendations?.length > 0 ? (
-                  forecastData.optimization_recommendations.map((rec, index) => (
-                    <div
-                      key={index}
-                      className={`p-4 rounded-lg border-l-4 ${
-                        rec.priority === 'critical' ? 'border-l-red-500 bg-red-50 dark:bg-red-950/20' :
-                        rec.priority === 'high' ? 'border-l-orange-500 bg-orange-50 dark:bg-orange-950/20' :
-                        rec.priority === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' :
-                        'border-l-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {rec.type?.replace('_', ' ') || 'Recommandation'}
-                        </span>
-                        <Badge variant="outline" className={`${
-                          rec.priority === 'critical' ? 'border-red-300 text-red-700 bg-red-100' :
-                          rec.priority === 'high' ? 'border-orange-300 text-orange-700 bg-orange-100' :
-                          rec.priority === 'medium' ? 'border-yellow-300 text-yellow-700 bg-yellow-100' :
-                          'border-blue-300 text-blue-700 bg-blue-100'
-                        }`}>
-                          {rec.priority}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{rec.message}</p>
-                      {rec.action && (
-                        <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          👉 Action: {rec.action}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="space-y-3">
-                    {/* Recommandations générées automatiquement */}
-                    <div className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 rounded-lg">
-                      <h5 className="font-medium text-teal-800 dark:text-teal-200 mb-2 flex items-center">
-                        <Shield className="w-4 h-4 mr-2" />
-                        Recommandations Automatiques
-                      </h5>
-                      <ul className="text-sm text-teal-700 dark:text-teal-300 space-y-1">
-                        <li>• Surveiller les niveaux de stock pour {bloodType}</li>
-                        <li>• Planifier les collectes selon la demande prédite</li>
-                        <li>• Optimiser la rotation des stocks</li>
-                        {forecastData.predictions?.some(p => p.predicted_demand > 15) && (
-                          <li className="font-medium">• ⚠️ Préparer du stock supplémentaire pour les pics prévus</li>
-                        )}
-                        {forecastData.predictions?.some(p => p.confidence < 0.6) && (
-                          <li className="font-medium">• 👁️ Surveillance renforcée requise (confiance variable)</li>
-                        )}
-                      </ul>
-                    </div>
-
-                    {/* Recommandations contextuelle basées sur le stock */}
-                    {forecastData.contextual_insights?.current_stock !== undefined && (
-                      <div className={`p-4 rounded-lg ${
-                        forecastData.contextual_insights.stock_days_remaining < 3
-                          ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
-                          : forecastData.contextual_insights.stock_days_remaining < 7
-                          ? 'bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800'
-                          : 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
-                      }`}>
-                        <h5 className={`font-medium mb-2 flex items-center ${
-                          forecastData.contextual_insights.stock_days_remaining < 3
-                            ? 'text-red-800 dark:text-red-200'
-                            : forecastData.contextual_insights.stock_days_remaining < 7
-                            ? 'text-yellow-800 dark:text-yellow-200'
-                            : 'text-green-800 dark:text-green-200'
-                        }`}>
-                          <Package className="w-4 h-4 mr-2" />
-                          Gestion du Stock - {bloodType}
-                        </h5>
-                        <div className={`txt-sm ${
-                          forecastData.contextual_insights.stock_days_remaining < 3
-                            ? 'text-red-700 dark:text-red-300'
-                            : forecastData.contextual_insights.stock_days_remaining < 7
-                            ? 'text-yellow-700 dark:text-yellow-300'
-                            : 'text-green-700 dark:text-green-300'
-                        }`}>
-                          {forecastData.contextual_insights.stock_days_remaining < 3 ? (
-                            <>
-                              <p className="font-medium mb-1">🚨 URGENT - Stock critique!</p>
-                              <p>• Organiser une collecte d'urgence dans les 24h</p>
-                              <p>• Contacter les donneurs réguliers</p>
-                              <p>• Vérifier les stocks d'autres groupes compatibles</p>
-                            </>
-                          ) : forecastData.contextual_insights.stock_days_remaining < 7 ? (
-                            <>
-                              <p className="font-medium mb-1">⚠️ Stock à surveiller</p>
-                              <p>• Programmer une collecte dans les 2-3 prochains jours</p>
-                              <p>• Préparer la communication aux donneurs</p>
-                              <p>• Optimiser l'utilisation des unités les plus anciennes</p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="font-medium mb-1">✅ Stock optimal</p>
-                              <p>• Maintenir le rythme de collecte actuel</p>
-                              <p>• Surveiller les prévisions pour anticiper</p>
-                              <p>• Optimiser la planification des donneurs</p>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                <div className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 rounded-lg">
+                  <h5 className="font-medium text-teal-800 dark:text-teal-200 mb-2 flex items-center">
+                    <Shield className="w-4 h-4 mr-2" />
+                    Recommandations Automatiques IA
+                  </h5>
+                  <ul className="text-sm text-teal-700 dark:text-teal-300 space-y-1">
+                    <li>• Surveiller les niveaux de stock pour {bloodType}</li>
+                    <li>• Planifier les collectes selon la demande prédite</li>
+                    <li>• Optimiser la rotation des stocks</li>
+                    {forecastData.predictions?.some(p => p.predicted_demand > 15) && (
+                      <li className="font-medium">• ⚠️ Préparer du stock supplémentaire pour les pics prévus</li>
                     )}
+                    {forecastData.predictions?.some(p => p.confidence < 0.6) && (
+                      <li className="font-medium">• 👁️ Surveillance renforcée requise (confiance variable)</li>
+                    )}
+                    <li>• 📊 Modèle utilisé: {(() => {
+                      const method = availableMethods.find(m => m.value === forecastData.method_used)
+                      return method ? method.label.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                             forecastData.method_used?.replace('_', ' ') || 'Méthode avancée'
+                    })()} - Précision {calculatePrecision || 'N/A'}%</li>
+                  </ul>
+                </div>
 
-                    {/* Recommandations basées sur la méthode utilisée */}
-                    <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30 rounded-lg">
-                      <h5 className="font-medium text-purple-800 dark:text-purple-200 mb-2 flex items-center">
-                        <Brain className="w-4 h-4 mr-2" />
-                        Optimisation du Modèle - {forecastData.method_used?.toUpperCase().replace('_', ' ')}
-                      </h5>
-                      <div className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
-                        {forecastData.method_used === 'emergency_fallback_real_data' ? (
-                          <>
-                            <p>• ⚠️ Données insuffisantes détectées</p>
-                            <p>• 📊 Augmenter la fréquence d'enregistrement des transactions</p>
-                            <p>• 🔄 Réentraîner le modèle dès que plus de données sont disponibles</p>
-                          </>
-                        ) : forecastData.model_performance && Object.values(forecastData.model_performance)[0]?.mape > 25 ? (
-                          <>
-                            <p>• 📈 Précision du modèle à améliorer</p>
-                            <p>• 🔄 Réentraînement recommandé avec plus de données</p>
-                            <p>• 👁️ Validation manuelle des prédictions conseillée</p>
-                          </>
-                        ) : (
-                          <>
-                            <p>• ✅ Modèle performant - confiance élevée</p>
-                            <p>• 📊 Continuer l'enregistrement régulier des données</p>
-                            <p>• 🎯 Utiliser les prédictions pour l'optimisation</p>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30 rounded-lg">
+                  <h5 className="font-medium text-purple-800 dark:text-purple-200 mb-2 flex items-center">
+                    <Brain className="w-4 h-4 mr-2" />
+                    Optimisation du Modèle
+                  </h5>
+                  <div className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
+                    {forecastData.method_used?.includes('fallback') ? (
+                      <>
+                        <p>• ⚠️ Données insuffisantes détectées</p>
+                        <p>• 📊 Augmenter la fréquence d'enregistrement des transactions</p>
+                        <p>• 🔄 Réentraîner le modèle dès que plus de données sont disponibles</p>
+                      </>
+                    ) : forecastData.model_performance && Object.values(forecastData.model_performance)[0]?.mape > 25 ? (
+                      <>
+                        <p>• 📈 Précision du modèle à améliorer</p>
+                        <p>• 🔄 Réentraînement recommandé avec plus de données</p>
+                        <p>• 👁️ Validation manuelle des prédictions conseillée</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>• ✅ Modèle performant - confiance élevée ({calculatePrecision || 'N/A'}%)</p>
+                        <p>• 📊 Continuer l'enregistrement régulier des données</p>
+                        <p>• 🎯 Utiliser les prédictions pour l'optimisation</p>
+                        <p>• 🚀 Méthode {(() => {
+                          const method = availableMethods.find(m => m.value === forecastData.method_used)
+                          return method?.tier || 'standard'
+                        })()} active avec {forecastData.data_points_used || 'N/A'} points</p>
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1505,12 +1740,10 @@ export default function RealDataForecastingSystem() {
                         <span>Latence: {apiStatus.responseTime}ms</span>
                       </div>
                     )}
-                    {forecastData?.generation_time_ms && (
-                      <div className="flex items-center">
-                        <Cpu className="w-3 h-3 mr-1" />
-                        <span>Génération: {(forecastData.generation_time_ms / 1000).toFixed(1)}s</span>
-                      </div>
-                    )}
+                    <div className="flex items-center">
+                      <Brain className="w-3 h-3 mr-1" />
+                      <span>{availableMethods.length} méthodes IA</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1535,25 +1768,13 @@ export default function RealDataForecastingSystem() {
                     API v{apiStatus.version}
                   </Badge>
                 )}
-                <div className="flex items-center space-x-2 text-xs">
-                  {apiStatus.modelsAvailable.xgboost && (
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                      XGBoost ✓
-                    </Badge>
-                  )}
-                  {apiStatus.modelsAvailable.statsmodels && (
-                    <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">
-                      ARIMA/STL ✓
-                    </Badge>
-                  )}
-                </div>
               </div>
             </div>
 
             {/* Métrique de santé du système */}
             {forecastData && (
               <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
                   <div>
                     <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
                       {forecastData.predictions?.length || 0}
@@ -1562,9 +1783,7 @@ export default function RealDataForecastingSystem() {
                   </div>
                   <div>
                     <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {forecastData.model_performance ?
-                        `${(100 - (Object.values(forecastData.model_performance)[0]?.mape || 50)).toFixed(0)}%` :
-                        'N/A'}
+                      {calculatePrecision || 'N/A'}%
                     </div>
                     <div className="text-xs text-slate-600 dark:text-slate-400">Précision</div>
                   </div>
@@ -1577,15 +1796,322 @@ export default function RealDataForecastingSystem() {
                   </div>
                   <div>
                     <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
-                      {forecastData.data_source === 'real_database' ? '✅' : '⏳'}
+                      {forecastData.data_source?.includes('real') ? '✅' : '⏳'}
                     </div>
                     <div className="text-xs text-slate-600 dark:text-slate-400">Données</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                      {(() => {
+                        const method = availableMethods.find(m => m.value === forecastData.method_used)
+                        return method?.tier?.charAt(0).toUpperCase() || '?'
+                      })()}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">Tier IA</div>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Statut des dépendances */}
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
+              <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Statut des Dépendances IA
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className={`p-2 rounded text-center ${
+                  apiStatus.modelsAvailable.xgboost 
+                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800' 
+                    : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
+                }`}>
+                  <div className={`text-xs font-medium ${
+                    apiStatus.modelsAvailable.xgboost ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                  }`}>
+                    XGBoost
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {apiStatus.modelsAvailable.xgboost ? 'Installé' : 'Manquant'}
+                  </div>
+                </div>
+                <div className={`p-2 rounded text-center ${
+                  apiStatus.modelsAvailable.statsmodels 
+                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800' 
+                    : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
+                }`}>
+                  <div className={`text-xs font-medium ${
+                    apiStatus.modelsAvailable.statsmodels ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                  }`}>
+                    StatsModels
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {apiStatus.modelsAvailable.statsmodels ? 'Installé' : 'Manquant'}
+                  </div>
+                </div>
+                <div className={`p-2 rounded text-center ${
+                  apiStatus.modelsAvailable.prophet 
+                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800' 
+                    : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
+                }`}>
+                  <div className={`text-xs font-medium ${
+                    apiStatus.modelsAvailable.prophet ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                  }`}>
+                    Prophet
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {apiStatus.modelsAvailable.prophet ? 'Installé' : 'Manquant'}
+                  </div>
+                </div>
+                <div className={`p-2 rounded text-center ${
+                  apiStatus.modelsAvailable.sklearn 
+                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800' 
+                    : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
+                }`}>
+                  <div className={`text-xs font-medium ${
+                    apiStatus.modelsAvailable.sklearn ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                  }`}>
+                    Scikit-Learn
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {apiStatus.modelsAvailable.sklearn ? 'Installé' : 'Manquant'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
+
+        {/* Section d'export et actions avancées */}
+        {forecastData && (
+          <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Download className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+                  Actions et Export
+                </div>
+                <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
+                  Données Disponibles
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Exportez vos prédictions et gérez les analyses pour une utilisation externe
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const exportData = {
+                      metadata: {
+                        generated_at: forecastData.generated_at,
+                        blood_type: bloodType,
+                        time_range: timeRange,
+                        method_used: forecastData.method_used,
+                        precision: calculatePrecision,
+                        data_points_used: forecastData.data_points_used
+                      },
+                      predictions: forecastData.predictions,
+                      summary: forecastData.summary_metrics,
+                      model_performance: forecastData.model_performance
+                    }
+
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                      type: 'application/json'
+                    })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `forecast_${bloodType}_${new Date().toISOString().split('T')[0]}.json`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="hover:scale-105 transition-all duration-200"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export JSON
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const csvContent = [
+                      ['Date', 'Demande Prédite', 'Confiance (%)', 'Borne Inf', 'Borne Sup'],
+                      ...forecastData.predictions.map(pred => [
+                        pred.date,
+                        Math.round(pred.predicted_demand || 0),
+                        Math.round((pred.confidence || 0) * 100),
+                        Math.round(pred.lower_bound || 0),
+                        Math.round(pred.upper_bound || 0)
+                      ])
+                    ].map(row => row.join(',')).join('\n')
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `forecast_${bloodType}_${new Date().toISOString().split('T')[0]}.csv`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="hover:scale-105 transition-all duration-200"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(forecastData.predictions, null, 2))
+                      .then(() => {
+                        alert('Données copiées dans le presse-papiers!')
+                      })
+                      .catch(err => {
+                        console.error('Erreur copie:', err)
+                      })
+                  }}
+                  className="hover:scale-105 transition-all duration-200"
+                >
+                  <Info className="w-4 h-4 mr-2" />
+                  Copier JSON
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const reportContent = `
+RAPPORT DE PRÉVISION IA - ${bloodType}
+=====================================
+
+Généré le: ${new Date(forecastData.generated_at).toLocaleString()}
+Méthode utilisée: ${forecastData.method_used}
+Précision du modèle: ${calculatePrecision || 'N/A'}%
+Points de données: ${forecastData.data_points_used || 'N/A'}
+
+RÉSUMÉ EXÉCUTIF:
+- Demande totale prédite: ${forecastData.summary_metrics?.total_demand || 'N/A'} unités
+- Confiance moyenne: ${forecastData.summary_metrics?.average_confidence || 'N/A'}%
+- Jours à forte demande: ${forecastData.summary_metrics?.high_demand_days || 0}
+- Pic maximum: ${forecastData.summary_metrics?.max_demand || 'N/A'} unités
+- Tendance: ${forecastData.summary_metrics?.trend || 'N/A'}
+
+PRÉDICTIONS DÉTAILLÉES:
+${forecastData.predictions?.map((pred, i) => 
+  `Jour ${i+1} (${pred.date}): ${Math.round(pred.predicted_demand || 0)} unités (${Math.round((pred.confidence || 0) * 100)}% confiance)`
+).join('\n') || 'Aucune prédiction disponible'}
+
+RECOMMANDATIONS:
+- Surveiller les niveaux de stock pour ${bloodType}
+- Planifier les collectes selon la demande prédite
+${forecastData.predictions?.some(p => p.predicted_demand > 15) ? '- ⚠️ ATTENTION: Pics de demande détectés - prévoir stock supplémentaire' : ''}
+${forecastData.predictions?.some(p => p.confidence < 0.6) ? '- 👁️ Surveillance renforcée requise (confiance variable sur certains jours)' : ''}
+
+Ce rapport a été généré automatiquement par le Système de Prévision IA.
+                    `
+
+                    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8;' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `rapport_forecast_${bloodType}_${new Date().toISOString().split('T')[0]}.txt`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="hover:scale-105 transition-all duration-200"
+                >
+                  <PlayCircle className="w-4 h-4 mr-2" />
+                  Rapport Complet
+                </Button>
+              </div>
+
+              {/* Statistiques d'export */}
+              <div className="mt-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 rounded-lg">
+                <h5 className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">
+                  📊 Statistiques de l'Export
+                </h5>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="text-center">
+                    <div className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      {forecastData.predictions?.length || 0}
+                    </div>
+                    <div className="text-indigo-600 dark:text-indigo-400">Points de données</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      {forecastData.generation_time_ms ? `${(forecastData.generation_time_ms / 1000).toFixed(1)}s` : 'N/A'}
+                    </div>
+                    <div className="text-indigo-600 dark:text-indigo-400">Temps génération</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      {new Date(forecastData.generated_at).toLocaleDateString()}
+                    </div>
+                    <div className="text-indigo-600 dark:text-indigo-400">Date création</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      {forecastData.data_source?.includes('real') ? 'Production' : 'Test'}
+                    </div>
+                    <div className="text-indigo-600 dark:text-indigo-400">Environnement</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Footer avec informations techniques */}
+        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div className="flex items-center space-x-4 text-sm text-slate-500 dark:text-slate-400">
+              <div className="flex items-center">
+                <Brain className="w-4 h-4 mr-1" />
+                <span>Système de Prévision IA v2.0</span>
+              </div>
+              <div className="flex items-center">
+                <Database className="w-4 h-4 mr-1" />
+                <span>Données Réelles en Production</span>
+              </div>
+              <div className="flex items-center">
+                <Server className="w-4 h-4 mr-1" />
+                <span>API Django Backend</span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Badge variant="outline" className="text-xs">
+                {availableMethods.length} Algorithmes IA
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                React Frontend
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                Recharts Visualisation
+              </Badge>
+              {forecastData && (
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                  Prévision Active
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 text-center">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              🧬 Système professionnel de gestion des stocks sanguins avec intelligence artificielle
+              • Prédictions basées sur vos vraies données de transactions
+              • Algorithmes d'apprentissage automatique adaptatifs
+              • Interface moderne et intuitive pour la prise de décision
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )
