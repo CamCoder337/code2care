@@ -128,6 +128,22 @@ FORECASTING_SYSTEM = safe_import_forecasting()
 
 logger = logging.getLogger(__name__)
 
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+    logger.info("✅ XGBoost importé avec succès")
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    logger.warning("⚠️ XGBoost non disponible")
+
+try:
+    import statsmodels.api as sm
+    from statsmodels.tsa.arima.model import ARIMA
+    STATSMODELS_AVAILABLE = True
+    logger.info("✅ Statsmodels importé avec succès")
+except ImportError:
+    STATSMODELS_AVAILABLE = False
+    logger.warning("⚠️ Statsmodels non disponible")
 
 
 
@@ -3266,22 +3282,58 @@ def ai_system_health(request):
 
 # ==================== SYSTEM METRICS ====================
 @api_view(['GET'])
-def system_metrics(request):
-    """Métriques système basiques"""
+@require_http_methods(["GET"])
+def health_check(request):
+    """Health check simple"""
     try:
-        return Response({
-            'status': 'operational',
-            'timestamp': timezone.now().isoformat(),
-            'metrics': {
-                'database_status': 'connected',
-                'cache_status': 'active',
-                'api_status': 'operational'
-            },
-            'version': '2.3'
-        }, status=status.HTTP_200_OK)
+        # Test DB
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
 
+        return JsonResponse({
+            "status": "healthy",
+            "database": "connected",
+            "version": "2.0",
+            "timestamp": timezone.now().isoformat()
+        })
     except Exception as e:
-        return Response({
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return JsonResponse({
+            "status": "error",
+            "error": str(e)
+        }, status=500)
+
+
+# 6. CORRECTION - Vue system_metrics corrigée
+@api_view(["GET"])
+@require_http_methods(["GET"])
+def system_metrics(request):
+    """Métriques système"""
+    try:
+        import psutil
+        import os
+
+        metrics = {
+            "cpu_usage": psutil.cpu_percent(),
+            "memory_usage": psutil.virtual_memory().percent,
+            "disk_usage": psutil.disk_usage('/').percent,
+            "process_count": len(psutil.pids()),
+            "timestamp": timezone.now().isoformat()
+        }
+
+        return JsonResponse(metrics)
+    except ImportError:
+        # Fallback si psutil n'est pas disponible
+        return JsonResponse({
+            "cpu_usage": "N/A",
+            "memory_usage": "N/A",
+            "disk_usage": "N/A",
+            "process_count": "N/A",
+            "timestamp": timezone.now().isoformat(),
+            "note": "psutil not available"
+        })
+    except Exception as e:
+        return JsonResponse({
+            "error": str(e),
+            "timestamp": timezone.now().isoformat()
+        }, status=500)
