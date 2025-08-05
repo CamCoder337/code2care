@@ -1138,7 +1138,7 @@ class AISystemHealthView(APIView):
         return recommendations
 
 @global_allow_any
-class MethodsView(APIView):
+class AIMethodsView(APIView):
     """
     🔧 Endpoint pour récupérer les méthodes IA disponibles
     """
