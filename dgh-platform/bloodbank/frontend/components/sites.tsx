@@ -215,8 +215,8 @@ export default function Sites() {
             <br />
             L'API semble être indisponible. Vérifiez que :
             <ul className="mt-2 ml-4 list-disc">
-              <li>L'API Django est démarrée sur le port 8000</li>
-              <li>La commande <code className="bg-gray-100 px-1 rounded">python manage.py runserver 8000</code> fonctionne</li>
+              <li>L'API Django est démarrée sur le serveur</li>
+              <li>La commande <code className="bg-gray-100 px-1 rounded">le serveur </code> fonctionne</li>
               <li>L'URL de l'API dans votre configuration est correcte</li>
             </ul>
             <Button
