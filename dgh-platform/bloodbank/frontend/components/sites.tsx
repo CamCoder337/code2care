@@ -124,13 +124,23 @@ export default function Sites() {
     blood_bank: false
   })
 
-  // Paramètres de recherche pour l'API
-  const queryParams = {
-    search: searchTerm,
-    page: currentPage,
-    page_size: pageSize,
-    ...(filterType !== "all" && { type: filterType })
-  }
+  // Paramètres de recherche pour l'API - Nettoyage des paramètres undefined
+  const queryParams = React.useMemo(() => {
+    const params: any = {
+      page: currentPage,
+      page_size: pageSize,
+    }
+
+    if (searchTerm?.trim()) {
+      params.search = searchTerm.trim()
+    }
+
+    if (filterType && filterType !== "all") {
+      params.type = filterType
+    }
+
+    return params
+  }, [searchTerm, currentPage, pageSize, filterType])
 
   // Hooks API avec gestion d'erreur améliorée
   const sitesQuery = useSites(queryParams, {
@@ -163,7 +173,7 @@ export default function Sites() {
       showNotification("Site créé avec succès!", "success")
     },
     onError: (error: any) => {
-      showNotification(`Erreur lors de la création: ${error.message}`, "error")
+      showNotification(`Erreur lors de la création: ${error?.message || 'Erreur inconnue'}`, "error")
     }
   })
 
@@ -173,7 +183,7 @@ export default function Sites() {
       showNotification("Site mis à jour avec succès!", "success")
     },
     onError: (error: any) => {
-      showNotification(`Erreur lors de la mise à jour: ${error.message}`, "error")
+      showNotification(`Erreur lors de la mise à jour: ${error?.message || 'Erreur inconnue'}`, "error")
     }
   })
 
@@ -184,7 +194,7 @@ export default function Sites() {
       showNotification("Site supprimé avec succès!", "success")
     },
     onError: (error: any) => {
-      showNotification(`Erreur lors de la suppression: ${error.message}`, "error")
+      showNotification(`Erreur lors de la suppression: ${error?.message || 'Erreur inconnue'}`, "error")
     }
   })
 
@@ -221,26 +231,37 @@ export default function Sites() {
   const totalCount = sitesData?.count || sites.length
 
   // Filtrage local si pas d'API
-  const filteredSites = useApiData
-    ? sites
-    : FALLBACK_SITES.filter(site =>
+  const filteredSites = React.useMemo(() => {
+    if (useApiData) {
+      return sites
+    }
+
+    return FALLBACK_SITES.filter(site => {
+      const matchesSearch = !searchTerm ||
         site.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
         site.site_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (site.region && site.region.toLowerCase().includes(searchTerm.toLowerCase())) ||
         site.type.toLowerCase().includes(searchTerm.toLowerCase())
-      ).filter(site =>
-        filterType === "all" || site.type === filterType
-      )
+
+      const matchesType = filterType === "all" || site.type === filterType
+
+      return matchesSearch && matchesType
+    })
+  }, [useApiData, sites, searchTerm, filterType])
 
   // Handlers
-  const handleCreateSite = () => {
+  const handleCreateSite = async () => {
     if (!newSite.site_id || !newSite.nom || !newSite.ville) {
       showNotification("Veuillez remplir tous les champs obligatoires", "error")
       return
     }
 
     if (useApiData) {
-      createSiteMutation.mutate(newSite as ExtendedSite)
+      try {
+        await createSiteMutation.mutateAsync(newSite as ExtendedSite)
+      } catch (error) {
+        console.error("Erreur lors de la création:", error)
+      }
     } else {
       // Simulation locale
       showNotification("Mode hors ligne - Changements non sauvegardés", "warning")
@@ -249,25 +270,33 @@ export default function Sites() {
     }
   }
 
-  const handleEditSite = () => {
+  const handleEditSite = async () => {
     if (!selectedSite) return
 
     if (useApiData) {
-      updateSiteMutation.mutate({
-        siteId: selectedSite.site_id,
-        site: selectedSite
-      })
+      try {
+        await updateSiteMutation.mutateAsync({
+          siteId: selectedSite.site_id,
+          site: selectedSite
+        })
+      } catch (error) {
+        console.error("Erreur lors de la modification:", error)
+      }
     } else {
       showNotification("Mode hors ligne - Changements non sauvegardés", "warning")
       setIsEditDialogOpen(false)
     }
   }
 
-  const handleDeleteSite = () => {
+  const handleDeleteSite = async () => {
     if (!selectedSite) return
 
     if (useApiData) {
-      deleteSiteMutation.mutate(selectedSite.site_id)
+      try {
+        await deleteSiteMutation.mutateAsync(selectedSite.site_id)
+      } catch (error) {
+        console.error("Erreur lors de la suppression:", error)
+      }
     } else {
       showNotification("Mode hors ligne - Changements non sauvegardés", "warning")
       setIsDeleteDialogOpen(false)
@@ -336,6 +365,17 @@ export default function Sites() {
         return status
     }
   }
+
+  // Statistiques calculées de manière sécurisée
+  const statistics = React.useMemo(() => {
+    const sitesToCalculate = filteredSites || []
+    return {
+      total: totalCount,
+      active: sitesToCalculate.filter((s: any) => s.status === "active").length,
+      withBloodBank: sitesToCalculate.filter((s: any) => s.blood_bank).length,
+      maintenance: sitesToCalculate.filter((s: any) => s.status === "maintenance").length,
+    }
+  }, [filteredSites, totalCount])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -556,8 +596,8 @@ export default function Sites() {
                       <X className="w-4 h-4 mr-2" />
                       Annuler
                     </Button>
-                    <Button onClick={handleCreateSite} disabled={createSiteMutation.isLoading}>
-                      {createSiteMutation.isLoading ? (
+                    <Button onClick={handleCreateSite} disabled={createSiteMutation.isPending}>
+                      {createSiteMutation.isPending ? (
                         <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       ) : (
                         <Save className="w-4 h-4 mr-2" />
@@ -626,7 +666,7 @@ export default function Sites() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-teal-600 dark:text-teal-400">Total Sites</p>
-                  <p className="text-3xl font-bold text-teal-700 dark:text-teal-300">{totalCount}</p>
+                  <p className="text-3xl font-bold text-teal-700 dark:text-teal-300">{statistics.total}</p>
                 </div>
                 <Building className="w-8 h-8 text-teal-600" />
               </div>
@@ -638,9 +678,7 @@ export default function Sites() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-green-600 dark:text-green-400">Sites Actifs</p>
-                  <p className="text-3xl font-bold text-green-700 dark:text-green-300">
-                    {filteredSites.filter((s: any) => s.status === "active").length}
-                  </p>
+                  <p className="text-3xl font-bold text-green-700 dark:text-green-300">{statistics.active}</p>
                 </div>
                 <Activity className="w-8 h-8 text-green-600" />
               </div>
@@ -652,9 +690,7 @@ export default function Sites() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Avec Banque de Sang</p>
-                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">
-                    {filteredSites.filter((s: any) => s.blood_bank).length}
-                  </p>
+                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{statistics.withBloodBank}</p>
                 </div>
                 <MapPin className="w-8 h-8 text-blue-600" />
               </div>
@@ -666,9 +702,7 @@ export default function Sites() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-purple-600 dark:text-purple-400">En Maintenance</p>
-                  <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">
-                    {filteredSites.filter((s: any) => s.status === "maintenance").length}
-                  </p>
+                  <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">{statistics.maintenance}</p>
                 </div>
                 <Settings className="w-8 h-8 text-purple-600" />
               </div>
@@ -1181,8 +1215,8 @@ export default function Sites() {
                     <X className="w-4 h-4 mr-2" />
                     Annuler
                   </Button>
-                  <Button onClick={handleEditSite} disabled={updateSiteMutation.isLoading}>
-                    {updateSiteMutation.isLoading ? (
+                  <Button onClick={handleEditSite} disabled={updateSiteMutation.isPending}>
+                    {updateSiteMutation.isPending ? (
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                     ) : (
                       <Save className="w-4 h-4 mr-2" />
@@ -1215,9 +1249,9 @@ export default function Sites() {
               <Button
                 variant="destructive"
                 onClick={handleDeleteSite}
-                disabled={deleteSiteMutation.isLoading}
+                disabled={deleteSiteMutation.isPending}
               >
-                {deleteSiteMutation.isLoading ? (
+                {deleteSiteMutation.isPending ? (
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="w-4 h-4 mr-2" />
