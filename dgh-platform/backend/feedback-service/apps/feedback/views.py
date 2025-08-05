@@ -209,19 +209,24 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return queryset
     
     def create(self, request, *args, **kwargs):
-        """Création de rendez-vous avec support des headers"""
+        """Création de rendez-vous - réservé aux professionnels uniquement"""
+        # Vérifier que seuls les professionnels peuvent créer des rendez-vous
+        user_type = request.headers.get('X-User-Type')
+        if user_type != 'professional':
+            return Response(
+                {'error': 'Seuls les professionnels peuvent créer des rendez-vous'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Support auto-assignation patient_id/professional_id depuis headers
+        # Support auto-assignation professional_id depuis headers
         user_id = request.headers.get('X-User-ID')
-        user_type = request.headers.get('X-User-Type')
         
         validated_data = serializer.validated_data.copy()
         
-        if user_type == 'patient' and user_id and 'patient_id' not in validated_data:
-            validated_data['patient_id'] = user_id
-        elif user_type == 'professional' and user_id and 'professional_id' not in validated_data:
+        if user_id and 'professional_id' not in validated_data:
             validated_data['professional_id'] = user_id
         
         appointment = Appointment.objects.create(**validated_data)
@@ -233,10 +238,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
         """Récupère les rendez-vous à venir"""
-        from datetime import datetime
-        
         queryset = self.get_queryset().filter(
-            scheduled__gte=datetime.now()
+            scheduled__gte=timezone.now()
         )
         
         serializer = self.get_serializer(queryset, many=True)
