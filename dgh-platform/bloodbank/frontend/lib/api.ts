@@ -5,7 +5,7 @@ import axios, { AxiosError, AxiosResponse } from 'axios'
 const getApiBaseUrl = () => {
   // En production sur Vercel
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    return 'https://your-django-api-url.com' // Remplacez par votre vraie URL API Django
+    return process.env.NEXT_PUBLIC_API_URL || 'https://high5-code2care-sr7p.onrender.com' // Remplacez par votre vraie URL API Django
   }
 
   // En développement local
