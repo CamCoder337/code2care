@@ -448,6 +448,30 @@ export const useCreateBloodRequest = (
 // FORECASTING HOOKS
 // ======================
 
+export const useForecastMethods = (options = {}) => {
+  return useQuery({
+    queryKey: ['forecasting', 'methods'],
+    queryFn: () => apiService.getAvailableForecastMethods(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: (failureCount, error) => {
+      // Retry jusqu'à 3 fois, mais pas pour les erreurs 404
+      if (error?.response?.status === 404) return false
+      return failureCount < 3
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    ...options,
+  })
+}
+
+export const useTestMethodsConnection = () => {
+  return useQuery({
+    queryKey: ['forecasting', 'methods', 'test'],
+    queryFn: () => apiService.testMethodsEndpoint(),
+    enabled: false, // Ne s'exécute que manuellement
+    retry: 1,
+  })
+}
+
 export const useDemandForecast = (
   params?: {
     blood_type?: string
@@ -455,13 +479,14 @@ export const useDemandForecast = (
     method?: string
     lightweight?: boolean
   },
-  options?: UseQueryOptions<ForecastResult>
+  options = {}
 ) => {
   return useQuery({
-    queryKey: queryKeys.forecasting.demand(params),
+    queryKey: ['forecasting', 'demand', params],
     queryFn: () => apiService.getDemandForecast(params),
-    staleTime: 600000, // Forecasts are valid for 10 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes
     enabled: !!params?.blood_type, // Only run if blood_type is provided
+    retry: 2,
     ...options,
   })
 }

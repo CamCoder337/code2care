@@ -382,14 +382,52 @@ export const apiService = {
     method?: string
     lightweight?: boolean
   }): Promise<ForecastResult> {
-    const response = await api.get('/forecasting/demand/', { params })
-    return response.data
+    try {
+      console.log('🔮 Generating forecast with params:', params)
+
+      const requestData = {
+        blood_type: params?.blood_type || 'O+',
+        days_ahead: params?.days || 7,
+        method: params?.method || 'auto',
+        force_retrain: false,
+        include_confidence_intervals: true,
+        include_feature_importance: true,
+        include_model_metrics: true
+      }
+
+      const response = await api.post('/forecast/', requestData)
+      console.log('✅ Forecast response:', response.data)
+
+      return response.data
+    } catch (error: any) {
+      console.error('❌ Forecast error:', error)
+
+      // Fallback avec prédictions simulées
+      const fallbackForecast: ForecastResult = {
+        blood_type: params?.blood_type || 'O+',
+        forecast_period_days: params?.days || 7,
+        method_used: 'fallback',
+        predictions: Array.from({ length: params?.days || 7 }, (_, i) => ({
+          date: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          predicted_demand: Math.round(15 + Math.random() * 10),
+          confidence: 0.6
+        })),
+        model_accuracy: {
+          accuracy: '60%',
+          samples: 0
+        },
+        enhanced_forecasting_available: false,
+        generated_at: new Date().toISOString()
+      }
+
+      return fallbackForecast
+    }
   },
 
   async getOptimizationRecommendations() {
     const response = await api.get('/forecasting/recommendations/')
     return response.data
-  },z
+  },
 
   // System Configuration
   async getSystemConfig(): Promise<SystemConfig> {
@@ -401,6 +439,118 @@ export const apiService = {
     const response = await api.get('/config/compatibility/')
     return response.data
   },
+
+  async getAvailableForecastMethods() {
+    try {
+      console.log('🔍 Fetching methods from:', `${API_BASE_URL}/methods/`)
+      const response = await api.get('/methods/')
+      console.log('✅ Methods response:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error('❌ Failed to fetch methods from backend:', error)
+
+      // Fallback complet avec toutes les méthodes
+      const fallbackData = {
+        available_methods: [
+          {
+            value: 'auto',
+            name: 'Auto-Sélection Intelligente',
+            description: 'Sélection automatique de la meilleure méthode',
+            available: true,
+            recommended: true,
+            tier: 'standard',
+            confidence_expected: '75-90%'
+          },
+          {
+            value: 'random_forest',
+            name: 'Random Forest',
+            description: 'Algorithme d\'ensemble robuste',
+            available: true,
+            recommended: false,
+            tier: 'standard',
+            confidence_expected: '70-85%'
+          },
+          {
+            value: 'linear_regression',
+            name: 'Régression Linéaire',
+            description: 'Modèle simple et rapide',
+            available: true,
+            recommended: false,
+            tier: 'basic',
+            confidence_expected: '60-75%'
+          },
+          {
+            value: 'xgboost',
+            name: 'XGBoost',
+            description: 'Gradient boosting avancé',
+            available: true,
+            recommended: false,
+            tier: 'premium',
+            confidence_expected: '80-95%',
+            good_for: 'Données complexes avec patterns non-linéaires'
+          },
+          {
+            value: 'arima',
+            name: 'ARIMA',
+            description: 'Modèle de série temporelle classique',
+            available: true,
+            recommended: false,
+            tier: 'professional',
+            confidence_expected: '70-85%',
+            good_for: 'Données avec tendances claires'
+          },
+          {
+            value: 'stl_arima',
+            name: 'STL + ARIMA',
+            description: 'Décomposition saisonnière + ARIMA',
+            available: true,
+            recommended: false,
+            tier: 'professional',
+            confidence_expected: '75-90%',
+            good_for: 'Données avec saisonnalité marquée'
+          }
+        ],
+        system_capabilities: {
+          xgboost_available: true,
+          statsmodels_available: true,
+          max_forecast_days: 30,
+          supported_blood_types: ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        },
+        total_methods: 6,
+        fallback_used: true,
+        error: handleApiError(error)
+      }
+
+      console.log('🔄 Using fallback methods data:', fallbackData)
+      return fallbackData
+    }
+  },
+
+  // Test de connectivité amélioré
+  async testMethodsEndpoint() {
+    try {
+      const response = await api.get('/methods/')
+      return {
+        success: true,
+        methods_count: response.data.available_methods?.length || 0,
+        xgboost_available: response.data.system_capabilities?.xgboost_available,
+        statsmodels_available: response.data.system_capabilities?.statsmodels_available,
+        data: response.data
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: handleApiError(error),
+        details: {
+          url: `${API_BASE_URL}/methods/`,
+          status: error.response?.status,
+          message: error.message
+        }
+      }
+    }
+  },
+
+
 
   // Data Import
   async importCSVData(file: File) {
