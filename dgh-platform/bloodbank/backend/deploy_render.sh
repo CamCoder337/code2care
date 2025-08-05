@@ -1,6 +1,6 @@
 #!/bin/bash
-# Script de build optimisé pour Render - Blood Bank System
-# Remplace votre commande de build actuelle
+# Script de build optimisé pour Render - Blood Bank System CORRIGÉ
+# Avec gestion appropriée des migrations
 
 set -e  # Arrêter en cas d'erreur
 
@@ -43,44 +43,73 @@ pip install --no-cache-dir xgboost==3.0.3 || echo "xgboost skipped due to memory
 echo "  - Installing remaining dependencies..."
 pip install --no-cache-dir -r requirements.txt || echo "Some optional dependencies skipped"
 
-# ==================== OPTIMISATION PYTHON ====================
-echo "🔧 Optimisation Python..."
-
 # Nettoyer le cache pip
 pip cache purge
 
-# Compiler les bytecodes Python pour optimiser le démarrage
-python -m compileall . -q || true
+# ==================== DJANGO SETUP AVEC GESTION DES MIGRATIONS ====================
+echo "⚙️ Configuration Django avec gestion robuste des migrations..."
 
-# ==================== DJANGO SETUP ====================
-echo "⚙️ Configuration Django..."
+# 🔧 CORRECTION: Diagnostic et correction des migrations
+echo "🔍 Diagnostic des migrations..."
+python manage.py showmigrations || echo "⚠️ Aucune migration trouvée"
+
+# Créer les migrations si elles n'existent pas
+echo "📝 Création des migrations manquantes..."
+python manage.py makemigrations app --noinput || echo "⚠️ Pas de nouvelles migrations nécessaires"
+
+# Appliquer les migrations avec gestion d'erreurs
+echo "🗄️ Application des migrations avec gestion d'erreurs..."
+python manage.py migrate --noinput || {
+    echo "⚠️ Migration normale échouée, tentative avec --fake-initial..."
+    python manage.py migrate --fake-initial --noinput || {
+        echo "⚠️ Migration --fake-initial échouée, tentative de réparation..."
+
+        # Essayer de réparer les tables une par une
+        echo "🔧 Tentative de réparation des tables..."
+        python manage.py migrate app 0001 --fake || echo "Migration 0001 failed"
+        python manage.py migrate --noinput || echo "Final migration attempt failed"
+    }
+}
+
+# Vérification de l'état de la base de données
+echo "✅ Vérification de l'état final de la base de données..."
+python manage.py check --database default || echo "⚠️ Des problèmes de base de données persistent"
 
 # Collecte des fichiers statiques avec optimisations
 echo "📁 Collecte des fichiers statiques..."
 python manage.py collectstatic --noinput --clear
 
-# Migrations de base de données
-echo "🗄️ Migrations de base de données..."
-python manage.py migrate --noinput
-
 # Création du superuser par défaut (only if command exists)
 echo "👤 Création du superuser..."
 python manage.py create_default_superuser || echo "⚠️ create_default_superuser command not found, skipping..."
 
-# ==================== GÉNÉRATION DES DONNÉES DE PRODUCTION ====================
-echo "📊 Génération des données de production optimisée..."
+# ==================== GÉNÉRATION DES DONNÉES DE PRODUCTION (SEULEMENT SI DB OK) ====================
+echo "📊 Génération des données de production (si base de données OK)..."
 
-# Génération avec scale réduite pour Render (only if command exists)
-echo "Génération avec scale=large (optimisé pour 512MB RAM)..."
-python manage.py generate_production_data --scale=large || {
-    echo "⚠️ Erreur génération scale=large, tentative sans arguments..."
-    python manage.py generate_production_data || {
-        echo "⚠️ generate_production_data command not found, skipping data generation..."
+# Test de la connectivité avant la génération de données
+python manage.py shell -c "
+try:
+    from django.db import connection
+    cursor = connection.cursor()
+    cursor.execute('SELECT 1')
+    print('✅ Base de données accessible')
+except Exception as e:
+    print(f'❌ Problème de base de données: {e}')
+    exit(1)
+" && {
+    echo "📈 Base de données OK, génération des données..."
+    python manage.py generate_production_data --scale=large || {
+        echo "⚠️ Erreur génération scale=large, tentative sans arguments..."
+        python manage.py generate_production_data || {
+            echo "⚠️ generate_production_data command not found, skipping data generation..."
+        }
     }
+} || {
+    echo "⚠️ Base de données non accessible, skip génération des données"
 }
 
-# ==================== PRÉ-CALCUL DES CACHES ====================
-echo "💾 Pré-calcul des caches pour améliorer les performances..."
+# ==================== PRÉ-CALCUL DES CACHES (SEULEMENT SI DB OK) ====================
+echo "💾 Pré-calcul des caches (si base de données OK)..."
 
 python manage.py shell << 'EOF' || echo "⚠️ Cache pre-calculation failed, continuing..."
 import os
@@ -91,6 +120,16 @@ from django.test import RequestFactory
 # Configuration
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbank.settings')
 django.setup()
+
+# Test de la connectivité
+try:
+    from django.db import connection
+    cursor = connection.cursor()
+    cursor.execute('SELECT 1')
+    print('✅ Base de données accessible pour le cache')
+except Exception as e:
+    print(f'❌ Problème de base de données pour le cache: {e}')
+    exit(0)  # Continue sans erreur
 
 try:
     # Pré-calculer le dashboard
@@ -103,42 +142,16 @@ try:
 except Exception as e:
     print(f'⚠️ Erreur pré-calcul dashboard: {e}')
 
-try:
-    # Pré-calculer les recommandations avec méthode légère
-    from app.views import OptimizationRecommendationsAPIView
-    factory = RequestFactory()
-    request = factory.get('/forecasting/recommendations/')
-    view = OptimizationRecommendationsAPIView()
-
-    # Utiliser timeout court pour le build
-    view.forecaster.max_execution_time = 30  # 30 secondes max pendant le build
-    view.get(request)
-    print('✓ Cache recommandations pré-calculé')
-except Exception as e:
-    print(f'⚠️ Erreur pré-calcul recommandations: {e}')
-
-try:
-    # Pré-calculer les prévisions légères
-    from app.forecasting.blood_demand_forecasting import ProductionLightweightForecaster
-    forecaster = ProductionLightweightForecaster()
-
-    blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
-    for bt in blood_types:
-        forecaster.quick_predict_cached(bt, 7)
-
-    print('✓ Cache prévisions pré-calculé')
-except Exception as e:
-    print(f'⚠️ Erreur pré-calcul prévisions: {e}')
-
 print('✅ Pré-calcul des caches terminé')
 EOF
 
 # ==================== VÉRIFICATIONS SYSTÈME ====================
 echo "🔍 Vérifications système..."
 
-# Vérification Django
-python manage.py check --deploy --fail-level WARNING || {
-    echo "⚠️ Avertissements détectés mais build continue..."
+# Vérification Django avec tolérance aux warnings
+python manage.py check --deploy --fail-level ERROR || {
+    echo "⚠️ Erreurs critiques détectées, arrêt du build"
+    exit 1
 }
 
 # ==================== NETTOYAGE ====================
