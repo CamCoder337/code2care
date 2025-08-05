@@ -376,18 +376,107 @@ export const apiService = {
   },
 
   // Forecasting
+  async getOptimizationRecommendations() {
+    const response = await api.get('/forecasting/recommendations/')
+    return response.data
+  },
+
+  async getAvailableForecastMethods() {
+    try {
+      const response = await api.get('/methods/')
+      console.log('✅ Methods fetched from backend:', response.data)
+      return response.data
+    } catch (error) {
+      console.error('❌ Failed to fetch methods from backend:', error)
+      return {
+        available_methods: [
+          {
+            value: 'auto',
+            name: 'Automatique',
+            description: 'Sélection automatique de la meilleure méthode',
+            available: true,
+            recommended: true,
+            tier: 'standard',
+            confidence_expected: '75-90%'
+          },
+          {
+            value: 'random_forest',
+            name: 'Random Forest',
+            description: 'Algorithme d\'ensemble robuste',
+            available: true,
+            recommended: false,
+            tier: 'standard',
+            confidence_expected: '70-85%'
+          },
+          {
+            value: 'linear_regression',
+            name: 'Régression Linéaire',
+            description: 'Modèle simple et rapide',
+            available: true,
+            recommended: false,
+            tier: 'basic',
+            confidence_expected: '60-75%'
+          },
+          {
+            value: 'xgboost',
+            name: 'XGBoost',
+            description: 'Gradient boosting avancé',
+            available: true,
+            recommended: false,
+            tier: 'premium',
+            confidence_expected: '80-95%',
+            good_for: 'Données complexes avec patterns non-linéaires'
+          },
+          {
+            value: 'arima',
+            name: 'ARIMA',
+            description: 'Modèle de série temporelle classique',
+            available: true,
+            recommended: false,
+            tier: 'professional',
+            confidence_expected: '70-85%',
+            good_for: 'Données avec tendances claires'
+          },
+          {
+            value: 'stl_arima',
+            name: 'STL + ARIMA',
+            description: 'Décomposition saisonnière + ARIMA',
+            available: true,
+            recommended: false,
+            tier: 'professional',
+            confidence_expected: '75-90%',
+            good_for: 'Données avec saisonnalité marquée'
+          }
+        ],
+        system_capabilities: {
+          xgboost_available: true,
+          statsmodels_available: true,
+          max_forecast_days: 30,
+          supported_blood_types: ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        },
+        total_methods: 6,
+        fallback_used: true,
+        error: handleApiError(error)
+      }
+    }
+  },
+
   async getDemandForecast(params?: {
     blood_type?: string
     days?: number
     method?: string
     lightweight?: boolean
   }): Promise<ForecastResult> {
-    const response = await api.get('/forecasting/demand/', { params })
-    return response.data
-  },
-
-  async getOptimizationRecommendations() {
-    const response = await api.get('/forecasting/recommendations/')
+    // Utiliser le nouvel endpoint smart forecast
+    const response = await api.post('/forecast/', {
+      blood_type: params?.blood_type || 'O+',
+      days_ahead: params?.days || 7,
+      method: params?.method || 'auto',
+      force_retrain: false,
+      include_confidence_intervals: true,
+      include_feature_importance: true,
+      include_model_metrics: true
+    })
     return response.data
   },
 

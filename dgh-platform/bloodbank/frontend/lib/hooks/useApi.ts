@@ -448,6 +448,27 @@ export const useCreateBloodRequest = (
 // FORECASTING HOOKS
 // ======================
 
+export const useForecastMethods = (
+  options?: UseQueryOptions<any>
+) => {
+  return useQuery({
+    queryKey: ['forecasting', 'methods'],
+    queryFn: () => apiService.getAvailableForecastMethods(),
+    staleTime: 300000, // Les méthodes changent rarement - 5 minutes
+    retry: 3,
+    ...options,
+  })
+}
+
+export const useTestMethodsConnection = () => {
+  return useQuery({
+    queryKey: ['forecasting', 'methods', 'test'],
+    queryFn: () => apiService.testMethodsEndpoint(),
+    enabled: false, // Ne s'exécute que manuellement
+    retry: 1,
+  })
+}
+
 export const useDemandForecast = (
   params?: {
     blood_type?: string

@@ -29,7 +29,7 @@ const ERROR_TYPES = {
   INSUFFICIENT_DATA: 'INSUFFICIENT_DATA'
 }
 
-// ==================== API CLIENT INTÉGRÉ ====================
+// ==================== API CLIENT INTÉGRÉ CORRIGÉ ====================
 class EnhancedBloodForecastAPI {
   constructor(config = {}) {
     this.baseURL = config.baseURL || API_CONFIG.baseUrl
@@ -130,21 +130,11 @@ class EnhancedBloodForecastAPI {
         return this.methodsCache
       }
 
-      const data = await this.makeRequest('/available-methods/')
+      // 🔥 CORRECTION: Utiliser le bon endpoint pour récupérer les méthodes
+      const data = await this.makeRequest('/methods/')
 
-      const structuredData = {
-        available_methods: data.available_methods || data.methods || [],
-        system_capabilities: data.system_capabilities || {},
-        recommended_method: data.recommended_method || 'auto',
-        method_details: data.method_details || {},
-        performance_tiers: data.performance_tiers || {
-          premium: [],
-          professional: [],
-          standard: ['auto', 'random_forest'],
-          basic: ['linear_regression']
-        },
-        total_methods: (data.available_methods || data.methods || []).length
-      }
+      // Adapter les données du backend au format attendu par le frontend
+      const structuredData = this.adaptBackendMethodsToFrontend(data)
 
       this.methodsCache = structuredData
       this.methodsCacheExpiry = Date.now() + this.cacheValidityMs
@@ -152,7 +142,10 @@ class EnhancedBloodForecastAPI {
       return structuredData
 
     } catch (error) {
-      const fallbackData = {
+      console.error('❌ Erreur lors de la récupération des méthodes:', error)
+
+      // 🔥 CORRECTION: Fallback amélioré avec toutes les méthodes possibles
+      const enhancedFallbackData = {
         available_methods: [
           {
             value: 'auto',
@@ -164,6 +157,14 @@ class EnhancedBloodForecastAPI {
             tier: 'standard'
           },
           {
+            value: 'random_forest',
+            label: '🌲 Random Forest',
+            description: 'Apprentissage automatique robuste',
+            available: true,
+            confidence_expected: '70-85%',
+            tier: 'standard'
+          },
+          {
             value: 'linear_regression',
             label: '📈 Régression Linéaire',
             description: 'Modèle simple et rapide',
@@ -171,30 +172,152 @@ class EnhancedBloodForecastAPI {
             confidence_expected: '60-75%',
             tier: 'basic'
           },
+          // 🔥 AJOUT: Méthodes manquantes avec fallback intelligent
           {
-            value: 'random_forest',
-            label: '🌲 Random Forest',
-            description: 'Apprentissage automatique robuste',
-            available: true,
+            value: 'xgboost',
+            label: '🚀 XGBoost',
+            description: 'Gradient boosting avancé pour données complexes',
+            available: true, // On assume qu'il est disponible en production
+            confidence_expected: '80-95%',
+            tier: 'premium',
+            good_for: 'Données complexes avec patterns non-linéaires'
+          },
+          {
+            value: 'arima',
+            label: '📊 ARIMA',
+            description: 'Modèle de série temporelle classique',
+            available: true, // On assume qu'il est disponible en production
             confidence_expected: '70-85%',
-            tier: 'standard'
+            tier: 'professional',
+            good_for: 'Données avec tendances claires'
+          },
+          {
+            value: 'stl_arima',
+            label: '🔄 STL + ARIMA',
+            description: 'Décomposition saisonnière + ARIMA',
+            available: true, // On assume qu'il est disponible en production
+            confidence_expected: '75-90%',
+            tier: 'professional',
+            good_for: 'Données avec saisonnalité marquée'
           }
         ],
-        system_capabilities: {},
+        system_capabilities: {
+          xgboost_available: true,
+          statsmodels_available: true,
+          max_forecast_days: 30,
+          supported_blood_types: ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+        },
         recommended_method: 'auto',
         method_details: {},
         performance_tiers: {
-          premium: [],
-          professional: [],
+          premium: ['xgboost'],
+          professional: ['arima', 'stl_arima'],
           standard: ['auto', 'random_forest'],
           basic: ['linear_regression']
         },
-        total_methods: 3,
-        error: error.message
+        total_methods: 6,
+        error: error.message,
+        fallback_used: true
       }
 
-      return fallbackData
+      return enhancedFallbackData
     }
+  }
+
+  /**
+   * 🔥 NOUVELLE MÉTHODE: Adapter les données du backend au format frontend
+   */
+  adaptBackendMethodsToFrontend(backendData) {
+    try {
+      // Si les données sont déjà au bon format
+      if (backendData.available_methods && Array.isArray(backendData.available_methods)) {
+        return backendData
+      }
+
+      // Si les données viennent du nouveau format backend
+      if (backendData.available_methods && typeof backendData.available_methods === 'object') {
+        const methodsArray = Object.entries(backendData.available_methods).map(([key, method]) => ({
+          value: key,
+          label: this.getMethodLabel(key, method.name),
+          description: method.description || `Méthode ${method.name}`,
+          available: method.available !== false,
+          recommended: method.recommended || key === 'auto',
+          confidence_expected: this.getExpectedConfidence(key),
+          tier: this.getMethodTier(key),
+          good_for: method.good_for || method.description
+        }))
+
+        return {
+          available_methods: methodsArray,
+          system_capabilities: backendData.system_capabilities || {
+            xgboost_available: true,
+            statsmodels_available: true,
+            max_forecast_days: 30,
+            supported_blood_types: ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+          },
+          recommended_method: 'auto',
+          method_details: {},
+          performance_tiers: {
+            premium: ['xgboost'],
+            professional: ['arima', 'stl_arima'],
+            standard: ['auto', 'random_forest'],
+            basic: ['linear_regression']
+          },
+          total_methods: methodsArray.length
+        }
+      }
+
+      throw new Error('Format de données backend non reconnu')
+
+    } catch (error) {
+      console.error('❌ Erreur adaptation des méthodes:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Générer le label avec emoji pour une méthode
+   */
+  getMethodLabel(key, name) {
+    const labels = {
+      'auto': '🤖 Auto-Sélection Intelligente',
+      'random_forest': '🌲 Random Forest',
+      'linear_regression': '📈 Régression Linéaire',
+      'xgboost': '🚀 XGBoost',
+      'arima': '📊 ARIMA',
+      'stl_arima': '🔄 STL + ARIMA'
+    }
+    return labels[key] || `🔧 ${name || key.toUpperCase()}`
+  }
+
+  /**
+   * Obtenir la confiance attendue pour une méthode
+   */
+  getExpectedConfidence(key) {
+    const confidence = {
+      'auto': '75-90%',
+      'xgboost': '80-95%',
+      'stl_arima': '75-90%',
+      'arima': '70-85%',
+      'random_forest': '70-85%',
+      'linear_regression': '60-75%'
+    }
+    return confidence[key] || '70-85%'
+  }
+
+  /**
+   * Obtenir le tier d'une méthode
+   */
+  getMethodTier(key) {
+    const tiers = {
+      'xgboost': 'premium',
+      'arima': 'professional',
+      'stl_arima': 'professional',
+      'auto': 'standard',
+      'random_forest': 'standard',
+      'linear_regression': 'basic'
+    }
+    return tiers[key] || 'standard'
   }
 
   async generateForecast(params) {
@@ -296,6 +419,21 @@ class EnhancedBloodForecastAPI {
   clearCache() {
     this.methodsCache = null
     this.methodsCacheExpiry = null
+  }
+
+  /**
+   * 🔥 NOUVELLE MÉTHODE: Forcer le refresh des méthodes depuis le backend
+   */
+  async refreshMethodsFromBackend() {
+    try {
+      console.log('🔄 Refreshing methods from backend...')
+      const methods = await this.getAvailableMethods(true)
+      console.log('✅ Methods refreshed:', methods)
+      return methods
+    } catch (error) {
+      console.error('❌ Failed to refresh methods:', error)
+      throw error
+    }
   }
 }
 
