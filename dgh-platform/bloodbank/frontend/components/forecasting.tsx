@@ -15,7 +15,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 // ==================== CONFIGURATION ET CONSTANTES ====================
 const API_CONFIG = {
-  baseUrl: 'http://localhost:8000/api/v1',
+  baseUrl: 'process.env.NEXT_PUBLIC_API_URL/api/v1',
   timeout: 25000,
   retryAttempts: 3,
   retryDelay: 2000

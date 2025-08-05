@@ -1526,7 +1526,8 @@ class EnhancedBloodDemandForecaster:
         except Exception as e:
             logger.error(f"❌ Erreur STL-ARIMA: {e}")
             return self.predict_enhanced_fallback(blood_type, days_ahead)
-############500 DERNIERES LIGNES#########
+
+    ############500 DERNIERES LIGNES#########
     def predict_exponential_smoothing_enhanced(self, blood_type, days_ahead):
         """
         📊 PRÉDICTION EXPONENTIAL SMOOTHING AMÉLIORÉE
@@ -2009,7 +2010,7 @@ class EnhancedBloodDemandForecaster:
                 'asymmetric': config.get('priority') in ['critical', 'high'] if 'config' in locals() else False
             }
 
-            except Exception as e:
+        except Exception as e:
             logger.error(f"❌ Erreur calcul intervalles améliorés: {e}")
             # Fallback simple
             demands = [p.get('predicted_demand', 5) for p in predictions]
@@ -2020,7 +2021,6 @@ class EnhancedBloodDemandForecaster:
                 'margin': float(np.mean(margins)),
                 'method': 'fallback_simple'
             }
-
 
     def calculate_enhanced_stock_duration(self, contextual_data, predictions):
         """
@@ -2059,7 +2059,6 @@ class EnhancedBloodDemandForecaster:
         except Exception as e:
             logger.error(f"❌ Erreur calcul durée stock améliorée: {e}")
             return 5  # Valeur par défaut conservative
-
 
     def calculate_enhanced_overall_confidence(self, predictions, performance, contextual_data):
         """
@@ -2118,7 +2117,6 @@ class EnhancedBloodDemandForecaster:
             logger.error(f"❌ Erreur calcul confiance globale: {e}")
             return 0.5
 
-
     def get_top_features(self, blood_type, method, top_n=5):
         """
         🏆 RÉCUPÉRATION DES FEATURES LES PLUS IMPORTANTES
@@ -2140,7 +2138,6 @@ class EnhancedBloodDemandForecaster:
         except Exception as e:
             logger.error(f"❌ Erreur récupération top features: {e}")
             return {}
-
 
     def assess_supply_risk(self, contextual_data, predictions, blood_type):
         """
@@ -2234,7 +2231,6 @@ class EnhancedBloodDemandForecaster:
                 'risk_score': 0.5,
                 'days_until_stockout': 7
             }
-
 
     def generate_recommendations(self, contextual_data, predictions, blood_type):
         """
@@ -2337,7 +2333,6 @@ class EnhancedBloodDemandForecaster:
                 'details': 'Erreur dans l\'analyse automatique',
                 'timeline': 'Quand possible'
             }]
-
 
     def emergency_enhanced_fallback(self, blood_type, days_ahead):
         """
@@ -2459,962 +2454,944 @@ class EnhancedBloodDemandForecaster:
                 'warning': 'Prédiction critique - erreur système majeure'
             }
 
+class TimeoutException(Exception):
+    """Exception levée en cas de timeout"""
+    pass
 
-    class TimeoutException(Exception):
-        """Exception levée en cas de timeout"""
-        pass
+# ==================== FONCTIONS D'API AMÉLIORÉES ====================
 
+def generate_enhanced_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
+    """
+    🚀 FONCTION API PRINCIPALE AMÉLIORÉE
+    """
+    try:
+        logger.info(f"🤖 Enhanced API Request: {blood_type}, {days_ahead} days, method: {method}")
 
-    # ==================== FONCTIONS D'API AMÉLIORÉES ====================
+        # Initialiser le forecaster amélioré
+        forecaster = EnhancedBloodDemandForecaster(max_execution_time=150)
 
-    def generate_enhanced_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
-        """
-        🚀 FONCTION API PRINCIPALE AMÉLIORÉE
-        """
+        # Validation des paramètres
+        if blood_type not in forecaster.blood_type_config:
+            return {
+                'error': 'Invalid blood type',
+                'message': f'Blood type {blood_type} not supported',
+                'supported_types': list(forecaster.blood_type_config.keys())
+            }
+
+        if days_ahead < 1 or days_ahead > 30:
+            return {
+                'error': 'Invalid forecast period',
+                'message': 'Days ahead must be between 1 and 30',
+                'requested_days': days_ahead
+            }
+
+        # Nettoyer le cache si demandé
+        if force_retrain:
+            forecaster.clear_enhanced_cache(blood_type)
+            logger.info(f"🧹 Enhanced cache cleared for {blood_type}")
+
+        # Générer la prédiction améliorée
+        result = forecaster.predict_enhanced(blood_type, days_ahead, method)
+
+        if not result:
+            logger.error(f"❌ No enhanced result generated for {blood_type}")
+            return forecaster.emergency_enhanced_fallback(blood_type, days_ahead)
+
+        # Enrichir le résultat avec des métadonnées API
+        result.update({
+            'api_version': '3.0-enhanced',
+            'forecast_generated_via': 'enhanced_api',
+            'force_retrain_used': force_retrain,
+            'system_status': 'enhanced_operational',
+            'data_integrity': 'verified_enhanced',
+            'capabilities': {
+                'models_available': MODELS_AVAILABLE,
+                'xgboost_available': XGBOOST_AVAILABLE,
+                'statsmodels_available': STATSMODELS_AVAILABLE,
+                'prophet_available': PROPHET_AVAILABLE,
+                'advanced_features': True,
+                'risk_assessment': True,
+                'recommendations': True
+            }
+        })
+
+        # Log du succès avec métriques détaillées
+        method_used = result.get('method_used', 'unknown')
+        prediction_count = len(result.get('predictions', []))
+        confidence = result.get('quality_metrics', {}).get('prediction_confidence', 'unknown')
+        risk_level = result.get('risk_assessment', {}).get('overall_risk', 'unknown')
+
+        logger.info(f"✅ Enhanced API success: {blood_type}, {prediction_count} predictions, "
+                    f"method: {method_used}, confidence: {confidence}, risk: {risk_level}")
+
+        return result
+
+    except TimeoutException:
+        logger.error(f"⏰ Enhanced forecast timeout for {blood_type}")
+        return {
+            'error': 'Enhanced forecast timeout',
+            'message': 'Enhanced prediction took too long to generate',
+            'blood_type': blood_type,
+            'timeout_seconds': 150
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Enhanced API critical error: {e}", exc_info=True)
+
+        # Essayer de retourner au moins un fallback amélioré
         try:
-            logger.info(f"🤖 Enhanced API Request: {blood_type}, {days_ahead} days, method: {method}")
+            forecaster = EnhancedBloodDemandForecaster()
+            return forecaster.emergency_enhanced_fallback(blood_type, days_ahead)
+        except:
+            return {
+                'error': 'Critical enhanced system error',
+                'message': str(e),
+                'blood_type': blood_type,
+                'method_attempted': method,
+                'error_type': type(e).__name__
+            }
 
-            # Initialiser le forecaster amélioré
-            forecaster = EnhancedBloodDemandForecaster(max_execution_time=150)
+def get_enhanced_available_methods():
+    """
+    📋 MÉTHODES DISPONIBLES AMÉLIORÉES - VERSION COMPLÈTE
+    """
+    try:
+        methods = {
+            'auto': {
+                'available': True,
+                'display_name': 'Auto-Sélection Intelligente Premium',
+                'description': 'Sélection automatique du meilleur modèle avec validation croisée',
+                'recommended_for': 'Usage général - Performance optimale garantie',
+                'status': 'operational',
+                'confidence_expected': '80-95%',
+                'features': ['cross_validation', 'adaptive_selection', 'performance_tracking']
+            },
+            'random_forest': {
+                'available': True,
+                'display_name': 'Random Forest Avancé',
+                'description': 'Forêt aléatoire avec hyperparamètres optimisés',
+                'recommended_for': 'Données moyennes à importantes, prédictions stables',
+                'status': 'operational',
+                'confidence_expected': '75-88%',
+                'features': ['feature_importance', 'robust_outliers', 'parallel_processing']
+            },
+            'gradient_boosting': {
+                'available': True,
+                'display_name': 'Gradient Boosting Premium',
+                'description': 'Gradient Boosting avec régularisation avancée',
+                'recommended_for': 'Haute précision, patterns complexes',
+                'status': 'operational',
+                'confidence_expected': '78-90%',
+                'features': ['sequential_learning', 'overfitting_protection', 'adaptive_learning_rate']
+            },
+            'linear_regression': {
+                'available': True,
+                'display_name': 'Régression Linéaire Régularisée',
+                'description': 'Ridge/Lasso avec sélection automatique des features',
+                'recommended_for': 'Tendances linéaires, interprétabilité maximale',
+                'status': 'operational',
+                'confidence_expected': '65-78%',
+                'features': ['regularization', 'feature_selection', 'interpretable']
+            }
+        }
 
-            # Validation des paramètres
-            if blood_type not in forecaster.blood_type_config:
-                return {
-                    'error': 'Invalid blood type',
-                    'message': f'Blood type {blood_type} not supported',
-                    'supported_types': list(forecaster.blood_type_config.keys())
-                }
+        # Ajouter XGBoost si disponible
+        if XGBOOST_AVAILABLE:
+            methods['xgboost'] = {
+                'available': True,
+                'display_name': 'XGBoost Professional',
+                'description': 'XGBoost avec tuning automatique des hyperparamètres',
+                'recommended_for': 'Datasets importants, précision maximale',
+                'status': 'operational',
+                'confidence_expected': '82-96%',
+                'features': ['gradient_boosting', 'gpu_acceleration', 'early_stopping', 'hyperparameter_tuning']
+            }
 
-            if days_ahead < 1 or days_ahead > 30:
-                return {
-                    'error': 'Invalid forecast period',
-                    'message': 'Days ahead must be between 1 and 30',
-                    'requested_days': days_ahead
-                }
-
-            # Nettoyer le cache si demandé
-            if force_retrain:
-                forecaster.clear_enhanced_cache(blood_type)
-                logger.info(f"🧹 Enhanced cache cleared for {blood_type}")
-
-            # Générer la prédiction améliorée
-            result = forecaster.predict_enhanced(blood_type, days_ahead, method)
-
-            if not result:
-                logger.error(f"❌ No enhanced result generated for {blood_type}")
-                return forecaster.emergency_enhanced_fallback(blood_type, days_ahead)
-
-            # Enrichir le résultat avec des métadonnées API
-            result.update({
-                'api_version': '3.0-enhanced',
-                'forecast_generated_via': 'enhanced_api',
-                'force_retrain_used': force_retrain,
-                'system_status': 'enhanced_operational',
-                'data_integrity': 'verified_enhanced',
-                'capabilities': {
-                    'models_available': MODELS_AVAILABLE,
-                    'xgboost_available': XGBOOST_AVAILABLE,
-                    'statsmodels_available': STATSMODELS_AVAILABLE,
-                    'prophet_available': PROPHET_AVAILABLE,
-                    'advanced_features': True,
-                    'risk_assessment': True,
-                    'recommendations': True
+        # Ajouter les méthodes statistiques si statsmodels disponible
+        if STATSMODELS_AVAILABLE:
+            methods.update({
+                'arima': {
+                    'available': True,
+                    'display_name': 'ARIMA Auto-Optimisé',
+                    'description': 'ARIMA avec sélection automatique des paramètres (p,d,q)',
+                    'recommended_for': 'Séries temporelles avec tendances et patterns',
+                    'status': 'operational',
+                    'confidence_expected': '70-85%',
+                    'features': ['auto_arima', 'stationarity_testing', 'model_selection']
+                },
+                'stl_arima': {
+                    'available': True,
+                    'display_name': 'STL + ARIMA Saisonnier',
+                    'description': 'Décomposition STL combinée avec ARIMA',
+                    'recommended_for': 'Données avec forte saisonnalité hebdomadaire',
+                    'status': 'operational',
+                    'confidence_expected': '72-87%',
+                    'features': ['seasonal_decomposition', 'trend_modeling', 'residual_analysis']
+                },
+                'exponential_smoothing': {
+                    'available': True,
+                    'display_name': 'Holt-Winters Avancé',
+                    'description': 'Lissage exponentiel avec composantes tendance et saisonnalité',
+                    'recommended_for': 'Prédictions rapides avec saisonnalité',
+                    'status': 'operational',
+                    'confidence_expected': '68-82%',
+                    'features': ['triple_exponential', 'automatic_seasonality', 'trend_damping']
                 }
             })
 
-            # Log du succès avec métriques détaillées
-            method_used = result.get('method_used', 'unknown')
-            prediction_count = len(result.get('predictions', []))
-            confidence = result.get('quality_metrics', {}).get('prediction_confidence', 'unknown')
-            risk_level = result.get('risk_assessment', {}).get('overall_risk', 'unknown')
-
-            logger.info(f"✅ Enhanced API success: {blood_type}, {prediction_count} predictions, "
-                        f"method: {method_used}, confidence: {confidence}, risk: {risk_level}")
-
-            return result
-
-        except TimeoutException:
-            logger.error(f"⏰ Enhanced forecast timeout for {blood_type}")
-            return {
-                'error': 'Enhanced forecast timeout',
-                'message': 'Enhanced prediction took too long to generate',
-                'blood_type': blood_type,
-                'timeout_seconds': 150
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Enhanced API critical error: {e}", exc_info=True)
-
-            # Essayer de retourner au moins un fallback amélioré
-            try:
-                forecaster = EnhancedBloodDemandForecaster()
-                return forecaster.emergency_enhanced_fallback(blood_type, days_ahead)
-            except:
-                return {
-                    'error': 'Critical enhanced system error',
-                    'message': str(e),
-                    'blood_type': blood_type,
-                    'method_attempted': method,
-                    'error_type': type(e).__name__
-                }
-
-
-    def get_enhanced_available_methods():
-        """
-        📋 MÉTHODES DISPONIBLES AMÉLIORÉES - VERSION COMPLÈTE
-        """
-        try:
-            methods = {
-                'auto': {
-                    'available': True,
-                    'display_name': 'Auto-Sélection Intelligente Premium',
-                    'description': 'Sélection automatique du meilleur modèle avec validation croisée',
-                    'recommended_for': 'Usage général - Performance optimale garantie',
-                    'status': 'operational',
-                    'confidence_expected': '80-95%',
-                    'features': ['cross_validation', 'adaptive_selection', 'performance_tracking']
-                },
-                'random_forest': {
-                    'available': True,
-                    'display_name': 'Random Forest Avancé',
-                    'description': 'Forêt aléatoire avec hyperparamètres optimisés',
-                    'recommended_for': 'Données moyennes à importantes, prédictions stables',
-                    'status': 'operational',
-                    'confidence_expected': '75-88%',
-                    'features': ['feature_importance', 'robust_outliers', 'parallel_processing']
-                },
-                'gradient_boosting': {
-                    'available': True,
-                    'display_name': 'Gradient Boosting Premium',
-                    'description': 'Gradient Boosting avec régularisation avancée',
-                    'recommended_for': 'Haute précision, patterns complexes',
-                    'status': 'operational',
-                    'confidence_expected': '78-90%',
-                    'features': ['sequential_learning', 'overfitting_protection', 'adaptive_learning_rate']
-                },
-                'linear_regression': {
-                    'available': True,
-                    'display_name': 'Régression Linéaire Régularisée',
-                    'description': 'Ridge/Lasso avec sélection automatique des features',
-                    'recommended_for': 'Tendances linéaires, interprétabilité maximale',
-                    'status': 'operational',
-                    'confidence_expected': '65-78%',
-                    'features': ['regularization', 'feature_selection', 'interpretable']
-                }
-            }
-
-            # Ajouter XGBoost si disponible
-            if XGBOOST_AVAILABLE:
-                methods['xgboost'] = {
-                    'available': True,
-                    'display_name': 'XGBoost Professional',
-                    'description': 'XGBoost avec tuning automatique des hyperparamètres',
-                    'recommended_for': 'Datasets importants, précision maximale',
-                    'status': 'operational',
-                    'confidence_expected': '82-96%',
-                    'features': ['gradient_boosting', 'gpu_acceleration', 'early_stopping', 'hyperparameter_tuning']
-                }
-
-            # Ajouter les méthodes statistiques si statsmodels disponible
-            if STATSMODELS_AVAILABLE:
-                methods.update({
-                    'arima': {
-                        'available': True,
-                        'display_name': 'ARIMA Auto-Optimisé',
-                        'description': 'ARIMA avec sélection automatique des paramètres (p,d,q)',
-                        'recommended_for': 'Séries temporelles avec tendances et patterns',
-                        'status': 'operational',
-                        'confidence_expected': '70-85%',
-                        'features': ['auto_arima', 'stationarity_testing', 'model_selection']
-                    },
-                    'stl_arima': {
-                        'available': True,
-                        'display_name': 'STL + ARIMA Saisonnier',
-                        'description': 'Décomposition STL combinée avec ARIMA',
-                        'recommended_for': 'Données avec forte saisonnalité hebdomadaire',
-                        'status': 'operational',
-                        'confidence_expected': '72-87%',
-                        'features': ['seasonal_decomposition', 'trend_modeling', 'residual_analysis']
-                    },
-                    'exponential_smoothing': {
-                        'available': True,
-                        'display_name': 'Holt-Winters Avancé',
-                        'description': 'Lissage exponentiel avec composantes tendance et saisonnalité',
-                        'recommended_for': 'Prédictions rapides avec saisonnalité',
-                        'status': 'operational',
-                        'confidence_expected': '68-82%',
-                        'features': ['triple_exponential', 'automatic_seasonality', 'trend_damping']
-                    }
-                })
-
-            # Ajouter Prophet si disponible
-            if PROPHET_AVAILABLE:
-                methods['prophet'] = {
-                    'available': True,
-                    'display_name': 'Prophet Meta AI',
-                    'description': 'Modèle Prophet de Meta pour séries temporelles',
-                    'recommended_for': 'Données avec holidays et changements de tendance',
-                    'status': 'operational',
-                    'confidence_expected': '74-88%',
-                    'features': ['holiday_effects', 'changepoint_detection', 'uncertainty_intervals']
-                }
-
-            # Méthode de secours toujours disponible
-            methods['enhanced_fallback'] = {
+        # Ajouter Prophet si disponible
+        if PROPHET_AVAILABLE:
+            methods['prophet'] = {
                 'available': True,
-                'display_name': 'Fallback Intelligent Amélioré',
-                'description': 'Méthode de secours basée sur l\'analyse avancée des patterns',
-                'recommended_for': 'Backup système, données limitées, récupération d\'erreur',
+                'display_name': 'Prophet Meta AI',
+                'description': 'Modèle Prophet de Meta pour séries temporelles',
+                'recommended_for': 'Données avec holidays et changements de tendance',
                 'status': 'operational',
-                'confidence_expected': '50-70%',
-                'features': ['pattern_analysis', 'contextual_adjustment', 'priority_weighting']
+                'confidence_expected': '74-88%',
+                'features': ['holiday_effects', 'changepoint_detection', 'uncertainty_intervals']
             }
 
-            return {
-                'available_methods': list(methods.keys()),
-                'method_details': methods,
-                'total_methods': len([m for m in methods.values() if m['available']]),
-                'recommended_method': 'auto',
-                'system_capabilities': {
-                    'models_available': MODELS_AVAILABLE,
-                    'xgboost_available': XGBOOST_AVAILABLE,
-                    'statsmodels_available': STATSMODELS_AVAILABLE,
-                    'prophet_available': PROPHET_AVAILABLE,
-                    'sklearn_available': True,
-                    'advanced_features': True,
-                    'cross_validation': True,
-                    'uncertainty_quantification': True,
-                    'risk_assessment': True,
-                    'recommendations_engine': True
-                },
-                'performance_tiers': {
-                    'premium': ['xgboost', 'auto'] if XGBOOST_AVAILABLE else ['auto'],
-                    'professional': ['gradient_boosting', 'random_forest', 'stl_arima'],
-                    'standard': ['arima', 'exponential_smoothing', 'linear_regression'],
-                    'basic': ['enhanced_fallback']
-                }
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Error getting enhanced available methods: {e}")
-            return {
-                'available_methods': ['auto', 'random_forest', 'enhanced_fallback'],
-                'error': str(e)
-            }
-
-
-    def health_check_enhanced():
-        """
-        🏥 VÉRIFICATION DE SANTÉ DU SYSTÈME AMÉLIORÉE
-        """
-        try:
-            status = {
-                'status': 'healthy_enhanced',
-                'version': '3.0-enhanced',
-                'timestamp': datetime.now().isoformat(),
-                'dependencies': {
-                    'models_available': MODELS_AVAILABLE,
-                    'xgboost_available': XGBOOST_AVAILABLE,
-                    'statsmodels_available': STATSMODELS_AVAILABLE,
-                    'prophet_available': PROPHET_AVAILABLE,
-                    'pandas_available': True,
-                    'sklearn_available': True,
-                    'numpy_available': True,
-                    'scipy_available': True
-                },
-                'database': 'unknown',
-                'performance': {}
-            }
-
-            # Test de connexion DB amélioré
-            try:
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    cursor.execute("SELECT COUNT(*) FROM django_session")  # Test table existence
-                    status['database'] = 'connected_verified'
-            except Exception as e:
-                status['database'] = f'error: {str(e)}'
-                status['status'] = 'degraded_enhanced'
-
-            # Test des modèles Django avec comptage
-            if MODELS_AVAILABLE:
-                try:
-                    from .models import BloodUnit, BloodConsumption, BloodRequest
-
-                    counts = {
-                        'blood_units': BloodUnit.objects.count(),
-                        'consumptions': BloodConsumption.objects.count(),
-                        'requests': BloodRequest.objects.count()
-                    }
-
-                    status['data_availability'] = counts
-                    status['models_test'] = 'successful_with_data'
-
-                    # Vérifier la fraîcheur des données
-                    try:
-                        latest_unit = BloodUnit.objects.latest('collection_date')
-                        days_since_latest = (datetime.now().date() - latest_unit.collection_date).days
-                        status['data_freshness'] = f'{days_since_latest}_days_ago'
-                    except:
-                        status['data_freshness'] = 'unknown'
-
-                except Exception as e:
-                    status['models_test'] = f'failed: {str(e)}'
-                    status['status'] = 'degraded_enhanced'
-
-            # Test de performance rapide
-            try:
-                start_time = time.time()
-                forecaster = EnhancedBloodDemandForecaster()
-                init_time = time.time() - start_time
-
-                # Test de prédiction simple
-                test_start = time.time()
-                test_result = forecaster.predict_enhanced_fallback('O+', 1)
-                test_time = time.time() - test_start
-
-                status['performance'] = {
-                    'init_time_ms': round(init_time * 1000, 2),
-                    'prediction_time_ms': round(test_time * 1000, 2),
-                    'test_successful': len(test_result) > 0
-                }
-
-            except Exception as e:
-                status['performance'] = {'error': str(e)}
-                status['status'] = 'degraded_enhanced'
-
-            return status
-
-        except Exception as e:
-            return {
-                'status': 'error_enhanced',
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
-
-
-    def test_enhanced_forecast_system():
-        """
-        🧪 TEST SYSTÈME AMÉLIORÉ AVEC MÉTRIQUES DÉTAILLÉES
-        """
-        try:
-            results = {}
-
-            # Test des différentes méthodes disponibles
-            test_methods = ['auto', 'random_forest', 'enhanced_fallback']
-            if XGBOOST_AVAILABLE:
-                test_methods.append('xgboost')
-            if STATSMODELS_AVAILABLE:
-                test_methods.extend(['arima', 'stl_arima'])
-
-            for method in test_methods:
-                try:
-                    start_time = time.time()
-                    test_result = generate_enhanced_forecast_api('O+', days_ahead=3, method=method)
-                    execution_time = time.time() - start_time
-
-                    if 'error' not in test_result:
-                        results[method] = {
-                            'status': 'success',
-                            'execution_time_ms': round(execution_time * 1000, 2),
-                            'predictions_count': len(test_result.get('predictions', [])),
-                            'confidence': test_result.get('quality_metrics', {}).get('prediction_confidence', 0),
-                            'method_used': test_result.get('method_used'),
-                            'has_risk_assessment': 'risk_assessment' in test_result,
-                            'has_recommendations': 'recommendations' in test_result
-                        }
-                    else:
-                        results[method] = {
-                            'status': 'failed',
-                            'error': test_result.get('message', 'Unknown error'),
-                            'execution_time_ms': round(execution_time * 1000, 2)
-                        }
-
-                except Exception as e:
-                    results[method] = {
-                        'status': 'exception',
-                        'error': str(e)
-                    }
-
-            # Évaluation globale
-            successful_methods = [m for m, r in results.items() if r.get('status') == 'success']
-            failed_methods = [m for m, r in results.items() if r.get('status') != 'success']
-
-            if len(successful_methods) >= len(test_methods) * 0.7:  # 70% de succès
-                system_status = 'operational_enhanced'
-            elif len(successful_methods) > 0:
-                system_status = 'partially_operational_enhanced'
-            else:
-                system_status = 'critical_enhanced'
-
-            return {
-                'system_status': system_status,
-                'test_results': results,
-                'summary': {
-                    'total_methods_tested': len(test_methods),
-                    'successful_methods': len(successful_methods),
-                    'failed_methods': len(failed_methods),
-                    'success_rate': round(len(successful_methods) / len(test_methods) * 100, 1),
-                    'avg_execution_time_ms': round(np.mean([
-                        r.get('execution_time_ms', 0) for r in results.values()
-                        if r.get('execution_time_ms')
-                    ]), 2) if results else 0
-                },
-                'recommendations': []
-            }
-
-        except Exception as e:
-            return {
-                'system_status': 'error_enhanced',
-                'error': str(e),
-                'message': 'Enhanced system test failed with exception'
-            }
-
-
-    def verify_enhanced_system_integrity():
-        """
-        🔍 VÉRIFICATION AVANCÉE DE L'INTÉGRITÉ DU SYSTÈME
-        """
-        try:
-            issues = []
-            recommendations = []
-            capabilities = {}
-
-            # Test de connexion DB avancé
-            try:
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    # Test des tables spécifiques
-                    cursor.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_name LIKE '%blood%'")
-                    table_count = cursor.fetchone()[0]
-                    capabilities['database_tables'] = table_count
-                    logger.info(f"✅ Database connection successful, {table_count} blood-related tables found")
-            except Exception as e:
-                issues.append(f"Database connection failed: {e}")
-                recommendations.append("Check database configuration and ensure blood management tables exist")
-
-            # Test des modèles Django avancé
-            if MODELS_AVAILABLE:
-                try:
-                    from .models import BloodUnit, BloodConsumption, BloodRequest, Donor
-
-                    # Tests de comptage et de structure
-                    model_stats = {}
-                    for model_name, model_class in [
-                        ('BloodUnit', BloodUnit),
-                        ('BloodConsumption', BloodConsumption),
-                        ('BloodRequest', BloodRequest),
-                        ('Donor', Donor)
-                    ]:
-                        try:
-                            count = model_class.objects.count()
-                            model_stats[model_name] = count
-
-                            # Test d'accès aux champs critiques
-                            if count > 0:
-                                latest = model_class.objects.first()
-                                # Test de sérialisation basique
-                                str(latest)
-
-                        except Exception as e:
-                            issues.append(f"Model {model_name} access error: {e}")
-
-                    capabilities['model_data'] = model_stats
-
-                    total_records = sum(model_stats.values())
-                    if total_records == 0:
-                        issues.append("No data in database - system will operate in synthetic mode")
-                        recommendations.append("Load sample data or connect to production database")
-                    elif total_records < 100:
-                        issues.append("Limited data available - predictions may be less accurate")
-                        recommendations.append("Accumulate more historical data for better predictions")
-                    else:
-                        logger.info(f"✅ Sufficient data: {total_records} total records")
-
-                except ImportError as e:
-                    issues.append(f"Django models import failed: {e}")
-                    recommendations.append("Ensure Django models are properly configured and database is migrated")
-            else:
-                issues.append("Django models not available - using synthetic data only")
-                recommendations.append("Configure Django models for real data integration")
-
-            # Test des dépendances ML avancé
-            ml_capabilities = {}
-
-            # Test XGBoost
-            if XGBOOST_AVAILABLE:
-                try:
-                    import xgboost as xgb
-                    ml_capabilities['xgboost'] = xgb.__version__
-                    # Test d'instanciation rapide
-                    test_model = xgb.XGBRegressor(n_estimators=1)
-                    ml_capabilities['xgboost_functional'] = True
-                except Exception as e:
-                    issues.append(f"XGBoost available but not functional: {e}")
-                    ml_capabilities['xgboost_functional'] = False
-            else:
-                recommendations.append("Install XGBoost for premium ML capabilities: pip install xgboost")
-
-            # Test Statsmodels
-            if STATSMODELS_AVAILABLE:
-                try:
-                    import statsmodels
-                    ml_capabilities['statsmodels'] = statsmodels.__version__
-                    # Test d'import des modules critiques
-                    from statsmodels.tsa.arima.model import ARIMA
-                    ml_capabilities['statsmodels_functional'] = True
-                except Exception as e:
-                    issues.append(f"Statsmodels available but not functional: {e}")
-                    ml_capabilities['statsmodels_functional'] = False
-            else:
-                recommendations.append("Install Statsmodels for time series analysis: pip install statsmodels")
-
-            # Test Prophet
-            if PROPHET_AVAILABLE:
-                try:
-                    import prophet
-                    ml_capabilities['prophet'] = prophet.__version__
-                    ml_capabilities['prophet_functional'] = True
-                except Exception as e:
-                    issues.append(f"Prophet available but not functional: {e}")
-                    ml_capabilities['prophet_functional'] = False
-
-            capabilities['ml_libraries'] = ml_capabilities
-
-            # Test du forecaster avancé
-            forecaster_issues = []
-            try:
-                forecaster = EnhancedBloodDemandForecaster()
-
-                # Test d'initialisation des modèles
-                model_count = len(forecaster.models)
-                capabilities['ml_models_loaded'] = model_count
-
-                # Test de génération de données synthétiques
-                synthetic_data = forecaster.generate_enhanced_synthetic_data('O+', 30)
-                if synthetic_data is not None and len(synthetic_data) > 0:
-                    capabilities['synthetic_data_generation'] = True
-                else:
-                    forecaster_issues.append("Synthetic data generation failed")
-
-                # Test de création de features
-                if synthetic_data is not None:
-                    features_df = forecaster.create_advanced_features(synthetic_data)
-                    if features_df is not None:
-                        capabilities['feature_engineering'] = features_df.shape[1]
-                    else:
-                        forecaster_issues.append("Feature engineering failed")
-
-            except Exception as e:
-                forecaster_issues.append(f"Forecaster initialization failed: {e}")
-
-            if forecaster_issues:
-                issues.extend(forecaster_issues)
-                recommendations.append("Check Python environment and ML library installations")
-
-            # Test de performance
-            try:
-                performance_start = time.time()
-                test_prediction = generate_enhanced_forecast_api('O+', 1, 'enhanced_fallback')
-                performance_time = time.time() - performance_start
-
-                capabilities['performance_test'] = {
-                    'execution_time_ms': round(performance_time * 1000, 2),
-                    'successful': 'error' not in test_prediction
-                }
-
-                if performance_time > 10:  # Plus de 10 secondes
-                    issues.append("System performance is slow")
-                    recommendations.append("Consider optimizing database queries or upgrading hardware")
-
-            except Exception as e:
-                issues.append(f"Performance test failed: {e}")
-
-            # Déterminer le statut global
-            critical_issues = [i for i in issues if any(word in i.lower() for word in ['failed', 'error', 'critical'])]
-
-            if not issues:
-                status = 'excellent_enhanced'
-            elif not critical_issues:
-                status = 'good_enhanced'
-            elif len(critical_issues) < 3:
-                status = 'operational_with_issues_enhanced'
-            else:
-                status = 'degraded_enhanced'
-
-            return {
-                'status': status,
-                'issues': issues,
-                'recommendations': recommendations,
-                'capabilities': capabilities,
-                'system_metrics': {
-                    'total_issues': len(issues),
-                    'critical_issues': len(critical_issues),
-                    'ml_methods_available': len([k for k, v in ml_capabilities.items() if v and 'functional' not in k]),
-                    'data_sources_available': 1 if MODELS_AVAILABLE else 0,
-                    'advanced_features_enabled': True
-                },
-                'system_info': {
-                    'version': '3.0-enhanced',
-                    'models_available': MODELS_AVAILABLE,
-                    'xgboost_available': XGBOOST_AVAILABLE,
-                    'statsmodels_available': STATSMODELS_AVAILABLE,
-                    'prophet_available': PROPHET_AVAILABLE,
-                    'timestamp': datetime.now().isoformat()
-                }
-            }
-
-        except Exception as e:
-            return {
-                'status': 'critical_error_enhanced',
-                'error': str(e),
-                'capabilities': {'error': True},
-                'timestamp': datetime.now().isoformat()
-            }
-
-
-    # ==================== FONCTIONS UTILITAIRES AMÉLIORÉES ====================
-
-    def clear_enhanced_cache(blood_type=None):
-        """
-        🧹 NETTOYAGE DU CACHE AMÉLIORÉ
-        """
-        try:
-            if blood_type:
-                # Nettoyage spécifique avec patterns améliorés
-                cache_patterns = [
-                    f'enhanced_model_{blood_type}_*',
-                    f'enhanced_prediction_{blood_type}_*',
-                    f'contextual_data_{blood_type}_*',
-                    f'synthetic_data_{blood_type}_*'
-                ]
-
-                # Django cache ne supporte pas les wildcards, donc on utilise une approche différente
-                cache.clear()  # Pour l'instant, on nettoie tout
-                logger.info(f"✅ Enhanced cache cleared for {blood_type}")
-
-            else:
-                cache.clear()
-                logger.info("✅ Enhanced global cache cleared")
-
-            return {'status': 'success', 'message': 'Enhanced cache cleared successfully'}
-
-        except Exception as e:
-            logger.error(f"❌ Enhanced cache clearing error: {e}")
-            return {'status': 'error', 'message': str(e)}
-
-
-    def get_enhanced_system_stats():
-        """
-        📊 STATISTIQUES SYSTÈME AMÉLIORÉES
-        """
-        try:
-            # Stats de base
-            stats = {
-                'version': '3.0-enhanced',
-                'timestamp': datetime.now().isoformat(),
-                'api_level': 'professional_enhanced'
-            }
-
-            # Dépendances avec versions
-            dependencies = {
-                'core': {
-                    'pandas_available': True,
-                    'numpy_available': True,
-                    'sklearn_available': True,
-                    'scipy_available': True
-                },
-                'ml_premium': {
-                    'xgboost_available': XGBOOST_AVAILABLE,
-                    'statsmodels_available': STATSMODELS_AVAILABLE,
-                    'prophet_available': PROPHET_AVAILABLE
-                },
-                'database': {
-                    'models_available': MODELS_AVAILABLE,
-                    'django_integration': True
-                }
-            }
-
-            # Obtenir les versions si possible
-            try:
-                import pandas as pd
-                import numpy as np
-                import sklearn
-                dependencies['versions'] = {
-                    'pandas': pd.__version__,
-                    'numpy': np.__version__,
-                    'sklearn': sklearn.__version__
-                }
-
-                if XGBOOST_AVAILABLE:
-                    import xgboost as xgb
-                    dependencies['versions']['xgboost'] = xgb.__version__
-
-                if STATSMODELS_AVAILABLE:
-                    import statsmodels
-                    dependencies['versions']['statsmodels'] = statsmodels.__version__
-
-            except Exception as e:
-                dependencies['version_error'] = str(e)
-
-            stats['dependencies'] = dependencies
-
-            # Configuration des types sanguins avec détails
-            forecaster = EnhancedBloodDemandForecaster()
-            blood_types_config = {}
-
-            for blood_type, config in forecaster.blood_type_config.items():
-                blood_types_config[blood_type] = {
-                    'priority': config.get('priority'),
-                    'base_demand': config.get('base_demand'),
-                    'compatibility_count': len(config.get('compatibility', [])),
-                    'weekend_factor': config.get('weekend_factor'),
-                    'emergency_multiplier': config.get('emergency_multiplier')
-                }
-
-            stats['blood_types'] = {
-                'supported_types': list(blood_types_config.keys()),
-                'configurations': blood_types_config,
-                'total_supported': len(blood_types_config)
-            }
-
-            # Méthodes disponibles avec détails
-            methods_info = get_enhanced_available_methods()
-            stats['forecasting_methods'] = {
-                'total_methods': methods_info.get('total_methods', 0),
-                'premium_methods': methods_info.get('performance_tiers', {}).get('premium', []),
-                'all_available': methods_info.get('available_methods', []),
-                'capabilities': methods_info.get('system_capabilities', {})
-            }
-
-            # Limites et capacités
-            stats['system_limits'] = {
-                'max_forecast_days': 30,
-                'min_forecast_days': 1,
-                'max_execution_time': 150,
-                'cache_enabled': True,
-                'parallel_processing': True,
+        # Méthode de secours toujours disponible
+        methods['enhanced_fallback'] = {
+            'available': True,
+            'display_name': 'Fallback Intelligent Amélioré',
+            'description': 'Méthode de secours basée sur l\'analyse avancée des patterns',
+            'recommended_for': 'Backup système, données limitées, récupération d\'erreur',
+            'status': 'operational',
+            'confidence_expected': '50-70%',
+            'features': ['pattern_analysis', 'contextual_adjustment', 'priority_weighting']
+        }
+
+        return {
+            'available_methods': list(methods.keys()),
+            'method_details': methods,
+            'total_methods': len([m for m in methods.values() if m['available']]),
+            'recommended_method': 'auto',
+            'system_capabilities': {
+                'models_available': MODELS_AVAILABLE,
+                'xgboost_available': XGBOOST_AVAILABLE,
+                'statsmodels_available': STATSMODELS_AVAILABLE,
+                'prophet_available': PROPHET_AVAILABLE,
+                'sklearn_available': True,
+                'advanced_features': True,
                 'cross_validation': True,
                 'uncertainty_quantification': True,
                 'risk_assessment': True,
                 'recommendations_engine': True
+            },
+            'performance_tiers': {
+                'premium': ['xgboost', 'auto'] if XGBOOST_AVAILABLE else ['auto'],
+                'professional': ['gradient_boosting', 'random_forest', 'stl_arima'],
+                'standard': ['arima', 'exponential_smoothing', 'linear_regression'],
+                'basic': ['enhanced_fallback']
             }
+        }
 
-            # Statistiques de la base de données si disponible
-            if MODELS_AVAILABLE:
+    except Exception as e:
+        logger.error(f"❌ Error getting enhanced available methods: {e}")
+        return {
+            'available_methods': ['auto', 'random_forest', 'enhanced_fallback'],
+            'error': str(e)
+        }
+
+def health_check_enhanced():
+    """
+    🏥 VÉRIFICATION DE SANTÉ DU SYSTÈME AMÉLIORÉE
+    """
+    try:
+        status = {
+            'status': 'healthy_enhanced',
+            'version': '3.0-enhanced',
+            'timestamp': datetime.now().isoformat(),
+            'dependencies': {
+                'models_available': MODELS_AVAILABLE,
+                'xgboost_available': XGBOOST_AVAILABLE,
+                'statsmodels_available': STATSMODELS_AVAILABLE,
+                'prophet_available': PROPHET_AVAILABLE,
+                'pandas_available': True,
+                'sklearn_available': True,
+                'numpy_available': True,
+                'scipy_available': True
+            },
+            'database': 'unknown',
+            'performance': {}
+        }
+
+        # Test de connexion DB amélioré
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.execute("SELECT COUNT(*) FROM django_session")  # Test table existence
+                status['database'] = 'connected_verified'
+        except Exception as e:
+            status['database'] = f'error: {str(e)}'
+            status['status'] = 'degraded_enhanced'
+
+        # Test des modèles Django avec comptage
+        if MODELS_AVAILABLE:
+            try:
+                from .models import BloodUnit, BloodConsumption, BloodRequest
+
+                counts = {
+                    'blood_units': BloodUnit.objects.count(),
+                    'consumptions': BloodConsumption.objects.count(),
+                    'requests': BloodRequest.objects.count()
+                }
+
+                status['data_availability'] = counts
+                status['models_test'] = 'successful_with_data'
+
+                # Vérifier la fraîcheur des données
                 try:
-                    from .models import BloodUnit, BloodConsumption, BloodRequest, Donor
+                    latest_unit = BloodUnit.objects.latest('collection_date')
+                    days_since_latest = (datetime.now().date() - latest_unit.collection_date).days
+                    status['data_freshness'] = f'{days_since_latest}_days_ago'
+                except:
+                    status['data_freshness'] = 'unknown'
 
-                    db_stats = {}
-                    for model_name, model_class in [
-                        ('blood_units', BloodUnit),
-                        ('blood_consumptions', BloodConsumption),
-                        ('blood_requests', BloodRequest),
-                        ('donors', Donor)
-                    ]:
-                        try:
-                            count = model_class.objects.count()
-                            db_stats[model_name] = count
+            except Exception as e:
+                status['models_test'] = f'failed: {str(e)}'
+                status['status'] = 'degraded_enhanced'
 
-                            # Statistiques par type sanguin pour BloodUnit
-                            if model_name == 'blood_units' and count > 0:
-                                blood_type_distribution = {}
-                                for bt in forecaster.blood_type_config.keys():
-                                    bt_count = BloodUnit.objects.filter(donor__blood_type=bt).count()
-                                    if bt_count > 0:
-                                        blood_type_distribution[bt] = bt_count
-                                db_stats['blood_type_distribution'] = blood_type_distribution
+        # Test de performance rapide
+        try:
+            start_time = time.time()
+            forecaster = EnhancedBloodDemandForecaster()
+            init_time = time.time() - start_time
 
-                        except Exception as e:
-                            db_stats[f'{model_name}_error'] = str(e)
+            # Test de prédiction simple
+            test_start = time.time()
+            test_result = forecaster.predict_enhanced_fallback('O+', 1)
+            test_time = time.time() - test_start
 
-                    stats['database_stats'] = db_stats
-                    stats['database_stats']['last_updated'] = datetime.now().isoformat()
-
-                except Exception as e:
-                    stats['database_stats'] = {'error': str(e)}
-
-            return stats
-
-        except Exception as e:
-            return {
-                'version': '3.0-enhanced',
-                'error': str(e),
-                'timestamp': datetime.now().isoformat(),
-                'status': 'error_retrieving_stats'
+            status['performance'] = {
+                'init_time_ms': round(init_time * 1000, 2),
+                'prediction_time_ms': round(test_time * 1000, 2),
+                'test_successful': len(test_result) > 0
             }
 
-
-    # ==================== FONCTIONS DE COMPATIBILITÉ AMÉLIORÉES ====================
-
-    # Points d'entrée principaux - compatible avec l'API existante mais améliorée
-    def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
-        """
-        🚀 POINT D'ENTRÉE PRINCIPAL AMÉLIORÉ - Remplace l'ancienne version
-        """
-        return generate_enhanced_forecast_api(blood_type, days_ahead, method, force_retrain)
-
-
-    def predict_demand(blood_type, days_ahead=7, method='auto'):
-        """Alias pour compatibilité avec l'ancien code - version améliorée"""
-        return generate_enhanced_forecast_api(blood_type, days_ahead, method)
-
-
-    def health_check():
-        """Alias pour compatibilité - version améliorée"""
-        return health_check_enhanced()
-
-
-    def test_forecast_system():
-        """Alias pour compatibilité - version améliorée"""
-        return test_enhanced_forecast_system()
-
-
-    def get_available_methods():
-        """Alias pour compatibilité - version améliorée"""
-        return get_enhanced_available_methods()
-
-
-    def verify_system_integrity():
-        """Alias pour compatibilité - version améliorée"""
-        return verify_enhanced_system_integrity()
-
-
-    def get_system_stats():
-        """Alias pour compatibilité - version améliorée"""
-        return get_enhanced_system_stats()
-
-
-    def clear_all_cache():
-        """Alias pour compatibilité - version améliorée"""
-        return clear_enhanced_cache()
-
-
-    # Fonction d'extension du forecaster pour méthodes supplémentaires
-    def add_forecaster_method_enhanced(forecaster, method_name, method_func):
-        """
-        🔧 AJOUT DYNAMIQUE DE MÉTHODES DE PRÉVISION
-        """
-        try:
-            if hasattr(forecaster, 'custom_methods'):
-                forecaster.custom_methods[method_name] = method_func
-            else:
-                forecaster.custom_methods = {method_name: method_func}
-
-            logger.info(f"✅ Custom method '{method_name}' added to forecaster")
-            return True
-
         except Exception as e:
-            logger.error(f"❌ Error adding custom method: {e}")
-            return False
+            status['performance'] = {'error': str(e)}
+            status['status'] = 'degraded_enhanced'
 
+        return status
 
-    # ==================== CONFIGURATION ET TEST FINAL AMÉLIORÉ ====================
+    except Exception as e:
+        return {
+            'status': 'error_enhanced',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
 
-    if __name__ == "__main__":
-        """
-        🧪 TEST COMPLET DU MODULE AMÉLIORÉ
-        """
-        print("🩸 Enhanced Blood Demand Forecasting System v3.0")
-        print("=" * 70)
+def test_enhanced_forecast_system():
+    """
+    🧪 TEST SYSTÈME AMÉLIORÉ AVEC MÉTRIQUES DÉTAILLÉES
+    """
+    try:
+        results = {}
 
-        # Test d'initialisation amélioré
-        try:
-            forecaster = EnhancedBloodDemandForecaster()
-            print("✅ Enhanced Forecaster initialisé avec succès")
-            print(f"   📊 {len(forecaster.models)} modèles ML chargés")
-            print(f"   🩸 {len(forecaster.blood_type_config)} types sanguins configurés")
-        except Exception as e:
-            print(f"❌ Erreur initialisation enhanced: {e}")
-
-        # Test de santé du système amélioré
-        health = health_check_enhanced()
-        print(f"🏥 Santé du système: {health['status']}")
-
-        if 'performance' in health:
-            perf = health['performance']
-            print(f"   ⚡ Init: {perf.get('init_time_ms', 0)}ms")
-            print(f"   🔮 Prédiction: {perf.get('prediction_time_ms', 0)}ms")
-
-        # Test des méthodes disponibles
-        methods = get_enhanced_available_methods()
-        print(f"\n📋 Méthodes disponibles: {methods['total_methods']}")
-
-        premium_methods = methods['system_capabilities']
-        print("   🚀 Capacités Premium:")
-        for capability, available in premium_methods.items():
-            status = "✅" if available else "❌"
-            print(f"     {status} {capability}")
-
-        # Test de prédiction pour chaque méthode disponible
-        print("\n🔮 Tests de prédiction par méthode:")
-
+        # Test des différentes méthodes disponibles
         test_methods = ['auto', 'random_forest', 'enhanced_fallback']
         if XGBOOST_AVAILABLE:
             test_methods.append('xgboost')
         if STATSMODELS_AVAILABLE:
             test_methods.extend(['arima', 'stl_arima'])
 
-        for method in test_methods[:3]:  # Limiter pour éviter trop de sortie
+        for method in test_methods:
             try:
                 start_time = time.time()
-                result = generate_enhanced_forecast_api('O+', 3, method)
-                exec_time = time.time() - start_time
+                test_result = generate_enhanced_forecast_api('O+', days_ahead=3, method=method)
+                execution_time = time.time() - start_time
 
-                if 'error' not in result:
-                    predictions = len(result.get('predictions', []))
-                    confidence = result.get('quality_metrics', {}).get('prediction_confidence', 0)
-                    method_used = result.get('method_used', method)
-
-                    print(f"   ✅ {method}: {predictions} prévisions, "
-                          f"confiance: {confidence:.2f}, "
-                          f"méthode: {method_used} ({exec_time * 1000:.0f}ms)")
+                if 'error' not in test_result:
+                    results[method] = {
+                        'status': 'success',
+                        'execution_time_ms': round(execution_time * 1000, 2),
+                        'predictions_count': len(test_result.get('predictions', [])),
+                        'confidence': test_result.get('quality_metrics', {}).get('prediction_confidence', 0),
+                        'method_used': test_result.get('method_used'),
+                        'has_risk_assessment': 'risk_assessment' in test_result,
+                        'has_recommendations': 'recommendations' in test_result
+                    }
                 else:
-                    print(f"   ❌ {method}: {result.get('message', 'Erreur inconnue')}")
+                    results[method] = {
+                        'status': 'failed',
+                        'error': test_result.get('message', 'Unknown error'),
+                        'execution_time_ms': round(execution_time * 1000, 2)
+                    }
 
             except Exception as e:
-                print(f"   ❌ {method}: Exception - {str(e)[:50]}...")
+                results[method] = {
+                    'status': 'exception',
+                    'error': str(e)
+                }
 
-        # Test d'intégrité système
-        print("\n🔍 Intégrité du système:")
-        integrity = verify_enhanced_system_integrity()
-        print(f"   Status: {integrity['status']}")
+        # Évaluation globale
+        successful_methods = [m for m, r in results.items() if r.get('status') == 'success']
+        failed_methods = [m for m, r in results.items() if r.get('status') != 'success']
 
-        capabilities = integrity.get('capabilities', {})
-        if 'ml_models_loaded' in capabilities:
-            print(f"   📚 Modèles ML: {capabilities['ml_models_loaded']}")
-        if 'feature_engineering' in capabilities:
-            print(f"   🛠️ Features: {capabilities['feature_engineering']}")
+        if len(successful_methods) >= len(test_methods) * 0.7:  # 70% de succès
+            system_status = 'operational_enhanced'
+        elif len(successful_methods) > 0:
+            system_status = 'partially_operational_enhanced'
+        else:
+            system_status = 'critical_enhanced'
 
-        issues = integrity.get('issues', [])
-        if issues:
-            print("   ⚠️ Issues détectées:")
-            for issue in issues[:2]:  # Limiter à 2 issues
-                print(f"     - {issue[:60]}...")
+        return {
+            'system_status': system_status,
+            'test_results': results,
+            'summary': {
+                'total_methods_tested': len(test_methods),
+                'successful_methods': len(successful_methods),
+                'failed_methods': len(failed_methods),
+                'success_rate': round(len(successful_methods) / len(test_methods) * 100, 1),
+                'avg_execution_time_ms': round(np.mean([
+                    r.get('execution_time_ms', 0) for r in results.values()
+                    if r.get('execution_time_ms')
+                ]), 2) if results else 0
+            },
+            'recommendations': []
+        }
 
-        # Statistiques finales
+    except Exception as e:
+        return {
+            'system_status': 'error_enhanced',
+            'error': str(e),
+            'message': 'Enhanced system test failed with exception'
+        }
+
+def verify_enhanced_system_integrity():
+    """
+    🔍 VÉRIFICATION AVANCÉE DE L'INTÉGRITÉ DU SYSTÈME
+    """
+    try:
+        issues = []
+        recommendations = []
+        capabilities = {}
+
+        # Test de connexion DB avancé
         try:
-            stats = get_enhanced_system_stats()
-            methods_count = stats.get('forecasting_methods', {}).get('total_methods', 0)
-            blood_types_count = stats.get('blood_types', {}).get('total_supported', 0)
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                # Test des tables spécifiques
+                cursor.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_name LIKE '%blood%'")
+                table_count = cursor.fetchone()[0]
+                capabilities['database_tables'] = table_count
+                logger.info(f"✅ Database connection successful, {table_count} blood-related tables found")
+        except Exception as e:
+            issues.append(f"Database connection failed: {e}")
+            recommendations.append("Check database configuration and ensure blood management tables exist")
 
-            print(f"\n📊 Statistiques système:")
-            print(f"   🔬 {methods_count} méthodes de prévision")
-            print(f"   🩸 {blood_types_count} types sanguins supportés")
+        # Test des modèles Django avancé
+        if MODELS_AVAILABLE:
+            try:
+                from .models import BloodUnit, BloodConsumption, BloodRequest, Donor
 
-            if 'database_stats' in stats and not 'error' in stats['database_stats']:
-                db_stats = stats['database_stats']
-                total_records = sum(v for k, v in db_stats.items()
-                                    if isinstance(v, int) and 'distribution' not in k)
-                print(f"   💾 {total_records} enregistrements en base")
+                # Tests de comptage et de structure
+                model_stats = {}
+                for model_name, model_class in [
+                    ('BloodUnit', BloodUnit),
+                    ('BloodConsumption', BloodConsumption),
+                    ('BloodRequest', BloodRequest),
+                    ('Donor', Donor)
+                ]:
+                    try:
+                        count = model_class.objects.count()
+                        model_stats[model_name] = count
+
+                        # Test d'accès aux champs critiques
+                        if count > 0:
+                            latest = model_class.objects.first()
+                            # Test de sérialisation basique
+                            str(latest)
+
+                    except Exception as e:
+                        issues.append(f"Model {model_name} access error: {e}")
+
+                capabilities['model_data'] = model_stats
+
+                total_records = sum(model_stats.values())
+                if total_records == 0:
+                    issues.append("No data in database - system will operate in synthetic mode")
+                    recommendations.append("Load sample data or connect to production database")
+                elif total_records < 100:
+                    issues.append("Limited data available - predictions may be less accurate")
+                    recommendations.append("Accumulate more historical data for better predictions")
+                else:
+                    logger.info(f"✅ Sufficient data: {total_records} total records")
+
+            except ImportError as e:
+                issues.append(f"Django models import failed: {e}")
+                recommendations.append("Ensure Django models are properly configured and database is migrated")
+        else:
+            issues.append("Django models not available - using synthetic data only")
+            recommendations.append("Configure Django models for real data integration")
+
+        # Test des dépendances ML avancé
+        ml_capabilities = {}
+
+        # Test XGBoost
+        if XGBOOST_AVAILABLE:
+            try:
+                import xgboost as xgb
+                ml_capabilities['xgboost'] = xgb.__version__
+                # Test d'instanciation rapide
+                test_model = xgb.XGBRegressor(n_estimators=1)
+                ml_capabilities['xgboost_functional'] = True
+            except Exception as e:
+                issues.append(f"XGBoost available but not functional: {e}")
+                ml_capabilities['xgboost_functional'] = False
+        else:
+            recommendations.append("Install XGBoost for premium ML capabilities: pip install xgboost")
+
+        # Test Statsmodels
+        if STATSMODELS_AVAILABLE:
+            try:
+                import statsmodels
+                ml_capabilities['statsmodels'] = statsmodels.__version__
+                # Test d'import des modules critiques
+                from statsmodels.tsa.arima.model import ARIMA
+                ml_capabilities['statsmodels_functional'] = True
+            except Exception as e:
+                issues.append(f"Statsmodels available but not functional: {e}")
+                ml_capabilities['statsmodels_functional'] = False
+        else:
+            recommendations.append("Install Statsmodels for time series analysis: pip install statsmodels")
+
+        # Test Prophet
+        if PROPHET_AVAILABLE:
+            try:
+                import prophet
+                ml_capabilities['prophet'] = prophet.__version__
+                ml_capabilities['prophet_functional'] = True
+            except Exception as e:
+                issues.append(f"Prophet available but not functional: {e}")
+                ml_capabilities['prophet_functional'] = False
+
+        capabilities['ml_libraries'] = ml_capabilities
+
+        # Test du forecaster avancé
+        forecaster_issues = []
+        try:
+            forecaster = EnhancedBloodDemandForecaster()
+
+            # Test d'initialisation des modèles
+            model_count = len(forecaster.models)
+            capabilities['ml_models_loaded'] = model_count
+
+            # Test de génération de données synthétiques
+            synthetic_data = forecaster.generate_enhanced_synthetic_data('O+', 30)
+            if synthetic_data is not None and len(synthetic_data) > 0:
+                capabilities['synthetic_data_generation'] = True
+            else:
+                forecaster_issues.append("Synthetic data generation failed")
+
+            # Test de création de features
+            if synthetic_data is not None:
+                features_df = forecaster.create_advanced_features(synthetic_data)
+                if features_df is not None:
+                    capabilities['feature_engineering'] = features_df.shape[1]
+                else:
+                    forecaster_issues.append("Feature engineering failed")
 
         except Exception as e:
-            print(f"   ❌ Erreur statistiques: {e}")
+            forecaster_issues.append(f"Forecaster initialization failed: {e}")
 
-        print("\n" + "=" * 70)
-        print("✅ Module Enhanced Blood Demand Forecasting prêt à l'utilisation!")
-        print("📝 Utilisez generate_forecast_api(blood_type, days_ahead, method) pour les prédictions")
-        print("🎯 Version 3.0 avec ML avancé, évaluation de risque et recommandations")
-        print("🚀 Performance optimisée avec validation croisée et gestion d'incertitude")
+        if forecaster_issues:
+            issues.extend(forecaster_issues)
+            recommendations.append("Check Python environment and ML library installations")
+
+        # Test de performance
+        try:
+            performance_start = time.time()
+            test_prediction = generate_enhanced_forecast_api('O+', 1, 'enhanced_fallback')
+            performance_time = time.time() - performance_start
+
+            capabilities['performance_test'] = {
+                'execution_time_ms': round(performance_time * 1000, 2),
+                'successful': 'error' not in test_prediction
+            }
+
+            if performance_time > 10:  # Plus de 10 secondes
+                issues.append("System performance is slow")
+                recommendations.append("Consider optimizing database queries or upgrading hardware")
+
+        except Exception as e:
+            issues.append(f"Performance test failed: {e}")
+
+        # Déterminer le statut global
+        critical_issues = [i for i in issues if any(word in i.lower() for word in ['failed', 'error', 'critical'])]
+
+        if not issues:
+            status = 'excellent_enhanced'
+        elif not critical_issues:
+            status = 'good_enhanced'
+        elif len(critical_issues) < 3:
+            status = 'operational_with_issues_enhanced'
+        else:
+            status = 'degraded_enhanced'
+
+        return {
+            'status': status,
+            'issues': issues,
+            'recommendations': recommendations,
+            'capabilities': capabilities,
+            'system_metrics': {
+                'total_issues': len(issues),
+                'critical_issues': len(critical_issues),
+                'ml_methods_available': len([k for k, v in ml_capabilities.items() if v and 'functional' not in k]),
+                'data_sources_available': 1 if MODELS_AVAILABLE else 0,
+                'advanced_features_enabled': True
+            },
+            'system_info': {
+                'version': '3.0-enhanced',
+                'models_available': MODELS_AVAILABLE,
+                'xgboost_available': XGBOOST_AVAILABLE,
+                'statsmodels_available': STATSMODELS_AVAILABLE,
+                'prophet_available': PROPHET_AVAILABLE,
+                'timestamp': datetime.now().isoformat()
+            }
+        }
+
+    except Exception as e:
+        return {
+            'status': 'critical_error_enhanced',
+            'error': str(e),
+            'capabilities': {'error': True},
+            'timestamp': datetime.now().isoformat()
+        }
+
+# ==================== FONCTIONS UTILITAIRES AMÉLIORÉES ====================
+
+def clear_enhanced_cache(blood_type=None):
+    """
+    🧹 NETTOYAGE DU CACHE AMÉLIORÉ
+    """
+    try:
+        if blood_type:
+            # Nettoyage spécifique avec patterns améliorés
+            cache_patterns = [
+                f'enhanced_model_{blood_type}_*',
+                f'enhanced_prediction_{blood_type}_*',
+                f'contextual_data_{blood_type}_*',
+                f'synthetic_data_{blood_type}_*'
+            ]
+
+            # Django cache ne supporte pas les wildcards, donc on utilise une approche différente
+            cache.clear()  # Pour l'instant, on nettoie tout
+            logger.info(f"✅ Enhanced cache cleared for {blood_type}")
+
+        else:
+            cache.clear()
+            logger.info("✅ Enhanced global cache cleared")
+
+        return {'status': 'success', 'message': 'Enhanced cache cleared successfully'}
+
+    except Exception as e:
+        logger.error(f"❌ Enhanced cache clearing error: {e}")
+        return {'status': 'error', 'message': str(e)}
+
+def get_enhanced_system_stats():
+    """
+    📊 STATISTIQUES SYSTÈME AMÉLIORÉES
+    """
+    try:
+        # Stats de base
+        stats = {
+            'version': '3.0-enhanced',
+            'timestamp': datetime.now().isoformat(),
+            'api_level': 'professional_enhanced'
+        }
+
+        # Dépendances avec versions
+        dependencies = {
+            'core': {
+                'pandas_available': True,
+                'numpy_available': True,
+                'sklearn_available': True,
+                'scipy_available': True
+            },
+            'ml_premium': {
+                'xgboost_available': XGBOOST_AVAILABLE,
+                'statsmodels_available': STATSMODELS_AVAILABLE,
+                'prophet_available': PROPHET_AVAILABLE
+            },
+            'database': {
+                'models_available': MODELS_AVAILABLE,
+                'django_integration': True
+            }
+        }
+
+        # Obtenir les versions si possible
+        try:
+            import pandas as pd
+            import numpy as np
+            import sklearn
+            dependencies['versions'] = {
+                'pandas': pd.__version__,
+                'numpy': np.__version__,
+                'sklearn': sklearn.__version__
+            }
+
+            if XGBOOST_AVAILABLE:
+                import xgboost as xgb
+                dependencies['versions']['xgboost'] = xgb.__version__
+
+            if STATSMODELS_AVAILABLE:
+                import statsmodels
+                dependencies['versions']['statsmodels'] = statsmodels.__version__
+
+        except Exception as e:
+            dependencies['version_error'] = str(e)
+
+        stats['dependencies'] = dependencies
+
+        # Configuration des types sanguins avec détails
+        forecaster = EnhancedBloodDemandForecaster()
+        blood_types_config = {}
+
+        for blood_type, config in forecaster.blood_type_config.items():
+            blood_types_config[blood_type] = {
+                'priority': config.get('priority'),
+                'base_demand': config.get('base_demand'),
+                'compatibility_count': len(config.get('compatibility', [])),
+                'weekend_factor': config.get('weekend_factor'),
+                'emergency_multiplier': config.get('emergency_multiplier')
+            }
+
+        stats['blood_types'] = {
+            'supported_types': list(blood_types_config.keys()),
+            'configurations': blood_types_config,
+            'total_supported': len(blood_types_config)
+        }
+
+        # Méthodes disponibles avec détails
+        methods_info = get_enhanced_available_methods()
+        stats['forecasting_methods'] = {
+            'total_methods': methods_info.get('total_methods', 0),
+            'premium_methods': methods_info.get('performance_tiers', {}).get('premium', []),
+            'all_available': methods_info.get('available_methods', []),
+            'capabilities': methods_info.get('system_capabilities', {})
+        }
+
+        # Limites et capacités
+        stats['system_limits'] = {
+            'max_forecast_days': 30,
+            'min_forecast_days': 1,
+            'max_execution_time': 150,
+            'cache_enabled': True,
+            'parallel_processing': True,
+            'cross_validation': True,
+            'uncertainty_quantification': True,
+            'risk_assessment': True,
+            'recommendations_engine': True
+        }
+
+        # Statistiques de la base de données si disponible
+        if MODELS_AVAILABLE:
+            try:
+                from .models import BloodUnit, BloodConsumption, BloodRequest, Donor
+
+                db_stats = {}
+                for model_name, model_class in [
+                    ('blood_units', BloodUnit),
+                    ('blood_consumptions', BloodConsumption),
+                    ('blood_requests', BloodRequest),
+                    ('donors', Donor)
+                ]:
+                    try:
+                        count = model_class.objects.count()
+                        db_stats[model_name] = count
+
+                        # Statistiques par type sanguin pour BloodUnit
+                        if model_name == 'blood_units' and count > 0:
+                            blood_type_distribution = {}
+                            for bt in forecaster.blood_type_config.keys():
+                                bt_count = BloodUnit.objects.filter(donor__blood_type=bt).count()
+                                if bt_count > 0:
+                                    blood_type_distribution[bt] = bt_count
+                            db_stats['blood_type_distribution'] = blood_type_distribution
+
+                    except Exception as e:
+                        db_stats[f'{model_name}_error'] = str(e)
+
+                stats['database_stats'] = db_stats
+                stats['database_stats']['last_updated'] = datetime.now().isoformat()
+
+            except Exception as e:
+                stats['database_stats'] = {'error': str(e)}
+
+        return stats
+
+    except Exception as e:
+        return {
+            'version': '3.0-enhanced',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat(),
+            'status': 'error_retrieving_stats'
+        }
+
+# ==================== FONCTIONS DE COMPATIBILITÉ AMÉLIORÉES ====================
+
+# Points d'entrée principaux - compatible avec l'API existante mais améliorée
+def generate_forecast_api(blood_type, days_ahead=7, method='auto', force_retrain=False):
+    """
+    🚀 POINT D'ENTRÉE PRINCIPAL AMÉLIORÉ - Remplace l'ancienne version
+    """
+    return generate_enhanced_forecast_api(blood_type, days_ahead, method, force_retrain)
+
+def predict_demand(blood_type, days_ahead=7, method='auto'):
+    """Alias pour compatibilité avec l'ancien code - version améliorée"""
+    return generate_enhanced_forecast_api(blood_type, days_ahead, method)
+
+def health_check():
+    """Alias pour compatibilité - version améliorée"""
+    return health_check_enhanced()
+
+def test_forecast_system():
+    """Alias pour compatibilité - version améliorée"""
+    return test_enhanced_forecast_system()
+
+def get_available_methods():
+    """Alias pour compatibilité - version améliorée"""
+    return get_enhanced_available_methods()
+
+def verify_system_integrity():
+    """Alias pour compatibilité - version améliorée"""
+    return verify_enhanced_system_integrity()
+
+def get_system_stats():
+    """Alias pour compatibilité - version améliorée"""
+    return get_enhanced_system_stats()
+
+def clear_all_cache():
+    """Alias pour compatibilité - version améliorée"""
+    return clear_enhanced_cache()
+
+# Fonction d'extension du forecaster pour méthodes supplémentaires
+def add_forecaster_method_enhanced(forecaster, method_name, method_func):
+    """
+    🔧 AJOUT DYNAMIQUE DE MÉTHODES DE PRÉVISION
+    """
+    try:
+        if hasattr(forecaster, 'custom_methods'):
+            forecaster.custom_methods[method_name] = method_func
+        else:
+            forecaster.custom_methods = {method_name: method_func}
+
+        logger.info(f"✅ Custom method '{method_name}' added to forecaster")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Error adding custom method: {e}")
+        return False
+
+# ==================== CONFIGURATION ET TEST FINAL AMÉLIORÉ ====================
+
+if __name__ == "__main__":
+    """
+    🧪 TEST COMPLET DU MODULE AMÉLIORÉ
+    """
+    print("🩸 Enhanced Blood Demand Forecasting System v3.0")
+    print("=" * 70)
+
+    # Test d'initialisation amélioré
+    try:
+        forecaster = EnhancedBloodDemandForecaster()
+        print("✅ Enhanced Forecaster initialisé avec succès")
+        print(f"   📊 {len(forecaster.models)} modèles ML chargés")
+        print(f"   🩸 {len(forecaster.blood_type_config)} types sanguins configurés")
+    except Exception as e:
+        print(f"❌ Erreur initialisation enhanced: {e}")
+
+    # Test de santé du système amélioré
+    health = health_check_enhanced()
+    print(f"🏥 Santé du système: {health['status']}")
+
+    if 'performance' in health:
+        perf = health['performance']
+        print(f"   ⚡ Init: {perf.get('init_time_ms', 0)}ms")
+        print(f"   🔮 Prédiction: {perf.get('prediction_time_ms', 0)}ms")
+
+    # Test des méthodes disponibles
+    methods = get_enhanced_available_methods()
+    print(f"\n📋 Méthodes disponibles: {methods['total_methods']}")
+
+    premium_methods = methods['system_capabilities']
+    print("   🚀 Capacités Premium:")
+    for capability, available in premium_methods.items():
+        status = "✅" if available else "❌"
+        print(f"     {status} {capability}")
+
+    # Test de prédiction pour chaque méthode disponible
+    print("\n🔮 Tests de prédiction par méthode:")
+
+    test_methods = ['auto', 'random_forest', 'enhanced_fallback']
+    if XGBOOST_AVAILABLE:
+        test_methods.append('xgboost')
+    if STATSMODELS_AVAILABLE:
+        test_methods.extend(['arima', 'stl_arima'])
+
+    for method in test_methods[:3]:  # Limiter pour éviter trop de sortie
+        try:
+            start_time = time.time()
+            result = generate_enhanced_forecast_api('O+', 3, method)
+            exec_time = time.time() - start_time
+
+            if 'error' not in result:
+                predictions = len(result.get('predictions', []))
+                confidence = result.get('quality_metrics', {}).get('prediction_confidence', 0)
+                method_used = result.get('method_used', method)
+
+                print(f"   ✅ {method}: {predictions} prévisions, "
+                      f"confiance: {confidence:.2f}, "
+                      f"méthode: {method_used} ({exec_time * 1000:.0f}ms)")
+            else:
+                print(f"   ❌ {method}: {result.get('message', 'Erreur inconnue')}")
+
+        except Exception as e:
+            print(f"   ❌ {method}: Exception - {str(e)[:50]}...")
+
+    # Test d'intégrité système
+    print("\n🔍 Intégrité du système:")
+    integrity = verify_enhanced_system_integrity()
+    print(f"   Status: {integrity['status']}")
+
+    capabilities = integrity.get('capabilities', {})
+    if 'ml_models_loaded' in capabilities:
+        print(f"   📚 Modèles ML: {capabilities['ml_models_loaded']}")
+    if 'feature_engineering' in capabilities:
+        print(f"   🛠️ Features: {capabilities['feature_engineering']}")
+
+    issues = integrity.get('issues', [])
+    if issues:
+        print("   ⚠️ Issues détectées:")
+        for issue in issues[:2]:  # Limiter à 2 issues
+            print(f"     - {issue[:60]}...")
+
+    # Statistiques finales
+    try:
+        stats = get_enhanced_system_stats()
+        methods_count = stats.get('forecasting_methods', {}).get('total_methods', 0)
+        blood_types_count = stats.get('blood_types', {}).get('total_supported', 0)
+
+        print(f"\n📊 Statistiques système:")
+        print(f"   🔬 {methods_count} méthodes de prévision")
+        print(f"   🩸 {blood_types_count} types sanguins supportés")
+
+        if 'database_stats' in stats and not 'error' in stats['database_stats']:
+            db_stats = stats['database_stats']
+            total_records = sum(v for k, v in db_stats.items()
+                                if isinstance(v, int) and 'distribution' not in k)
+            print(f"   💾 {total_records} enregistrements en base")
+
+    except Exception as e:
+        print(f"   ❌ Erreur statistiques: {e}")
+
+    print("\n" + "=" * 70)
+    print("✅ Module Enhanced Blood Demand Forecasting prêt à l'utilisation!")
+    print("📝 Utilisez generate_forecast_api(blood_type, days_ahead, method) pour les prédictions")
+    print("🎯 Version 3.0 avec ML avancé, évaluation de risque et recommandations")
+    print("🚀 Performance optimisée avec validation croisée et gestion d'incertitude")
