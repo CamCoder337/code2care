@@ -2553,9 +2553,12 @@ def generate_enhanced_forecast_api(blood_type, days_ahead=7, method='auto', forc
 
 def get_enhanced_available_methods():
     """
-    📋 MÉTHODES DISPONIBLES AMÉLIORÉES - VERSION COMPLÈTE
+    📋 MÉTHODES DISPONIBLES AMÉLIORÉES - VERSION CORRIGÉE
     """
     try:
+        logger.info("🔍 Début get_enhanced_available_methods...")
+
+        # Méthodes de base toujours disponibles
         methods = {
             'auto': {
                 'available': True,
@@ -2595,7 +2598,8 @@ def get_enhanced_available_methods():
             }
         }
 
-        # Ajouter XGBoost si disponible
+        # Vérifier et ajouter XGBoost
+        logger.info(f"🔍 Vérification XGBoost: XGBOOST_AVAILABLE = {XGBOOST_AVAILABLE}")
         if XGBOOST_AVAILABLE:
             methods['xgboost'] = {
                 'available': True,
@@ -2606,10 +2610,14 @@ def get_enhanced_available_methods():
                 'confidence_expected': '82-96%',
                 'features': ['gradient_boosting', 'gpu_acceleration', 'early_stopping', 'hyperparameter_tuning']
             }
+            logger.info("✅ XGBoost ajouté aux méthodes disponibles")
+        else:
+            logger.warning("❌ XGBoost non disponible - ignoré")
 
-        # Ajouter les méthodes statistiques si statsmodels disponible
+        # Vérifier et ajouter les méthodes statistiques
+        logger.info(f"🔍 Vérification Statsmodels: STATSMODELS_AVAILABLE = {STATSMODELS_AVAILABLE}")
         if STATSMODELS_AVAILABLE:
-            methods.update({
+            stats_methods = {
                 'arima': {
                     'available': True,
                     'display_name': 'ARIMA Auto-Optimisé',
@@ -2637,9 +2645,14 @@ def get_enhanced_available_methods():
                     'confidence_expected': '68-82%',
                     'features': ['triple_exponential', 'automatic_seasonality', 'trend_damping']
                 }
-            })
+            }
+            methods.update(stats_methods)
+            logger.info(f"✅ {len(stats_methods)} méthodes statistiques ajoutées")
+        else:
+            logger.warning("❌ Statsmodels non disponible - méthodes ARIMA ignorées")
 
-        # Ajouter Prophet si disponible
+        # Vérifier et ajouter Prophet
+        logger.info(f"🔍 Vérification Prophet: PROPHET_AVAILABLE = {PROPHET_AVAILABLE}")
         if PROPHET_AVAILABLE:
             methods['prophet'] = {
                 'available': True,
@@ -2650,6 +2663,9 @@ def get_enhanced_available_methods():
                 'confidence_expected': '74-88%',
                 'features': ['holiday_effects', 'changepoint_detection', 'uncertainty_intervals']
             }
+            logger.info("✅ Prophet ajouté aux méthodes disponibles")
+        else:
+            logger.warning("❌ Prophet non disponible - ignoré")
 
         # Méthode de secours toujours disponible
         methods['enhanced_fallback'] = {
@@ -2662,7 +2678,34 @@ def get_enhanced_available_methods():
             'features': ['pattern_analysis', 'contextual_adjustment', 'priority_weighting']
         }
 
-        return {
+        # Calcul des tiers de performance
+        performance_tiers = {
+            'premium': [],
+            'professional': [],
+            'standard': [],
+            'basic': []
+        }
+
+        # Classification des méthodes par tier
+        if XGBOOST_AVAILABLE:
+            performance_tiers['premium'].extend(['xgboost', 'auto'])
+        else:
+            performance_tiers['premium'].append('auto')
+
+        performance_tiers['professional'].extend(['gradient_boosting', 'random_forest'])
+
+        if STATSMODELS_AVAILABLE:
+            performance_tiers['professional'].append('stl_arima')
+            performance_tiers['standard'].extend(['arima', 'exponential_smoothing'])
+
+        if PROPHET_AVAILABLE:
+            performance_tiers['professional'].append('prophet')
+
+        performance_tiers['standard'].append('linear_regression')
+        performance_tiers['basic'].append('enhanced_fallback')
+
+        # Construire la réponse finale
+        result = {
             'available_methods': list(methods.keys()),
             'method_details': methods,
             'total_methods': len([m for m in methods.values() if m['available']]),
@@ -2679,18 +2722,40 @@ def get_enhanced_available_methods():
                 'risk_assessment': True,
                 'recommendations_engine': True
             },
-            'performance_tiers': {
-                'premium': ['xgboost', 'auto'] if XGBOOST_AVAILABLE else ['auto'],
-                'professional': ['gradient_boosting', 'random_forest', 'stl_arima'],
-                'standard': ['arima', 'exponential_smoothing', 'linear_regression'],
-                'basic': ['enhanced_fallback']
-            }
+            'performance_tiers': performance_tiers,
+            'dependencies_check': DEPENDENCIES_CHECK.get('dependencies_status', {})
         }
 
+        logger.info(
+            f"✅ get_enhanced_available_methods terminé: {len(result['available_methods'])} méthodes disponibles")
+        logger.info(f"📊 Méthodes: {', '.join(result['available_methods'])}")
+
+        return result
+
     except Exception as e:
-        logger.error(f"❌ Error getting enhanced available methods: {e}")
+        logger.error(f"❌ Error in get_enhanced_available_methods: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # Fallback minimal
         return {
-            'available_methods': ['auto', 'random_forest', 'enhanced_fallback'],
+            'available_methods': ['auto', 'random_forest', 'linear_regression', 'enhanced_fallback'],
+            'method_details': {
+                'auto': {'available': True, 'display_name': 'Auto-Sélection', 'description': 'Sélection automatique'},
+                'random_forest': {'available': True, 'display_name': 'Random Forest', 'description': 'Forêt aléatoire'},
+                'linear_regression': {'available': True, 'display_name': 'Régression Linéaire',
+                                      'description': 'Modèle linéaire'},
+                'enhanced_fallback': {'available': True, 'display_name': 'Fallback',
+                                      'description': 'Méthode de secours'}
+            },
+            'total_methods': 4,
+            'recommended_method': 'auto',
+            'system_capabilities': {'error': 'Capabilities check failed'},
+            'performance_tiers': {
+                'premium': ['auto'],
+                'professional': ['random_forest'],
+                'standard': ['linear_regression'],
+                'basic': ['enhanced_fallback']
+            },
             'error': str(e)
         }
 
