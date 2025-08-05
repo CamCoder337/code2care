@@ -769,7 +769,7 @@ export default function EnhancedForecastingSystem() {
       value: (() => {
         if (!forecastData?.method_used) return "N/A"
         const method = availableMethods.find(m => m.value === forecastData.method_used)
-        return method ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+        return method && method.name ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
                forecastData.method_used.toUpperCase().replace('_', ' ')
       })(),
       icon: Brain,
@@ -1254,7 +1254,7 @@ export default function EnhancedForecastingSystem() {
                   }`}>
                     {(() => {
                       const method = availableMethods.find(m => m.value === forecastData.method_used)
-                      return method ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                      return method && method.name ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
                              forecastData.method_used?.toUpperCase().replace('_', ' ') || 'UNKNOWN'
                     })()}
                   </Badge>
@@ -1749,7 +1749,7 @@ export default function EnhancedForecastingSystem() {
                       <span className="font-semibold">
                         {(() => {
                           const method = availableMethods.find(m => m.value === forecastData.method_used)
-                          return method ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                          return method && method.name ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
                                  forecastData.method_used?.toUpperCase().replace('_', ' ') || 'N/A'
                         })()}
                       </span>
@@ -1807,7 +1807,7 @@ export default function EnhancedForecastingSystem() {
                     )}
                     <li>• 📊 Modèle utilisé: {(() => {
                       const method = availableMethods.find(m => m.value === forecastData.method_used)
-                      return method ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
+                      return method && method.name ? method.name.replace(/[🤖🔬🌲⚡📈]/g, '').trim() :
                              forecastData.method_used?.replace('_', ' ') || 'Méthode avancée'
                     })()} - Précision {calculatePrecision || 'N/A'}%</li>
                   </ul>
