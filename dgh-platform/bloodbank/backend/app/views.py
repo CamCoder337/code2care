@@ -2464,153 +2464,577 @@ class InventoryAnalyticsAPIView(BaseAPIView):
 
 @global_allow_any
 # ==================== REPORTING VIEWS ====================
-class ReportExportAPIView(BaseAPIView):
-    """Export de rapports en CSV"""
+@method_decorator(csrf_exempt, name='dispatch')
+class DataImportAPIView(BaseAPIView):
+    """Import des données CSV avec validation et traitement intelligent"""
 
-    def get(self, request):
-        report_type = request.GET.get('type', 'inventory')
-        format_type = request.GET.get('format', 'csv')
+    def post(self, request):
+        start_time = time.time()
 
         try:
-            if report_type == 'inventory':
-                return self.export_inventory_report(format_type)
-            elif report_type == 'consumption':
-                return self.export_consumption_report(format_type)
-            elif report_type == 'waste':
-                return self.export_waste_report(format_type)
-            elif report_type == 'donors':
-                return self.export_donors_report(format_type)
-            else:
+            csv_file = request.FILES.get('csv_file')
+            if not csv_file:
                 return Response(
-                    {'error': 'Type de rapport non supporté'},
+                    {'success': False, 'error': 'Fichier CSV requis'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Validation du fichier
+            validation_result = self.validate_file(csv_file)
+            if not validation_result['valid']:
+                return Response({
+                    'success': False,
+                    'error': 'Fichier CSV invalide',
+                    'errors': validation_result['errors']
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Lire et traiter le fichier CSV
+            file_data = csv_file.read().decode('utf-8')
+            csv_reader = csv.DictReader(io.StringIO(file_data))
+
+            # Statistiques d'import
+            stats = {
+                'imported_records': 0,
+                'donors_created': 0,
+                'blood_units_created': 0,
+                'sites_created': 0,
+                'records_updated': 0,
+                'skipped_records': 0
+            }
+
+            errors = []
+            warnings = []
+
+            with transaction.atomic():
+                for row_num, row in enumerate(csv_reader, start=2):
+                    try:
+                        result = self.process_csv_row(row, row_num)
+
+                        # Mettre à jour les statistiques
+                        if result['imported']:
+                            stats['imported_records'] += 1
+                            if result.get('donor_created'): stats['donors_created'] += 1
+                            if result.get('unit_created'): stats['blood_units_created'] += 1
+                            if result.get('site_created'): stats['sites_created'] += 1
+                            if result.get('record_updated'): stats['records_updated'] += 1
+                        else:
+                            stats['skipped_records'] += 1
+
+                        if result.get('warnings'):
+                            warnings.extend(result['warnings'])
+
+                    except Exception as e:
+                        error_msg = f"Ligne {row_num}: {str(e)}"
+                        errors.append(error_msg)
+                        logger.warning(error_msg)
+
+                        # Limiter les erreurs affichées
+                        if len(errors) > 50:
+                            errors.append("... (erreurs supplémentaires tronquées)")
+                            break
+
+            processing_time = round(time.time() - start_time, 2)
+
+            return Response({
+                'success': True,
+                'imported_records': stats['imported_records'],
+                'skipped_records': stats['skipped_records'],
+                'errors': warnings + errors,  # Combiner warnings et erreurs
+                'total_errors': len(warnings + errors),
+                'processing_time': processing_time,
+                'summary': {
+                    'donors_created': stats['donors_created'],
+                    'blood_units_created': stats['blood_units_created'],
+                    'sites_created': stats['sites_created'],
+                    'records_updated': stats['records_updated']
+                }
+            })
+
+        except UnicodeDecodeError:
+            return Response({
+                'success': False,
+                'error': 'Erreur d\'encodage. Assurez-vous que le fichier est en UTF-8.'
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Report export error: {str(e)}")
-            return Response(
-                {'error': 'Erreur lors de l\'export du rapport'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"CSV Import error: {str(e)}")
+            return Response({
+                'success': False,
+                'error': f'Erreur lors de l\'import: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def export_inventory_report(self, format_type):
-        """Export du rapport d'inventaire"""
-        response = HttpResponse(content_type='text/csv')
-        response[
-            'Content-Disposition'] = f'attachment; filename="inventory_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+    def validate_file(self, csv_file):
+        """Validation du fichier CSV"""
+        errors = []
 
-        writer = csv.writer(response)
-        writer.writerow([
-            'Unit ID', 'Blood Type', 'Status', 'Collection Date',
-            'Expiry Date', 'Volume (ml)', 'Hemoglobin (g/dl)',
-            'Site', 'Days to Expiry'
-        ])
+        # Vérifier la taille (10MB max)
+        if csv_file.size > 10 * 1024 * 1024:
+            errors.append("Fichier trop volumineux (max 10MB)")
 
-        units = BloodUnit.objects.select_related('donor', 'record__site').all()
+        # Vérifier le type
+        if not csv_file.name.endswith('.csv'):
+            errors.append("Le fichier doit être au format CSV")
 
-        for unit in units:
-            writer.writerow([
-                unit.unit_id,
-                unit.donor.blood_type,
-                unit.status,
-                unit.collection_date,
-                unit.date_expiration,
-                unit.volume_ml,
-                unit.hemoglobin_g_dl or '',
-                unit.record.site.nom,
-                unit.days_until_expiry
-            ])
+        try:
+            # Tester la lecture
+            content = csv_file.read().decode('utf-8')
+            csv_file.seek(0)  # Reset file pointer
 
-        return response
+            # Vérifier les colonnes requises
+            csv_reader = csv.DictReader(io.StringIO(content))
+            headers = csv_reader.fieldnames or []
 
-    def export_consumption_report(self, format_type):
-        """Export du rapport de consommation"""
-        response = HttpResponse(content_type='text/csv')
-        response[
-            'Content-Disposition'] = f'attachment; filename="consumption_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+            required_columns = ['record_id', 'donor_id', 'blood_type', 'donation_date']
+            missing_columns = [col for col in required_columns if col not in headers]
 
-        writer = csv.writer(response)
-        writer.writerow([
-            'Date', 'Unit ID', 'Blood Type', 'Patient',
-            'Department', 'Volume', 'Request ID'
-        ])
+            if missing_columns:
+                errors.append(f"Colonnes manquantes: {', '.join(missing_columns)}")
 
-        consumptions = BloodConsumption.objects.select_related(
-            'unit__donor', 'patient', 'request__department'
-        ).all()
+        except UnicodeDecodeError:
+            errors.append("Erreur d'encodage. Utilisez l'encodage UTF-8.")
+        except Exception as e:
+            errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
 
-        for consumption in consumptions:
-            writer.writerow([
-                consumption.date,
-                consumption.unit.unit_id,
-                consumption.unit.donor.blood_type,
-                f"{consumption.patient.first_name} {consumption.patient.last_name}",
-                consumption.request.department.name,
-                consumption.volume,
-                consumption.request.request_id
-            ])
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors
+        }
 
-        return response
+    def process_csv_row(self, row, row_num):
+        """Traite une ligne du CSV avec gestion des erreurs détaillée"""
+        warnings = []
+        result = {
+            'imported': False,
+            'donor_created': False,
+            'unit_created': False,
+            'site_created': False,
+            'record_updated': False,
+            'warnings': []
+        }
 
-    def export_waste_report(self, format_type):
-        """Export du rapport de gaspillage"""
-        response = HttpResponse(content_type='text/csv')
-        response[
-            'Content-Disposition'] = f'attachment; filename="waste_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+        # Nettoyer et valider les données
+        record_id = row.get('record_id', '').strip()
+        donor_id = row.get('donor_id', '').strip()
 
-        writer = csv.writer(response)
-        writer.writerow([
-            'Unit ID', 'Blood Type', 'Collection Date',
-            'Expiry Date', 'Volume (ml)', 'Site', 'Days Expired'
-        ])
+        # Générer des IDs si manquants
+        if not record_id:
+            record_id = f"BB{str(row_num).zfill(6)}"
+            warnings.append(f"Ligne {row_num}: ID d'enregistrement généré automatiquement")
 
-        expired_units = BloodUnit.objects.filter(status='Expired').select_related('donor', 'record__site')
+        if not donor_id:
+            donor_id = f"D{str(row_num).zfill(6)}"
+            warnings.append(f"Ligne {row_num}: ID de donneur généré automatiquement")
 
-        for unit in expired_units:
-            days_expired = (timezone.now().date() - unit.date_expiration).days
-            writer.writerow([
-                unit.unit_id,
-                unit.donor.blood_type,
-                unit.collection_date,
-                unit.date_expiration,
-                unit.volume_ml,
-                unit.record.site.nom,
-                days_expired
-            ])
+        # Vérifier si l'enregistrement existe déjà
+        if BloodUnit.objects.filter(unit_id=record_id).exists():
+            warnings.append(f"Ligne {row_num}: Enregistrement {record_id} déjà existant, ignoré")
+            result['warnings'] = warnings
+            return result
 
-        return response
+        # Créer ou récupérer le site
+        collection_site = row.get('collection_site', 'Site Inconnu').strip() or 'Site Inconnu'
+        site, site_created = Site.objects.get_or_create(
+            site_id=f"SITE_{collection_site.replace(' ', '_').upper()}",
+            defaults={
+                'nom': collection_site,
+                'ville': 'Douala'  # Valeur par défaut
+            }
+        )
 
-    def export_donors_report(self, format_type):
-        """Export du rapport des donneurs"""
-        response = HttpResponse(content_type='text/csv')
-        response[
-            'Content-Disposition'] = f'attachment; filename="donors_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+        if site_created:
+            result['site_created'] = True
 
-        writer = csv.writer(response)
-        writer.writerow([
-            'Donor ID', 'Name', 'Age', 'Gender', 'Blood Type',
-            'Phone', 'Total Donations', 'Last Donation'
-        ])
+        # Créer ou récupérer le donneur
+        donor_age = self.safe_int(row.get('donor_age'), 30)
+        donor_gender = row.get('donor_gender', 'M').strip()
+        blood_type = row.get('blood_type', 'O+').strip()
 
-        donors = Donor.objects.all()
+        # Valider le groupe sanguin
+        valid_blood_types = [choice[0] for choice in Donor.BLOOD_TYPE_CHOICES]
+        if blood_type not in valid_blood_types:
+            warnings.append(f"Ligne {row_num}: Groupe sanguin '{blood_type}' invalide, remplacé par O+")
+            blood_type = 'O+'
 
-        for donor in donors:
-            total_donations = BloodUnit.objects.filter(donor=donor).count()
-            last_donation = BloodUnit.objects.filter(donor=donor).order_by('-collection_date').first()
-            last_donation_date = last_donation.collection_date if last_donation else ''
+        # Calculer date de naissance approximative
+        try:
+            birth_year = date.today().year - donor_age
+            birth_date = date(birth_year, 1, 1)
+        except:
+            birth_date = date(1980, 1, 1)
+            warnings.append(f"Ligne {row_num}: Date de naissance calculée par défaut")
 
-            writer.writerow([
-                donor.donor_id,
-                f"{donor.first_name} {donor.last_name}",
-                donor.age,
-                donor.get_gender_display(),
-                donor.blood_type,
-                donor.phone_number,
-                total_donations,
-                last_donation_date
-            ])
+        donor, donor_created = Donor.objects.get_or_create(
+            donor_id=donor_id,
+            defaults={
+                'first_name': f'Donneur_{donor_id}',
+                'last_name': 'Anonyme',
+                'date_of_birth': birth_date,
+                'gender': donor_gender if donor_gender in ['M', 'F'] else 'M',
+                'blood_type': blood_type,
+                'phone_number': '000000000'
+            }
+        )
 
-        return response
+        if donor_created:
+            result['donor_created'] = True
+
+        # Traiter les dates
+        donation_date = self.parse_date(row.get('donation_date'))
+        if not donation_date:
+            donation_date = date.today()
+            warnings.append(f"Ligne {row_num}: Date de don manquante, utilisée date actuelle")
+
+        # Créer l'enregistrement de don
+        blood_record, record_created = BloodRecord.objects.get_or_create(
+            record_id=record_id,
+            defaults={
+                'site': site,
+                'screening_results': 'Valid',
+                'record_date': donation_date,
+                'quantity': 1
+            }
+        )
+
+        # Créer l'unité de sang
+        expiry_date = self.parse_date(row.get('expiry_date'))
+        if not expiry_date:
+            expiry_date = donation_date + timedelta(days=120)  # 120 jours par défaut
+
+        volume_ml = self.safe_int(row.get('collection_volume_ml'), 450)
+        hemoglobin = self.safe_float(row.get('hemoglobin_g_dl'))
+
+        # Déterminer le statut
+        unit_status = 'Available'
+        if expiry_date < date.today():
+            unit_status = 'Expired'
+            warnings.append(f"Ligne {row_num}: Unité expirée créée avec statut 'Expired'")
+
+        blood_unit, unit_created = BloodUnit.objects.get_or_create(
+            unit_id=record_id,
+            defaults={
+                'donor': donor,
+                'record': blood_record,
+                'collection_date': donation_date,
+                'volume_ml': volume_ml,
+                'hemoglobin_g_dl': hemoglobin,
+                'date_expiration': expiry_date,
+                'status': unit_status
+            }
+        )
+
+        if unit_created:
+            result['unit_created'] = True
+            result['imported'] = True
+        else:
+            result['record_updated'] = True
+            warnings.append(f"Ligne {row_num}: Enregistrement existant mis à jour")
+
+        result['warnings'] = warnings
+        return result
+
+    def safe_int(self, value, default=0):
+        """Conversion sécurisée en entier"""
+        try:
+            if not value or str(value).strip() == '':
+                return default
+            return int(float(str(value).strip()))
+        except (ValueError, TypeError):
+            return default
+
+    def safe_float(self, value, default=None):
+        """Conversion sécurisée en float"""
+        try:
+            if not value or str(value).strip() == '':
+                return default
+            return float(str(value).strip())
+        except (ValueError, TypeError):
+            return default
+
+    def parse_date(self, date_string):
+        """Parse une date avec plusieurs formats possibles"""
+        if not date_string or not str(date_string).strip():
+            return None
+
+        date_str = str(date_string).strip()
+
+        # Formats supportés
+        formats = [
+            '%Y-%m-%d',  # 2024-01-15
+            '%d/%m/%Y',  # 15/01/2024
+            '%d-%m-%Y',  # 15-01-2024
+            '%Y/%m/%d',  # 2024/01/15
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt).date()
+            except ValueError:
+                continue
+
+        return None
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DataValidationAPIView(BaseAPIView):
+    """Validation des données CSV avant import"""
+
+    def post(self, request):
+        try:
+            csv_file = request.FILES.get('csv_file')
+            if not csv_file:
+                return Response(
+                    {'valid': False, 'errors': ['Fichier CSV requis']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validation du fichier
+            file_validation = self.validate_file_structure(csv_file)
+            if not file_validation['valid']:
+                return Response(file_validation)
+
+            # Lire le contenu pour validation détaillée
+            file_data = csv_file.read().decode('utf-8')
+            csv_reader = csv.DictReader(io.StringIO(file_data))
+
+            validation_result = self.validate_csv_content(csv_reader)
+
+            return Response(validation_result)
+
+        except UnicodeDecodeError:
+            return Response({
+                'valid': False,
+                'errors': ['Erreur d\'encodage. Utilisez l\'encodage UTF-8.'],
+                'warnings': [],
+                'preview': [],
+                'total_rows': 0,
+                'valid_rows': 0
+            })
+        except Exception as e:
+            logger.error(f"CSV Validation error: {str(e)}")
+            return Response({
+                'valid': False,
+                'errors': [f'Erreur lors de la validation: {str(e)}'],
+                'warnings': [],
+                'preview': [],
+                'total_rows': 0,
+                'valid_rows': 0
+            })
+
+    def validate_file_structure(self, csv_file):
+        """Validation de la structure du fichier"""
+        errors = []
+        warnings = []
+
+        # Vérifier la taille
+        if csv_file.size > 10 * 1024 * 1024:
+            errors.append("Fichier trop volumineux (maximum 10MB)")
+
+        if csv_file.size == 0:
+            errors.append("Le fichier est vide")
+
+        # Vérifier l'extension
+        if not csv_file.name.lower().endswith('.csv'):
+            errors.append("Le fichier doit avoir l'extension .csv")
+
+        try:
+            content = csv_file.read().decode('utf-8')
+            csv_file.seek(0)  # Reset pour usage ultérieur
+
+            if not content.strip():
+                errors.append("Le fichier CSV est vide")
+                return {'valid': False, 'errors': errors, 'warnings': warnings}
+
+            # Vérifier les en-têtes
+            csv_reader = csv.DictReader(io.StringIO(content))
+            headers = csv_reader.fieldnames or []
+
+            required_columns = ['record_id', 'donor_id', 'blood_type', 'donation_date']
+            optional_columns = ['collection_site', 'donor_age', 'donor_gender',
+                                'collection_volume_ml', 'hemoglobin_g_dl', 'expiry_date']
+
+            missing_required = [col for col in required_columns if col not in headers]
+            if missing_required:
+                errors.append(f"Colonnes requises manquantes: {', '.join(missing_required)}")
+
+            extra_columns = [col for col in headers if col not in required_columns + optional_columns]
+            if extra_columns:
+                warnings.append(f"Colonnes supplémentaires ignorées: {', '.join(extra_columns)}")
+
+        except UnicodeDecodeError:
+            errors.append("Erreur d'encodage. Utilisez l'encodage UTF-8")
+        except Exception as e:
+            errors.append(f"Erreur lors de l'analyse du fichier: {str(e)}")
+
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings
+        }
+
+    def validate_csv_content(self, csv_reader):
+        """Validation du contenu du CSV"""
+        errors = []
+        warnings = []
+        preview_data = []
+        valid_rows = 0
+        total_rows = 0
+
+        # Groupes sanguins valides
+        valid_blood_types = [choice[0] for choice in Donor.BLOOD_TYPE_CHOICES]
+
+        for row_num, row in enumerate(csv_reader, start=2):
+            total_rows += 1
+            row_errors = []
+            row_warnings = []
+
+            # Validation des champs obligatoires
+            record_id = row.get('record_id', '').strip()
+            donor_id = row.get('donor_id', '').strip()
+            blood_type = row.get('blood_type', '').strip()
+            donation_date = row.get('donation_date', '').strip()
+
+            # Vérifications
+            if not record_id:
+                row_warnings.append(f"Ligne {row_num}: ID d'enregistrement manquant (sera généré)")
+
+            if not donor_id:
+                row_warnings.append(f"Ligne {row_num}: ID de donneur manquant (sera généré)")
+
+            if not blood_type:
+                row_errors.append(f"Ligne {row_num}: Groupe sanguin manquant")
+            elif blood_type not in valid_blood_types:
+                row_errors.append(f"Ligne {row_num}: Groupe sanguin '{blood_type}' invalide")
+
+            if donation_date:
+                parsed_date = self.parse_date(donation_date)
+                if not parsed_date:
+                    row_errors.append(f"Ligne {row_num}: Format de date invalide '{donation_date}'")
+                elif parsed_date > date.today():
+                    row_warnings.append(f"Ligne {row_num}: Date de don dans le futur")
+            else:
+                row_warnings.append(f"Ligne {row_num}: Date de don manquante (date actuelle sera utilisée)")
+
+            # Validation des champs numériques
+            volume = row.get('collection_volume_ml', '').strip()
+            if volume:
+                try:
+                    vol_int = int(float(volume))
+                    if vol_int <= 0 or vol_int > 1000:
+                        row_warnings.append(f"Ligne {row_num}: Volume inhabituel ({vol_int}ml)")
+                except (ValueError, TypeError):
+                    row_errors.append(f"Ligne {row_num}: Volume invalide '{volume}'")
+
+            hemoglobin = row.get('hemoglobin_g_dl', '').strip()
+            if hemoglobin:
+                try:
+                    hb_float = float(hemoglobin)
+                    if hb_float < 8 or hb_float > 20:
+                        row_warnings.append(f"Ligne {row_num}: Taux d'hémoglobine inhabituel ({hb_float}g/dl)")
+                except (ValueError, TypeError):
+                    row_errors.append(f"Ligne {row_num}: Taux d'hémoglobine invalide '{hemoglobin}'")
+
+            # Vérifier les doublons
+            if record_id and BloodUnit.objects.filter(unit_id=record_id).exists():
+                row_warnings.append(f"Ligne {row_num}: Enregistrement {record_id} existe déjà (sera ignoré)")
+
+            # Collecter les erreurs et warnings
+            errors.extend(row_errors)
+            warnings.extend(row_warnings)
+
+            if len(row_errors) == 0:
+                valid_rows += 1
+
+            # Ajouter à l'aperçu (5 premières lignes seulement)
+            if len(preview_data) < 5:
+                preview_row = dict(row)
+                preview_row['_row_status'] = 'valid' if len(row_errors) == 0 else 'invalid'
+                preview_row['_row_errors'] = len(row_errors)
+                preview_row['_row_warnings'] = len(row_warnings)
+                preview_data.append(preview_row)
+
+            # Limiter les erreurs pour éviter la surcharge
+            if len(errors) > 100:
+                errors.append("... (erreurs supplémentaires tronquées)")
+                break
+
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'preview': preview_data,
+            'total_rows': total_rows,
+            'valid_rows': valid_rows
+        }
+
+    def parse_date(self, date_string):
+        """Parse une date avec plusieurs formats possibles"""
+        if not date_string or not str(date_string).strip():
+            return None
+
+        date_str = str(date_string).strip()
+
+        formats = ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d']
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt).date()
+            except ValueError:
+                continue
+
+        return None
+
+@api_view(['GET'])
+def download_csv_template(request):
+    """Télécharge le modèle CSV avec des données d'exemple"""
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="blood_bank_template.csv"'
+
+    writer = csv.writer(response)
+
+    # En-têtes
+    headers = [
+        'record_id', 'donor_id', 'collection_site', 'donor_age', 'donor_gender',
+        'blood_type', 'donation_date', 'collection_volume_ml', 'hemoglobin_g_dl', 'expiry_date'
+    ]
+    writer.writerow(headers)
+
+    # Données d'exemple
+    example_rows = [
+        ['BB000001', 'D000001', 'Centre Principal Douala', '35', 'M', 'O+', '2024-01-15', '450', '14.2', '2024-05-15'],
+        ['BB000002', 'D000002', 'Site Secondaire Douala', '28', 'F', 'A+', '2024-01-16', '450', '13.8', '2024-05-16'],
+        ['BB000003', 'D000003', 'Centre Principal Douala', '42', 'M', 'B-', '2024-01-17', '450', '15.1', '2024-05-17'],
+        ['BB000004', 'D000004', 'Clinique Privée', '31', 'F', 'AB+', '2024-01-18', '450', '12.9', '2024-05-18'],
+        ['BB000005', 'D000005', 'Hôpital Général', '45', 'M', 'O-', '2024-01-19', '450', '14.8', '2024-05-19'],
+    ]
+
+    for row in example_rows:
+        writer.writerow(row)
+
+    # Ajouter des commentaires en bas
+    writer.writerow([])
+    writer.writerow(['# INSTRUCTIONS:'])
+    writer.writerow(['# - record_id: Identifiant unique (obligatoire si fourni)'])
+    writer.writerow(['# - donor_id: Identifiant du donneur (obligatoire si fourni)'])
+    writer.writerow(['# - blood_type: A+, A-, B+, B-, AB+, AB-, O+, O- (obligatoire)'])
+    writer.writerow(['# - donation_date: Format YYYY-MM-DD (obligatoire)'])
+    writer.writerow(['# - collection_volume_ml: Volume en ml (optionnel, défaut: 450)'])
+    writer.writerow(['# - hemoglobin_g_dl: Taux hémoglobine (optionnel)'])
+    writer.writerow(['# - expiry_date: Date expiration (optionnel, calculé si absent)'])
+
+    return response
+
+# Vue pour l'historique des imports (optionnelle)
+class ImportHistoryAPIView(BaseAPIView):
+    """Historique des imports de données"""
+
+    def get(self, request):
+        # Cette vue pourrait être implémentée pour traquer les imports
+        # Pour l'instant, retourner des données factices
+        return Response({
+            'results': [],
+            'count': 0,
+            'message': 'Historique des imports non encore implémenté'
+        })
+
 
 @global_allow_any
 # ==================== CONFIGURATION VIEWS ====================
