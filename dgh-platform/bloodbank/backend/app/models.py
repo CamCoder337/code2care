@@ -269,8 +269,15 @@ class Department(models.Model):
         ).count()
 
 
+# Modification du modèle Patient dans models.py
+
 class Patient(models.Model):
     """Modèle pour les patients"""
+    GENDER_CHOICES = [
+        ('M', 'Masculin'),
+        ('F', 'Féminin'),
+    ]
+
     BLOOD_TYPE_CHOICES = [
         ('A+', 'A+'),
         ('A-', 'A-'),
@@ -286,6 +293,7 @@ class Patient(models.Model):
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     date_of_birth = models.DateField()
+    gender = models.CharField(max_length=2, choices=GENDER_CHOICES)  # Nouveau champ
     blood_type = models.CharField(max_length=3, choices=BLOOD_TYPE_CHOICES)
     patient_history = models.TextField(blank=True)
 
