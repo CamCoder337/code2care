@@ -3,10 +3,10 @@
  * Gère toutes les requêtes vers l'API Gateway
  */
 
-import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment } from './config'
+import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse } from './config'
 
 // Export des types pour usage externe
-export type { ApiResponse, PaginatedResponse, Appointment }
+export type { ApiResponse, PaginatedResponse, Appointment, Patient, PatientsPaginatedResponse }
 
 // Classe principale pour les requêtes API
 export class ApiService {
@@ -149,6 +149,25 @@ export class ApiService {
         console.log('📍 Endpoint:', API_ENDPOINTS.PATIENTS.LIST)
         console.log('🌐 Full URL:', `${this.baseUrl}${API_ENDPOINTS.PATIENTS.LIST}`)
         return this.get(API_ENDPOINTS.PATIENTS.LIST, token)
+    }
+
+    async getPatientsWithPagination(token: string, params?: URLSearchParams): Promise<PatientsPaginatedResponse> {
+        // Ajouter la pagination par défaut si pas spécifiée
+        const searchParams = new URLSearchParams(params)
+        if (!searchParams.has('page')) {
+            searchParams.set('page', '1')
+        }
+        if (!searchParams.has('page_size')) {
+            searchParams.set('page_size', '20')
+        }
+        
+        const endpoint = `${API_ENDPOINTS.PATIENTS.LIST_ALL}?${searchParams.toString()}`
+        
+        console.log('🔗 API Service - getPatientsWithPagination called')
+        console.log('📍 Endpoint:', endpoint)
+        console.log('🌐 Full URL:', `${this.baseUrl}${endpoint}`)
+        
+        return this.get<PatientsPaginatedResponse>(endpoint, token)
     }
 
     async getPatientProfile(patientId: string, token?: string) {

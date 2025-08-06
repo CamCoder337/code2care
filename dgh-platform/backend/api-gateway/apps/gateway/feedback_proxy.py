@@ -20,7 +20,8 @@ from .swagger_schemas import (
     get_prescription_decorator, update_prescription_decorator,
     delete_prescription_decorator,
     list_medications_decorator, get_medication_decorator,
-    list_reminders_decorator, get_reminder_decorator, update_reminder_decorator
+    list_reminders_decorator, get_reminder_decorator, update_reminder_decorator,
+    list_patients_decorator
 )
 import httpx
 import json
@@ -1618,5 +1619,118 @@ def update_patient_reminder(request, reminder_id):
         logger.error(f"Erreur lors de la mise à jour du rappel: {str(e)}")
         return Response(
             {'error': 'Erreur lors de la mise à jour du rappel'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# ========== PATIENT LIST ENDPOINT ==========
+
+@list_patients_decorator
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_patients(request):
+    """
+    Liste tous les patients avec pagination et recherche (réservé aux professionnels et admins)
+    Route: GET /api/v1/patients/
+    
+    Paramètres de requête:
+    - page: Numéro de page (défaut: 1)
+    - page_size: Taille de page (défaut: 20, max: 100)
+    - search: Recherche par nom, prénom ou téléphone
+    - ordering: Tri par champ (ex: first_name, -created_at)
+    """
+    # Vérifier les permissions
+    if request.user.user_type not in ['professional', 'admin']:
+        return Response(
+            {
+                'error': 'Accès réservé aux professionnels et administrateurs',
+                'user_type': request.user.user_type
+            }, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        from django.core.paginator import Paginator
+        from django.db.models import Q
+        
+        # Récupérer les paramètres de requête
+        page = int(request.query_params.get('page', 1))
+        page_size = min(int(request.query_params.get('page_size', 20)), 100)
+        search = request.query_params.get('search', '').strip()
+        ordering = request.query_params.get('ordering', 'first_name')
+        
+        # Construire la requête de base
+        patients = Patient.objects.select_related('user').all()
+        
+        # Appliquer la recherche si fournie
+        if search:
+            patients = patients.filter(
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search) |
+                Q(user__phone_number__icontains=search) |
+                Q(user__email__icontains=search)
+            )
+        
+        # Appliquer le tri
+        valid_ordering_fields = ['first_name', 'last_name', 'date_of_birth', 'gender', 'user__phone_number']
+        if ordering.lstrip('-') in valid_ordering_fields:
+            patients = patients.order_by(ordering)
+        else:
+            patients = patients.order_by('first_name')
+        
+        # Appliquer la pagination
+        paginator = Paginator(patients, page_size)
+        
+        if page > paginator.num_pages:
+            page = paginator.num_pages if paginator.num_pages > 0 else 1
+            
+        page_obj = paginator.get_page(page)
+        
+        # Sérialiser les données
+        patients_data = []
+        for patient in page_obj:
+            patients_data.append({
+                'patient_id': str(patient.patient_id),
+                'first_name': patient.first_name,
+                'last_name': patient.last_name,
+                'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+                'gender': patient.gender,
+                'preferred_language': patient.preferred_language,
+                'preferred_contact_method': patient.preferred_contact_method,
+                'user': {
+                    'id': str(patient.user.id),
+                    'phone_number': patient.user.phone_number,
+                    'email': patient.user.email,
+                    'is_verified': patient.user.is_verified,
+                    'created_at': patient.user.created_at.isoformat(),
+                }
+            })
+        
+        # Réponse avec métadonnées de pagination
+        response_data = {
+            'count': paginator.count,
+            'num_pages': paginator.num_pages,
+            'current_page': page,
+            'page_size': page_size,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+            'next_page': page + 1 if page_obj.has_next() else None,
+            'previous_page': page - 1 if page_obj.has_previous() else None,
+            'results': patients_data
+        }
+        
+        logger.info(f"Liste patients récupérée: {paginator.count} total, page {page}/{paginator.num_pages}")
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except ValueError as e:
+        return Response(
+            {'error': f'Paramètre invalide: {str(e)}'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des patients: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération des patients'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

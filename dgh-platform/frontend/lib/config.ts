@@ -20,7 +20,8 @@ export const API_ENDPOINTS = {
     },
     // Patients
     PATIENTS: {
-        LIST: '/auth/patients/', // Endpoint: GET /api/v1/auth/patients/
+        LIST: '/auth/patients/', // Endpoint: GET /api/v1/auth/patients/ (pour création appointments)
+        LIST_ALL: '/patients/', // Endpoint: GET /api/v1/patients/ (liste complète avec pagination)
         PROFILE: (patientId: string) => `/patient/${patientId}/profile/`,
     },
     // Appointments
@@ -81,4 +82,35 @@ export interface Appointment {
     status?: "scheduled" | "completed" | "cancelled"
     notes?: string
     duration?: number
+}
+
+// Interface pour les patients
+export interface Patient {
+    patient_id: string
+    first_name: string
+    last_name: string
+    date_of_birth: string | null
+    gender: 'M' | 'F' | 'O'
+    preferred_language: string
+    preferred_contact_method: 'email' | 'sms' | 'call'
+    user: {
+        id: string
+        phone_number: string
+        email: string
+        is_verified: boolean
+        created_at: string
+    }
+}
+
+// Interface pour la réponse paginée des patients
+export interface PatientsPaginatedResponse {
+    count: number
+    num_pages: number
+    current_page: number
+    page_size: number
+    has_next: boolean
+    has_previous: boolean
+    next_page: number | null
+    previous_page: number | null
+    results: Patient[]
 }

@@ -1531,3 +1531,255 @@ delete_prescription_decorator = swagger_auto_schema(
     },
     tags=['Prescriptions']
 )
+
+
+# ========== PATIENTS SCHEMAS ==========
+
+patient_response_schema = {
+    "type": "object",
+    "properties": {
+        "patient_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID unique du patient",
+            "example": "c2849d3e-802f-47a2-ab38-c54b16c89af5"
+        },
+        "first_name": {
+            "type": "string",
+            "description": "Prénom du patient",
+            "example": "Marie"
+        },
+        "last_name": {
+            "type": "string", 
+            "description": "Nom de famille du patient",
+            "example": "Dupont"
+        },
+        "date_of_birth": {
+            "type": "string",
+            "format": "date",
+            "description": "Date de naissance",
+            "example": "1985-03-15"
+        },
+        "gender": {
+            "type": "string",
+            "enum": ["M", "F", "O"],
+            "description": "Genre (M=Masculin, F=Féminin, O=Autre)",
+            "example": "F"
+        },
+        "preferred_language": {
+            "type": "string",
+            "enum": ["fr", "en", "dua", "bas", "ewo"],
+            "description": "Langue préférée",
+            "example": "fr"
+        },
+        "preferred_contact_method": {
+            "type": "string",
+            "enum": ["sms", "voice", "whatsapp"],
+            "description": "Méthode de contact préférée",
+            "example": "sms"
+        },
+        "user": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID utilisateur système",
+                    "example": "a1c14a1e-6062-4d1e-952d-e8de3f4f3da2"
+                },
+                "phone_number": {
+                    "type": "string",
+                    "description": "Numéro de téléphone",
+                    "example": "+237123456789"
+                },
+                "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Adresse email",
+                    "example": "marie.dupont@example.com"
+                },
+                "is_verified": {
+                    "type": "boolean",
+                    "description": "Statut de vérification",
+                    "example": True
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Date de création du compte",
+                    "example": "2025-01-15T10:30:00.000000"
+                }
+            }
+        }
+    }
+}
+
+patients_paginated_response_schema = {
+    "type": "object",
+    "properties": {
+        "count": {
+            "type": "integer",
+            "description": "Nombre total de patients",
+            "example": 125
+        },
+        "num_pages": {
+            "type": "integer", 
+            "description": "Nombre total de pages",
+            "example": 7
+        },
+        "current_page": {
+            "type": "integer",
+            "description": "Page courante",
+            "example": 1
+        },
+        "page_size": {
+            "type": "integer",
+            "description": "Nombre d'éléments par page",
+            "example": 20
+        },
+        "has_next": {
+            "type": "boolean",
+            "description": "Indique s'il y a une page suivante",
+            "example": True
+        },
+        "has_previous": {
+            "type": "boolean",
+            "description": "Indique s'il y a une page précédente", 
+            "example": False
+        },
+        "next_page": {
+            "type": "integer",
+            "nullable": True,
+            "description": "Numéro de la page suivante (null si dernière page)",
+            "example": 2
+        },
+        "previous_page": {
+            "type": "integer",
+            "nullable": True,
+            "description": "Numéro de la page précédente (null si première page)",
+            "example": None
+        },
+        "results": {
+            "type": "array",
+            "items": patient_response_schema,
+            "description": "Liste des patients de la page courante"
+        }
+    }
+}
+
+list_patients_decorator = swagger_auto_schema(
+    method='GET',
+    operation_id="list_patients",
+    operation_summary="Lister tous les patients",
+    operation_description="""
+    **Récupère la liste paginée de tous les patients avec fonctionnalités de recherche et tri.**
+    
+    🔒 **Accès restreint** : Professionnels de santé et administrateurs uniquement
+    
+    ## Fonctionnalités :
+    - **Pagination automatique** avec métadonnées complètes
+    - **Recherche multi-champs** (nom, prénom, téléphone, email)
+    - **Tri flexible** par différents critères
+    - **Filtrage intelligent** et sécurisé
+    
+    ## Exemples d'utilisation :
+    - `?page=2&page_size=10` : Page 2 avec 10 patients
+    - `?search=marie` : Recherche "marie" dans tous les champs
+    - `?ordering=-last_name` : Tri par nom décroissant
+    - `?search=admin&ordering=first_name&page_size=5` : Recherche + tri + pagination
+    """,
+    manual_parameters=[
+        openapi.Parameter(
+            'page',
+            openapi.IN_QUERY,
+            description="Numéro de page à récupérer (défaut: 1)",
+            type=openapi.TYPE_INTEGER,
+            minimum=1,
+            example=1
+        ),
+        openapi.Parameter(
+            'page_size', 
+            openapi.IN_QUERY,
+            description="Nombre de patients par page (défaut: 20, max: 100)",
+            type=openapi.TYPE_INTEGER,
+            minimum=1,
+            maximum=100,
+            example=20
+        ),
+        openapi.Parameter(
+            'search',
+            openapi.IN_QUERY,
+            description="Terme de recherche (nom, prénom, téléphone, email)",
+            type=openapi.TYPE_STRING,
+            example="marie"
+        ),
+        openapi.Parameter(
+            'ordering',
+            openapi.IN_QUERY,
+            description="Champ de tri (préfixer par '-' pour ordre décroissant)",
+            type=openapi.TYPE_STRING,
+            enum=['first_name', 'last_name', 'date_of_birth', 'gender', 'user__phone_number', 
+                  '-first_name', '-last_name', '-date_of_birth', '-gender', '-user__phone_number'],
+            example="first_name"
+        )
+    ],
+    responses={
+        200: openapi.Response(
+            description='Liste paginée des patients récupérée avec succès',
+            schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties=patients_paginated_response_schema["properties"]
+            ),
+            examples={
+                "application/json": {
+                    "count": 125,
+                    "num_pages": 7,
+                    "current_page": 1,
+                    "page_size": 20,
+                    "has_next": True,
+                    "has_previous": False,
+                    "next_page": 2,
+                    "previous_page": None,
+                    "results": [
+                        {
+                            "patient_id": "c2849d3e-802f-47a2-ab38-c54b16c89af5",
+                            "first_name": "Marie",
+                            "last_name": "Dupont", 
+                            "date_of_birth": "1985-03-15",
+                            "gender": "F",
+                            "preferred_language": "fr",
+                            "preferred_contact_method": "sms",
+                            "user": {
+                                "id": "a1c14a1e-6062-4d1e-952d-e8de3f4f3da2",
+                                "phone_number": "+237123456789",
+                                "email": "marie.dupont@example.com",
+                                "is_verified": True,
+                                "created_at": "2025-01-15T10:30:00.000000"
+                            }
+                        }
+                    ]
+                }
+            }
+        ),
+        400: openapi.Response(
+            description='Paramètres de requête invalides',
+            examples={
+                "application/json": {
+                    "error": "Paramètre invalide: invalid literal for int() with base 10: 'abc'"
+                }
+            }
+        ),
+        401: openapi.Response(description='Authentification requise'),
+        403: openapi.Response(
+            description='Accès réservé aux professionnels et administrateurs',
+            examples={
+                "application/json": {
+                    "error": "Accès réservé aux professionnels et administrateurs",
+                    "user_type": "patient"
+                }
+            }
+        ),
+        500: openapi.Response(description='Erreur interne du serveur')
+    },
+    tags=['Patients']
+)

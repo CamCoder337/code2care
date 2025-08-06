@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { apiService, type PaginatedResponse, type Appointment } from '@/lib/api'
+import { apiService, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 interface UseApiState<T> {
@@ -394,4 +394,91 @@ export function useMedications() {
 // Departments
 export function useDepartments() {
     return useApiGet<any[]>('/departments/')
+}
+
+// Patients avec pagination (pour la page patients)
+export function usePatientsWithPagination(params?: URLSearchParams) {
+    const { user, hasHydrated, accessToken } = useAuthStore()
+    const [patients, setPatients] = useState<Patient[]>([])
+    const [paginationData, setPaginationData] = useState<{
+        count: number;
+        num_pages: number;
+        current_page: number;
+        page_size: number;
+        has_next: boolean;
+        has_previous: boolean;
+        next_page: number | null;
+        previous_page: number | null;
+    }>({ 
+        count: 0, 
+        num_pages: 0, 
+        current_page: 1, 
+        page_size: 20, 
+        has_next: false, 
+        has_previous: false, 
+        next_page: null, 
+        previous_page: null 
+    })
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    const fetchPatients = useCallback(async () => {
+        console.log('🔍 usePatients - fetchPatients called')
+        console.log('👤 User:', user)
+        console.log('🔑 AccessToken:', accessToken ? 'Present' : 'Missing')
+        console.log('🔄 HasHydrated:', hasHydrated)
+        console.log('📋 Params:', params?.toString())
+
+        // Attendre que la rehydratation soit terminée
+        if (!hasHydrated) {
+            console.log('⏳ Waiting for rehydration to complete...')
+            setIsLoading(true)
+            return
+        }
+
+        if (!accessToken) {
+            console.log('❌ No access token found after rehydration')
+            setError('Authentication token not found')
+            setIsLoading(false)
+            return
+        }
+
+        console.log('🚀 Starting API call...')
+        setIsLoading(true)
+        setError(null)
+
+        try {
+            const response = await apiService.getPatientsWithPagination(accessToken, params)
+            console.log('✅ API Response:', response)
+            
+            setPatients(response.results || [])
+            setPaginationData({
+                count: response.count,
+                num_pages: response.num_pages,
+                current_page: response.current_page,
+                page_size: response.page_size,
+                has_next: response.has_next,
+                has_previous: response.has_previous,
+                next_page: response.next_page,
+                previous_page: response.previous_page
+            })
+        } catch (err) {
+            console.error('💥 API Error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to fetch patients')
+        } finally {
+            setIsLoading(false)
+        }
+    }, [accessToken, params?.toString(), hasHydrated])
+
+    useEffect(() => {
+        fetchPatients()
+    }, [fetchPatients])
+
+    return {
+        patients,
+        pagination: paginationData,
+        isLoading,
+        error,
+        refetch: fetchPatients,
+    }
 }

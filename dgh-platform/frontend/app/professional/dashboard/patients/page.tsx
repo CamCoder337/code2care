@@ -6,6 +6,7 @@ import {Button} from "@/components/ui/button"
 import {Input} from "@/components/ui/input"
 import {Badge} from "@/components/ui/badge"
 import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar"
+import {Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious} from "@/components/ui/pagination"
 import {
     AlertTriangle,
     Filter,
@@ -22,91 +23,51 @@ import {
 import {Dialog, DialogTrigger} from "@/components/ui/dialog"
 import {AddPatientForm} from "@/components/forms/add-patient-form"
 import {type ProfessionalUser, useAuthStore} from "@/stores/auth-store"
-
-// 1. Define a TypeScript interface that matches the API's patient structure
-interface Patient {
-    patient_id: string
-    first_name: string
-    last_name: string
-    date_of_birth: string
-    gender: string
-    preferred_language: string
-    preferred_contact_method: string
-    user: {
-        id: string
-        username: string // This field is used as the email
-        phone_number: string
-        user_type: string
-        is_verified: boolean
-        created_at: string
-    }
-    age: number
-}
+import {usePatientsWithPagination} from "@/hooks/use-api"
+import {useMemo} from "react"
 
 export default function Patients() {
     const {user} = useAuthStore()
     const professional = user as ProfessionalUser
     const [searchTerm, setSearchTerm] = useState("")
-    const [patients, setPatients] = useState<Patient[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
 
-    // 2. Fetch data from the API when the component mounts
-    useEffect(() => {
-        const fetchPatients = async () => {
-            if (!professional?.access_token) {
-                setError("Authentication token not found.")
-                setIsLoading(false)
-                return
-            }
-
-            try {
-                const response = await fetch("https://high5-gateway.onrender.com/api/v1/auth/patients/", {
-                    headers: {
-                        Authorization: `Bearer ${professional.access_token}`,
-                    },
-                })
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch patients: ${response.statusText}`)
-                }
-
-                const data = await response.json()
-                setPatients(data.patients || []) // The API returns data in a `patients` array
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "An unknown error occurred.")
-                console.error(err)
-            } finally {
-                setIsLoading(false)
-            }
+    // Construction des paramètres de filtre pour l'API
+    const params = useMemo(() => {
+        const urlParams = new URLSearchParams()
+        
+        // Pagination
+        urlParams.set("page", currentPage.toString())
+        urlParams.set("page_size", pageSize.toString())
+        
+        // Search
+        if (searchTerm.trim()) {
+            urlParams.set("search", searchTerm.trim())
         }
+        
+        return urlParams
+    }, [currentPage, pageSize, searchTerm])
 
-        fetchPatients()
-    }, [professional?.access_token])
-
-    // 3. Adapt the search filter to the new data structure
-    const filteredPatients = patients.filter(
-        (patient) =>
-            `${patient.first_name} ${patient.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            patient.patient_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            patient.user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            patient.user.phone_number.includes(searchTerm),
-    )
+    // Utiliser le hook comme dans appointments
+    const {
+        patients,
+        pagination,
+        isLoading,
+        error,
+        refetch
+    } = usePatientsWithPagination(params)
 
     const handleAddPatient = (newPatient: any) => {
         // TODO: This should be an API call to POST the new patient data
-        // For now, we just add it to the local state for demonstration
-        const optimisticPatient: Patient = {
-            ...newPatient,
-            patient_id: `PAT${Math.random().toString(36).substring(2, 9)}`,
-            user: {
-                ...newPatient.user,
-                id: `USR${Math.random().toString(36).substring(2, 9)}`,
-            },
-        }
-        setPatients([optimisticPatient, ...patients])
+        // For now, refresh the patient list
+        refetch()
         setIsAddDialogOpen(false)
+    }
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page)
     }
 
     const renderContent = () => {
@@ -128,7 +89,7 @@ export default function Patients() {
             )
         }
 
-        if (filteredPatients.length === 0) {
+        if (!patients || patients.length === 0) {
             return (
                 <div className="text-center p-10 bg-gray-50 dark:bg-gray-800/20 rounded-lg">
                     <p className="font-semibold">No patients found</p>
@@ -140,8 +101,9 @@ export default function Patients() {
         }
 
         return (
-            <div className="space-y-3 sm:space-y-4">
-                {filteredPatients.map((patient, index) => (
+            <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
+                    {patients.map((patient, index) => (
                     <Card
                         key={patient.patient_id}
                         className="card-hover glass-effect border-0 shadow-lg animate-scale-in w-full"
@@ -173,7 +135,7 @@ export default function Patients() {
                                             className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 lg:gap-4 text-xs sm:text-sm text-muted-foreground">
                                             <div className="flex items-center gap-1">
                                                 <User className="icon-responsive-sm flex-shrink-0"/>
-                                                <span className="truncate">{patient.age} years</span>
+                                                <span className="truncate">{patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : 'N/A'} years</span>
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <Phone className="icon-responsive-sm flex-shrink-0"/>
@@ -181,7 +143,7 @@ export default function Patients() {
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <Mail className="icon-responsive-sm flex-shrink-0"/>
-                                                <span className="truncate">{patient.user.username}</span>
+                                                <span className="truncate">{patient.user.email || 'No email'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -227,6 +189,64 @@ export default function Patients() {
                         </CardContent>
                     </Card>
                 ))}
+                </div>
+                
+                {/* Pagination */}
+                {pagination.num_pages > 1 && (
+                    <div className="flex flex-col items-center gap-4 pt-4">
+                        <div className="text-sm text-muted-foreground">
+                            Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, pagination.count)} of {pagination.count} patients
+                        </div>
+                        <Pagination>
+                            <PaginationContent>
+                                <PaginationItem>
+                                    <PaginationPrevious 
+                                        onClick={() => pagination.has_previous && handlePageChange(currentPage - 1)}
+                                        className={!pagination.has_previous ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                    />
+                                </PaginationItem>
+                                
+                                {Array.from({ length: Math.min(5, pagination.num_pages) }, (_, i) => {
+                                    let pageNumber;
+                                    if (pagination.num_pages <= 5) {
+                                        pageNumber = i + 1;
+                                    } else if (currentPage <= 3) {
+                                        pageNumber = i + 1;
+                                    } else if (currentPage >= pagination.num_pages - 2) {
+                                        pageNumber = pagination.num_pages - 4 + i;
+                                    } else {
+                                        pageNumber = currentPage - 2 + i;
+                                    }
+                                    
+                                    return (
+                                        <PaginationItem key={pageNumber}>
+                                            <PaginationLink
+                                                onClick={() => handlePageChange(pageNumber)}
+                                                isActive={currentPage === pageNumber}
+                                                className="cursor-pointer"
+                                            >
+                                                {pageNumber}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    );
+                                })}
+                                
+                                {pagination.num_pages > 5 && currentPage < pagination.num_pages - 2 && (
+                                    <PaginationItem>
+                                        <PaginationEllipsis />
+                                    </PaginationItem>
+                                )}
+                                
+                                <PaginationItem>
+                                    <PaginationNext 
+                                        onClick={() => pagination.has_next && handlePageChange(currentPage + 1)}
+                                        className={!pagination.has_next ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                    />
+                                </PaginationItem>
+                            </PaginationContent>
+                        </Pagination>
+                    </div>
+                )}
             </div>
         )
     }

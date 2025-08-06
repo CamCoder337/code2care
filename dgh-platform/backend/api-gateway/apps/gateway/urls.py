@@ -5,7 +5,7 @@ from .feedback_proxy import (
     create_feedback, my_feedbacks, feedback_status, test_feedback,
     appointments_view, appointment_detail_view, upcoming_appointments, today_appointments,
     prescriptions_view, prescription_detail_view,
-    list_medications, get_medication, patient_profile
+    list_medications, get_medication, patient_profile, list_patients
 )
 
 urlpatterns = [
@@ -40,4 +40,7 @@ urlpatterns = [
     # Routes medications (READ-ONLY)
     path('api/v1/medications/', list_medications, name='medications'),  # GET pour lister tous les médicaments
     path('api/v1/medications/<str:medication_id>/', get_medication, name='medication-detail'),  # GET pour récupérer un médicament spécifique
+    
+    # Routes patients (pour les professionnels/admins)
+    path('api/v1/patients/', list_patients, name='list-patients'),  # GET pour lister tous les patients avec pagination/recherche
 ]
