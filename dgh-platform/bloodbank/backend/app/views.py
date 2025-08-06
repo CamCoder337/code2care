@@ -1814,658 +1814,6 @@ class OptimizationRecommendationsAPIView(APIView):
 # ==================== DATA IMPORT VIEWS ====================
 @method_decorator(csrf_exempt, name='dispatch')
 class DataImportAPIView(BaseAPIView):
-    """Import des données CSV fournies par les organisateurs"""
-
-    def post(self, request):
-        try:
-            csv_file = request.FILES.get('csv_file')
-            if not csv_file:
-                return Response(
-                    {'error': 'Fichier CSV requis'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Lire le fichier CSV
-            file_data = csv_file.read().decode('utf-8')
-            csv_reader = csv.DictReader(io.StringIO(file_data))
-
-            imported_count = 0
-            errors = []
-
-            with transaction.atomic():
-                for row_num, row in enumerate(csv_reader, start=2):
-                    try:
-                        self.process_csv_row(row, row_num)
-                        imported_count += 1
-                    except Exception as e:
-                        errors.append(f"Ligne {row_num}: {str(e)}")
-                        if len(errors) > 50:  # Limiter les erreurs affichées
-                            errors.append("... (plus d'erreurs tronquées)")
-                            break
-
-            return Response({
-                'success': True,
-                'imported_records': imported_count,
-                'errors': errors,
-                'total_errors': len(errors)
-            })
-
-        except Exception as e:
-            logger.error(f"CSV Import error: {str(e)}")
-            return Response(
-                {'error': f'Erreur lors de l\'import: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def process_csv_row(self, row, row_num):
-        """Traite une ligne du CSV"""
-        # Nettoyer les données
-        record_id = row.get('record_id', '').strip()
-        donor_id = row.get('donor_id', '').strip()
-
-        # Valeurs par défaut si manquantes
-        if not record_id:
-            record_id = f"BB{str(row_num).zfill(6)}"
-
-        if not donor_id:
-            donor_id = f"D{str(row_num).zfill(6)}"
-
-        # Créer ou récupérer le site
-        collection_site = row.get('collection_site', 'Site Inconnu').strip()
-        if not collection_site:
-            collection_site = 'Site Inconnu'
-
-        site, _ = Site.objects.get_or_create(
-            site_id=f"SITE_{collection_site.replace(' ', '_').upper()}",
-            defaults={
-                'nom': collection_site,
-                'ville': 'Douala'  # Valeur par défaut
-            }
-        )
-
-        # Créer ou récupérer le donneur
-        donor_age = self.safe_float(row.get('donor_age'))
-        donor_gender = row.get('donor_gender', 'M').strip()
-        blood_type = row.get('blood_type', 'O+').strip()
-
-        # Calculer date de naissance approximative
-        birth_date = date.today() - timedelta(days=int(donor_age * 365)) if donor_age else date(1980, 1, 1)
-
-        donor, _ = Donor.objects.get_or_create(
-            donor_id=donor_id,
-            defaults={
-                'first_name': f'Donneur_{donor_id}',
-                'last_name': 'Anonyme',
-                'date_of_birth': birth_date,
-                'gender': donor_gender if donor_gender in ['M', 'F'] else 'M',
-                'blood_type': blood_type if blood_type in [choice[0] for choice in Donor.BLOOD_TYPE_CHOICES] else 'O+',
-                'phone_number': '000000000'
-            }
-        )
-
-        # Créer l'enregistrement de don
-        donation_date = self.parse_date(row.get('donation_date'))
-
-        blood_record, _ = BloodRecord.objects.get_or_create(
-            record_id=record_id,
-            defaults={
-                'site': site,
-                'screening_results': 'Valid',
-                'record_date': donation_date or date.today(),
-                'quantity': 1
-            }
-        )
-
-        # Créer l'unité de sang
-        unit_id = record_id  # Utiliser le même ID
-        collection_date = donation_date or date.today()
-        expiry_date = self.parse_date(row.get('expiry_date'))
-
-        # Si pas de date d'expiration, calculer (120 jours après collection)
-        if not expiry_date:
-            expiry_date = collection_date + timedelta(days=120)
-
-        volume_ml = self.safe_int(row.get('collection_volume_ml'), 450)
-        hemoglobin = self.safe_float(row.get('hemoglobin_g_dl'))
-
-        # Déterminer le statut
-        status = 'Available'
-        if expiry_date < date.today():
-            status = 'Expired'
-
-        BloodUnit.objects.get_or_create(
-            unit_id=unit_id,
-            defaults={
-                'donor': donor,
-                'record': blood_record,
-                'collection_date': collection_date,
-                'volume_ml': volume_ml,
-                'hemoglobin_g_dl': hemoglobin,
-                'date_expiration': expiry_date,
-                'status': status
-            }
-        )
-
-    def safe_int(self, value, default=0):
-        """Conversion sécurisée en entier"""
-        try:
-            return int(float(value)) if value and str(value).strip() else default
-        except (ValueError, TypeError):
-            return default
-
-    def safe_float(self, value, default=None):
-        """Conversion sécurisée en float"""
-        try:
-            return float(value) if value and str(value).strip() else default
-        except (ValueError, TypeError):
-            return default
-
-    def parse_date(self, date_string):
-        """Parse une date au format YYYY-MM-DD"""
-        if not date_string or not str(date_string).strip():
-            return None
-
-        try:
-            return datetime.strptime(str(date_string).strip(), '%Y-%m-%d').date()
-        except ValueError:
-            try:
-                return datetime.strptime(str(date_string).strip(), '%d/%m/%Y').date()
-            except ValueError:
-                return None
-
-@global_allow_any
-# ==================== CRUD VIEWS ====================
-class BloodUnitListAPIView(generics.ListAPIView):
-    """Liste des unités de sang avec filtrage"""
-    serializer_class = BloodUnitSerializer
-    pagination_class = StandardResultsSetPagination
-
-    def get_queryset(self):
-        queryset = BloodUnit.objects.select_related('donor', 'record__site').all()
-
-        # Filtres
-        blood_type = self.request.query_params.get('blood_type')
-        status = self.request.query_params.get('status')
-        expiring_days = self.request.query_params.get('expiring_days')
-
-        if blood_type:
-            queryset = queryset.filter(donor__blood_type=blood_type)
-
-        if status:
-            queryset = queryset.filter(status=status)
-
-        if expiring_days:
-            try:
-                days = int(expiring_days)
-                expiry_threshold = timezone.now().date() + timedelta(days=days)
-                queryset = queryset.filter(
-                    status='Available',
-                    date_expiration__lte=expiry_threshold
-                )
-            except ValueError:
-                pass
-
-        return queryset.order_by('-collection_date')
-
-@global_allow_any
-class BloodRequestListCreateAPIView(generics.ListCreateAPIView):
-    """Liste et création des demandes de sang"""
-    serializer_class = BloodRequestSerializer
-    pagination_class = StandardResultsSetPagination
-
-    def get_queryset(self):
-        queryset = BloodRequest.objects.select_related('department', 'site').all()
-
-        # Filtres
-        status = self.request.query_params.get('status')
-        priority = self.request.query_params.get('priority')
-        blood_type = self.request.query_params.get('blood_type')
-        department = self.request.query_params.get('department')
-
-        if status:
-            queryset = queryset.filter(status=status)
-
-        if priority:
-            queryset = queryset.filter(priority=priority)
-
-        if blood_type:
-            queryset = queryset.filter(blood_type=blood_type)
-
-        if department:
-            queryset = queryset.filter(department__name__icontains=department)
-
-        return queryset.order_by('-request_date', 'priority')
-
-
-
-
-
-
-@global_allow_any
-class BloodRequestDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
-    """Détail, mise à jour et suppression d'une demande de sang"""
-    queryset = BloodRequest.objects.select_related('department', 'site').all()
-    serializer_class = BloodRequestSerializer
-    lookup_field = 'request_id'
-
-    def get_object(self):
-        """Récupérer l'objet avec gestion d'erreur"""
-        try:
-            return super().get_object()
-        except BloodRequest.DoesNotExist:
-            from django.http import Http404
-            raise Http404("Demande de sang non trouvée")
-
-
-@global_allow_any
-class BloodConsumptionListCreateAPIView(generics.ListCreateAPIView):
-    """Liste et création des consommations de sang"""
-    serializer_class = BloodConsumptionSerializer
-    pagination_class = StandardResultsSetPagination
-
-    def get_queryset(self):
-        queryset = BloodConsumption.objects.select_related(
-            'request', 'unit__donor', 'patient'
-        ).all()
-
-        # Filtres
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
-        blood_type = self.request.query_params.get('blood_type')
-
-        if date_from:
-            try:
-                queryset = queryset.filter(date__gte=date_from)
-            except ValueError:
-                pass
-
-        if date_to:
-            try:
-                queryset = queryset.filter(date__lte=date_to)
-            except ValueError:
-                pass
-
-        if blood_type:
-            queryset = queryset.filter(unit__donor__blood_type=blood_type)
-
-        return queryset.order_by('-date')
-
-@global_allow_any
-# ==================== ANALYTICS VIEWS ====================
-class InventoryAnalyticsAPIView(BaseAPIView):
-    """Analytics avancés des stocks avec cache Redis"""
-
-    def get(self, request):
-        period = request.GET.get('period', '30')  # jours
-
-        try:
-            days = int(period)
-
-            # Cache spécifique à la période
-            cache_key = cache_key_builder('inventory_analytics', period)
-            cached_result = safe_cache_get(cache_key)
-
-            if cached_result:
-                logger.info(f"Analytics for {period} days served from Redis cache")
-                return Response(cached_result)
-
-            start_time = time.time()
-            start_date = timezone.now().date() - timedelta(days=days)
-
-            # Évolution des stocks par groupe sanguin
-            stock_evolution = self.get_stock_evolution_cached(start_date, days)
-
-            # Taux d'utilisation
-            utilization_rates = self.get_utilization_rates_cached(start_date)
-
-            # Analyse des pertes - Version PostgreSQL
-            waste_analysis = self.get_waste_analysis_cached(start_date)
-
-            # Tendances de demande - Version PostgreSQL
-            demand_trends = self.get_demand_trends_cached(start_date)
-
-            # Métriques de performance
-            performance_metrics = self.get_performance_metrics_cached(start_date)
-
-            execution_time = time.time() - start_time
-
-            result = {
-                'period_days': days,
-                'stock_evolution': stock_evolution,
-                'utilization_rates': utilization_rates,
-                'waste_analysis': waste_analysis,
-                'demand_trends': demand_trends,
-                'performance_metrics': performance_metrics,
-                'generated_at': timezone.now().isoformat(),
-                'execution_time_seconds': round(execution_time, 2),
-                'cache_backend': 'Redis Cloud'
-            }
-
-            # Cache pour 1 heure
-            safe_cache_set(cache_key, result, timeout=3600)
-            logger.info(f"Analytics generated and cached in {execution_time:.2f}s")
-
-            return Response(result)
-
-        except Exception as e:
-            logger.error(f"Analytics error: {str(e)}")
-            return Response(
-                {'error': 'Erreur lors de la génération des analytics'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def get_stock_evolution_cached(self, start_date, days):
-        """Évolution des stocks avec cache par tranches"""
-        cache_key = cache_key_builder('stock_evolution', start_date.isoformat(), days)
-        cached_result = safe_cache_get(cache_key)
-
-        if cached_result:
-            return cached_result
-
-        evolution = self.get_stock_evolution(start_date, days)
-        safe_cache_set(cache_key, evolution, timeout=1800)  # 30 minutes
-        return evolution
-
-    def get_utilization_rates_cached(self, start_date):
-        """Taux d'utilisation avec cache"""
-        cache_key = cache_key_builder('utilization_rates', start_date.isoformat())
-        cached_result = safe_cache_get(cache_key)
-
-        if cached_result:
-            return cached_result
-
-        rates = self.get_utilization_rates(start_date)
-        safe_cache_set(cache_key, rates, timeout=1800)  # 30 minutes
-        return rates
-
-    def get_waste_analysis_cached(self, start_date):
-        """Analyse des pertes avec cache"""
-        cache_key = cache_key_builder('waste_analysis', start_date.isoformat())
-        cached_result = safe_cache_get(cache_key)
-
-        if cached_result:
-            return cached_result
-
-        analysis = self.get_waste_analysis_postgresql(start_date)
-        safe_cache_set(cache_key, analysis, timeout=1800)  # 30 minutes
-        return analysis
-
-    def get_demand_trends_cached(self, start_date):
-        """Tendances de demande avec cache"""
-        cache_key = cache_key_builder('demand_trends', start_date.isoformat())
-        cached_result = safe_cache_get(cache_key)
-
-        if cached_result:
-            return cached_result
-
-        trends = self.get_demand_trends_postgresql(start_date)
-        safe_cache_set(cache_key, trends, timeout=1800)  # 30 minutes
-        return trends
-
-    def get_performance_metrics_cached(self, start_date):
-        """Métriques de performance avec cache"""
-        cache_key = cache_key_builder('performance_metrics', start_date.isoformat())
-        cached_result = safe_cache_get(cache_key)
-
-        if cached_result:
-            return cached_result
-
-        metrics = self.get_performance_metrics(start_date)
-        safe_cache_set(cache_key, metrics, timeout=1800)  # 30 minutes
-        return metrics
-
-    def get_stock_evolution(self, start_date, days):
-        """Évolution des stocks sur la période"""
-        evolution = []
-
-        for i in range(days):
-            check_date = start_date + timedelta(days=i)
-
-            daily_stocks = {}
-            for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
-                stock_count = BloodUnit.objects.filter(
-                    donor__blood_type=blood_type,
-                    collection_date__lte=check_date,
-                    date_expiration__gt=check_date
-                ).count()
-                daily_stocks[blood_type] = stock_count
-
-            evolution.append({
-                'date': check_date.isoformat(),
-                'stocks': daily_stocks,
-                'total': sum(daily_stocks.values())
-            })
-
-        return evolution
-
-    def get_utilization_rates(self, start_date):
-        """Taux d'utilisation par groupe sanguin"""
-        rates = []
-
-        for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
-            # Unités collectées
-            collected = BloodUnit.objects.filter(
-                donor__blood_type=blood_type,
-                collection_date__gte=start_date
-            ).count()
-
-            # Unités utilisées
-            used = BloodUnit.objects.filter(
-                donor__blood_type=blood_type,
-                collection_date__gte=start_date,
-                status='Used'
-            ).count()
-
-            # Unités expirées
-            expired = BloodUnit.objects.filter(
-                donor__blood_type=blood_type,
-                collection_date__gte=start_date,
-                status='Expired'
-            ).count()
-
-            utilization_rate = (used / collected * 100) if collected > 0 else 0
-            waste_rate = (expired / collected * 100) if collected > 0 else 0
-
-            rates.append({
-                'blood_type': blood_type,
-                'collected': collected,
-                'used': used,
-                'expired': expired,
-                'utilization_rate': round(utilization_rate, 2),
-                'waste_rate': round(waste_rate, 2)
-            })
-
-        return rates
-
-    # Correction de la méthode get_waste_analysis_postgresql
-    def get_waste_analysis_postgresql(self, start_date):
-        """Analyse des pertes - Version corrigée"""
-        try:
-            # Utiliser TruncMonth correctement importé
-            expired_units = BloodUnit.objects.filter(
-                status='Expired',
-                date_expiration__gte=start_date
-            ).annotate(
-                month=TruncMonth('date_expiration')
-            ).values('month', 'donor__blood_type').annotate(
-                count=Count('unit_id'),
-                total_volume=Sum('volume_ml')
-            ).order_by('month')
-
-            # Conversion en format lisible
-            monthly_waste = []
-            for item in expired_units:
-                month_str = item['month'].strftime('%Y-%m') if item['month'] else 'Unknown'
-                monthly_waste.append({
-                    'month': month_str,
-                    'blood_type': item['donor__blood_type'],
-                    'count': item['count'],
-                    'total_volume': item['total_volume'] or 0
-                })
-
-            # Coût estimé des pertes
-            total_expired = sum(item['count'] for item in monthly_waste)
-            estimated_cost = total_expired * 50000  # 50000 FCFA par unité
-
-            return {
-                'monthly_waste': monthly_waste,
-                'total_expired_units': total_expired,
-                'estimated_cost_fcfa': estimated_cost,
-                'main_causes': [
-                    {'cause': 'Expiration naturelle', 'percentage': 70},
-                    {'cause': 'Problèmes de rotation', 'percentage': 20},
-                    {'cause': 'Défauts de stockage', 'percentage': 10}
-                ]
-            }
-        except Exception as e:
-            logger.error(f"Waste analysis error: {str(e)}")
-            return {
-                'monthly_waste': [],
-                'total_expired_units': 0,
-                'estimated_cost_fcfa': 0,
-                'main_causes': []
-            }
-
-    def get_demand_trends_postgresql(self, start_date):
-        """Tendances de demande - Version corrigée"""
-        try:
-            # Utiliser TruncWeek correctement importé
-            weekly_demands = BloodRequest.objects.filter(
-                request_date__gte=start_date
-            ).annotate(
-                week=TruncWeek('request_date'),
-                year=Extract('request_date', 'year'),
-                week_number=Extract('request_date', 'week')
-            ).values('week', 'year', 'week_number', 'blood_type').annotate(
-                total_quantity=Sum('quantity')
-            ).order_by('week')
-
-            # Conversion en format lisible
-            weekly_trends = []
-            for item in weekly_demands:
-                week_str = f"{item['year']}-W{item['week_number']:02d}" if item['year'] and item[
-                    'week_number'] else 'Unknown'
-                weekly_trends.append({
-                    'week': week_str,
-                    'blood_type': item['blood_type'],
-                    'total_quantity': item['total_quantity']
-                })
-
-            # Demandes par département
-            dept_demands = BloodRequest.objects.filter(
-                request_date__gte=start_date
-            ).values('department__name').annotate(
-                total_requests=Count('request_id'),
-                total_quantity=Sum('quantity')
-            ).order_by('-total_quantity')
-
-            return {
-                'weekly_trends': weekly_trends,
-                'department_distribution': list(dept_demands),
-                'peak_demand_days': self.get_peak_demand_days(start_date)
-            }
-        except Exception as e:
-            logger.error(f"Demand trends error: {str(e)}")
-            return {
-                'weekly_trends': [],
-                'department_distribution': [],
-                'peak_demand_days': []
-            }
-
-    def get_peak_demand_days(self, start_date):
-        """Jours de pic de demande"""
-        try:
-            daily_demands = BloodRequest.objects.filter(
-                request_date__gte=start_date
-            ).values('request_date').annotate(
-                total_quantity=Sum('quantity')
-            ).order_by('-total_quantity')[:10]
-
-            return [
-                {
-                    'request_date': item['request_date'].isoformat() if item['request_date'] else None,
-                    'total_quantity': item['total_quantity']
-                }
-                for item in daily_demands
-            ]
-        except Exception as e:
-            logger.error(f"Peak demand days error: {str(e)}")
-            return []
-
-    def get_performance_metrics(self, start_date):
-        """Métriques de performance globales"""
-        try:
-            # Temps moyen de satisfaction des demandes
-            fulfilled_requests = BloodRequest.objects.filter(
-                request_date__gte=start_date,
-                status='Fulfilled'
-            )
-
-            # Stock de sécurité par groupe sanguin
-            safety_stock_status = []
-            for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
-                current_stock = BloodUnit.objects.filter(
-                    donor__blood_type=blood_type,
-                    status='Available'
-                ).count()
-
-                # Consommation moyenne des 7 derniers jours
-                week_consumption = BloodConsumption.objects.filter(
-                    unit__donor__blood_type=blood_type,
-                    date__gte=timezone.now().date() - timedelta(days=7)
-                ).count()
-
-                avg_daily_consumption = week_consumption / 7
-                days_of_supply = current_stock / avg_daily_consumption if avg_daily_consumption > 0 else float('inf')
-
-                safety_stock_status.append({
-                    'blood_type': blood_type,
-                    'current_stock': current_stock,
-                    'days_of_supply': round(days_of_supply, 1) if days_of_supply != float('inf') else 999,
-                    'status': 'safe' if days_of_supply >= 7 else 'critical' if days_of_supply < 3 else 'warning'
-                })
-
-            total_requests = BloodRequest.objects.filter(request_date__gte=start_date).count()
-            fulfillment_rate = round(fulfilled_requests.count() / total_requests * 100, 2) if total_requests > 0 else 0
-
-            return {
-                'total_requests': total_requests,
-                'fulfilled_requests': fulfilled_requests.count(),
-                'fulfillment_rate': fulfillment_rate,
-                'safety_stock_status': safety_stock_status,
-                'average_stock_turnover': self.calculate_stock_turnover(start_date)
-            }
-        except Exception as e:
-            logger.error(f"Performance metrics error: {str(e)}")
-            return {
-                'total_requests': 0,
-                'fulfilled_requests': 0,
-                'fulfillment_rate': 0,
-                'safety_stock_status': [],
-                'average_stock_turnover': 0
-            }
-
-    def calculate_stock_turnover(self, start_date):
-        """Calcule la rotation moyenne des stocks"""
-        try:
-            total_used = BloodUnit.objects.filter(
-                collection_date__gte=start_date,
-                status='Used'
-            ).count()
-
-            avg_stock = BloodUnit.objects.filter(
-                collection_date__gte=start_date
-            ).count() / 2  # Approximation du stock moyen
-
-            return round(total_used / avg_stock, 2) if avg_stock > 0 else 0
-        except:
-            return 0
-
-
-@global_allow_any
-# ==================== REPORTING VIEWS ====================
-@method_decorator(csrf_exempt, name='dispatch')
-class DataImportAPIView(BaseAPIView):
     """Import des données CSV avec validation et traitement intelligent"""
 
     def post(self, request):
@@ -3035,6 +2383,644 @@ class ImportHistoryAPIView(BaseAPIView):
             'message': 'Historique des imports non encore implémenté'
         })
 
+@global_allow_any
+# ==================== CRUD VIEWS ====================
+class BloodUnitListAPIView(generics.ListAPIView):
+    """Liste des unités de sang avec filtrage"""
+    serializer_class = BloodUnitSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        queryset = BloodUnit.objects.select_related('donor', 'record__site').all()
+
+        # Filtres
+        blood_type = self.request.query_params.get('blood_type')
+        status = self.request.query_params.get('status')
+        expiring_days = self.request.query_params.get('expiring_days')
+
+        if blood_type:
+            queryset = queryset.filter(donor__blood_type=blood_type)
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if expiring_days:
+            try:
+                days = int(expiring_days)
+                expiry_threshold = timezone.now().date() + timedelta(days=days)
+                queryset = queryset.filter(
+                    status='Available',
+                    date_expiration__lte=expiry_threshold
+                )
+            except ValueError:
+                pass
+
+        return queryset.order_by('-collection_date')
+
+@global_allow_any
+class BloodRequestListCreateAPIView(generics.ListCreateAPIView):
+    """Liste et création des demandes de sang"""
+    serializer_class = BloodRequestSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        queryset = BloodRequest.objects.select_related('department', 'site').all()
+
+        # Filtres
+        status = self.request.query_params.get('status')
+        priority = self.request.query_params.get('priority')
+        blood_type = self.request.query_params.get('blood_type')
+        department = self.request.query_params.get('department')
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if priority:
+            queryset = queryset.filter(priority=priority)
+
+        if blood_type:
+            queryset = queryset.filter(blood_type=blood_type)
+
+        if department:
+            queryset = queryset.filter(department__name__icontains=department)
+
+        return queryset.order_by('-request_date', 'priority')
+
+
+
+
+
+
+@global_allow_any
+class BloodRequestDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """Détail, mise à jour et suppression d'une demande de sang"""
+    queryset = BloodRequest.objects.select_related('department', 'site').all()
+    serializer_class = BloodRequestSerializer
+    lookup_field = 'request_id'
+
+    def get_object(self):
+        """Récupérer l'objet avec gestion d'erreur"""
+        try:
+            return super().get_object()
+        except BloodRequest.DoesNotExist:
+            from django.http import Http404
+            raise Http404("Demande de sang non trouvée")
+
+
+@global_allow_any
+class BloodConsumptionListCreateAPIView(generics.ListCreateAPIView):
+    """Liste et création des consommations de sang"""
+    serializer_class = BloodConsumptionSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        queryset = BloodConsumption.objects.select_related(
+            'request', 'unit__donor', 'patient'
+        ).all()
+
+        # Filtres
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        blood_type = self.request.query_params.get('blood_type')
+
+        if date_from:
+            try:
+                queryset = queryset.filter(date__gte=date_from)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                queryset = queryset.filter(date__lte=date_to)
+            except ValueError:
+                pass
+
+        if blood_type:
+            queryset = queryset.filter(unit__donor__blood_type=blood_type)
+
+        return queryset.order_by('-date')
+
+@global_allow_any
+# ==================== ANALYTICS VIEWS ====================
+class InventoryAnalyticsAPIView(BaseAPIView):
+    """Analytics avancés des stocks avec cache Redis"""
+
+    def get(self, request):
+        period = request.GET.get('period', '30')  # jours
+
+        try:
+            days = int(period)
+
+            # Cache spécifique à la période
+            cache_key = cache_key_builder('inventory_analytics', period)
+            cached_result = safe_cache_get(cache_key)
+
+            if cached_result:
+                logger.info(f"Analytics for {period} days served from Redis cache")
+                return Response(cached_result)
+
+            start_time = time.time()
+            start_date = timezone.now().date() - timedelta(days=days)
+
+            # Évolution des stocks par groupe sanguin
+            stock_evolution = self.get_stock_evolution_cached(start_date, days)
+
+            # Taux d'utilisation
+            utilization_rates = self.get_utilization_rates_cached(start_date)
+
+            # Analyse des pertes - Version PostgreSQL
+            waste_analysis = self.get_waste_analysis_cached(start_date)
+
+            # Tendances de demande - Version PostgreSQL
+            demand_trends = self.get_demand_trends_cached(start_date)
+
+            # Métriques de performance
+            performance_metrics = self.get_performance_metrics_cached(start_date)
+
+            execution_time = time.time() - start_time
+
+            result = {
+                'period_days': days,
+                'stock_evolution': stock_evolution,
+                'utilization_rates': utilization_rates,
+                'waste_analysis': waste_analysis,
+                'demand_trends': demand_trends,
+                'performance_metrics': performance_metrics,
+                'generated_at': timezone.now().isoformat(),
+                'execution_time_seconds': round(execution_time, 2),
+                'cache_backend': 'Redis Cloud'
+            }
+
+            # Cache pour 1 heure
+            safe_cache_set(cache_key, result, timeout=3600)
+            logger.info(f"Analytics generated and cached in {execution_time:.2f}s")
+
+            return Response(result)
+
+        except Exception as e:
+            logger.error(f"Analytics error: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la génération des analytics'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def get_stock_evolution_cached(self, start_date, days):
+        """Évolution des stocks avec cache par tranches"""
+        cache_key = cache_key_builder('stock_evolution', start_date.isoformat(), days)
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        evolution = self.get_stock_evolution(start_date, days)
+        safe_cache_set(cache_key, evolution, timeout=1800)  # 30 minutes
+        return evolution
+
+    def get_utilization_rates_cached(self, start_date):
+        """Taux d'utilisation avec cache"""
+        cache_key = cache_key_builder('utilization_rates', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        rates = self.get_utilization_rates(start_date)
+        safe_cache_set(cache_key, rates, timeout=1800)  # 30 minutes
+        return rates
+
+    def get_waste_analysis_cached(self, start_date):
+        """Analyse des pertes avec cache"""
+        cache_key = cache_key_builder('waste_analysis', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        analysis = self.get_waste_analysis_postgresql(start_date)
+        safe_cache_set(cache_key, analysis, timeout=1800)  # 30 minutes
+        return analysis
+
+    def get_demand_trends_cached(self, start_date):
+        """Tendances de demande avec cache"""
+        cache_key = cache_key_builder('demand_trends', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        trends = self.get_demand_trends_postgresql(start_date)
+        safe_cache_set(cache_key, trends, timeout=1800)  # 30 minutes
+        return trends
+
+    def get_performance_metrics_cached(self, start_date):
+        """Métriques de performance avec cache"""
+        cache_key = cache_key_builder('performance_metrics', start_date.isoformat())
+        cached_result = safe_cache_get(cache_key)
+
+        if cached_result:
+            return cached_result
+
+        metrics = self.get_performance_metrics(start_date)
+        safe_cache_set(cache_key, metrics, timeout=1800)  # 30 minutes
+        return metrics
+
+    def get_stock_evolution(self, start_date, days):
+        """Évolution des stocks sur la période"""
+        evolution = []
+
+        for i in range(days):
+            check_date = start_date + timedelta(days=i)
+
+            daily_stocks = {}
+            for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
+                stock_count = BloodUnit.objects.filter(
+                    donor__blood_type=blood_type,
+                    collection_date__lte=check_date,
+                    date_expiration__gt=check_date
+                ).count()
+                daily_stocks[blood_type] = stock_count
+
+            evolution.append({
+                'date': check_date.isoformat(),
+                'stocks': daily_stocks,
+                'total': sum(daily_stocks.values())
+            })
+
+        return evolution
+
+    def get_utilization_rates(self, start_date):
+        """Taux d'utilisation par groupe sanguin"""
+        rates = []
+
+        for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
+            # Unités collectées
+            collected = BloodUnit.objects.filter(
+                donor__blood_type=blood_type,
+                collection_date__gte=start_date
+            ).count()
+
+            # Unités utilisées
+            used = BloodUnit.objects.filter(
+                donor__blood_type=blood_type,
+                collection_date__gte=start_date,
+                status='Used'
+            ).count()
+
+            # Unités expirées
+            expired = BloodUnit.objects.filter(
+                donor__blood_type=blood_type,
+                collection_date__gte=start_date,
+                status='Expired'
+            ).count()
+
+            utilization_rate = (used / collected * 100) if collected > 0 else 0
+            waste_rate = (expired / collected * 100) if collected > 0 else 0
+
+            rates.append({
+                'blood_type': blood_type,
+                'collected': collected,
+                'used': used,
+                'expired': expired,
+                'utilization_rate': round(utilization_rate, 2),
+                'waste_rate': round(waste_rate, 2)
+            })
+
+        return rates
+
+    # Correction de la méthode get_waste_analysis_postgresql
+    def get_waste_analysis_postgresql(self, start_date):
+        """Analyse des pertes - Version corrigée"""
+        try:
+            # Utiliser TruncMonth correctement importé
+            expired_units = BloodUnit.objects.filter(
+                status='Expired',
+                date_expiration__gte=start_date
+            ).annotate(
+                month=TruncMonth('date_expiration')
+            ).values('month', 'donor__blood_type').annotate(
+                count=Count('unit_id'),
+                total_volume=Sum('volume_ml')
+            ).order_by('month')
+
+            # Conversion en format lisible
+            monthly_waste = []
+            for item in expired_units:
+                month_str = item['month'].strftime('%Y-%m') if item['month'] else 'Unknown'
+                monthly_waste.append({
+                    'month': month_str,
+                    'blood_type': item['donor__blood_type'],
+                    'count': item['count'],
+                    'total_volume': item['total_volume'] or 0
+                })
+
+            # Coût estimé des pertes
+            total_expired = sum(item['count'] for item in monthly_waste)
+            estimated_cost = total_expired * 50000  # 50000 FCFA par unité
+
+            return {
+                'monthly_waste': monthly_waste,
+                'total_expired_units': total_expired,
+                'estimated_cost_fcfa': estimated_cost,
+                'main_causes': [
+                    {'cause': 'Expiration naturelle', 'percentage': 70},
+                    {'cause': 'Problèmes de rotation', 'percentage': 20},
+                    {'cause': 'Défauts de stockage', 'percentage': 10}
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Waste analysis error: {str(e)}")
+            return {
+                'monthly_waste': [],
+                'total_expired_units': 0,
+                'estimated_cost_fcfa': 0,
+                'main_causes': []
+            }
+
+    def get_demand_trends_postgresql(self, start_date):
+        """Tendances de demande - Version corrigée"""
+        try:
+            # Utiliser TruncWeek correctement importé
+            weekly_demands = BloodRequest.objects.filter(
+                request_date__gte=start_date
+            ).annotate(
+                week=TruncWeek('request_date'),
+                year=Extract('request_date', 'year'),
+                week_number=Extract('request_date', 'week')
+            ).values('week', 'year', 'week_number', 'blood_type').annotate(
+                total_quantity=Sum('quantity')
+            ).order_by('week')
+
+            # Conversion en format lisible
+            weekly_trends = []
+            for item in weekly_demands:
+                week_str = f"{item['year']}-W{item['week_number']:02d}" if item['year'] and item[
+                    'week_number'] else 'Unknown'
+                weekly_trends.append({
+                    'week': week_str,
+                    'blood_type': item['blood_type'],
+                    'total_quantity': item['total_quantity']
+                })
+
+            # Demandes par département
+            dept_demands = BloodRequest.objects.filter(
+                request_date__gte=start_date
+            ).values('department__name').annotate(
+                total_requests=Count('request_id'),
+                total_quantity=Sum('quantity')
+            ).order_by('-total_quantity')
+
+            return {
+                'weekly_trends': weekly_trends,
+                'department_distribution': list(dept_demands),
+                'peak_demand_days': self.get_peak_demand_days(start_date)
+            }
+        except Exception as e:
+            logger.error(f"Demand trends error: {str(e)}")
+            return {
+                'weekly_trends': [],
+                'department_distribution': [],
+                'peak_demand_days': []
+            }
+
+    def get_peak_demand_days(self, start_date):
+        """Jours de pic de demande"""
+        try:
+            daily_demands = BloodRequest.objects.filter(
+                request_date__gte=start_date
+            ).values('request_date').annotate(
+                total_quantity=Sum('quantity')
+            ).order_by('-total_quantity')[:10]
+
+            return [
+                {
+                    'request_date': item['request_date'].isoformat() if item['request_date'] else None,
+                    'total_quantity': item['total_quantity']
+                }
+                for item in daily_demands
+            ]
+        except Exception as e:
+            logger.error(f"Peak demand days error: {str(e)}")
+            return []
+
+    def get_performance_metrics(self, start_date):
+        """Métriques de performance globales"""
+        try:
+            # Temps moyen de satisfaction des demandes
+            fulfilled_requests = BloodRequest.objects.filter(
+                request_date__gte=start_date,
+                status='Fulfilled'
+            )
+
+            # Stock de sécurité par groupe sanguin
+            safety_stock_status = []
+            for blood_type in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
+                current_stock = BloodUnit.objects.filter(
+                    donor__blood_type=blood_type,
+                    status='Available'
+                ).count()
+
+                # Consommation moyenne des 7 derniers jours
+                week_consumption = BloodConsumption.objects.filter(
+                    unit__donor__blood_type=blood_type,
+                    date__gte=timezone.now().date() - timedelta(days=7)
+                ).count()
+
+                avg_daily_consumption = week_consumption / 7
+                days_of_supply = current_stock / avg_daily_consumption if avg_daily_consumption > 0 else float('inf')
+
+                safety_stock_status.append({
+                    'blood_type': blood_type,
+                    'current_stock': current_stock,
+                    'days_of_supply': round(days_of_supply, 1) if days_of_supply != float('inf') else 999,
+                    'status': 'safe' if days_of_supply >= 7 else 'critical' if days_of_supply < 3 else 'warning'
+                })
+
+            total_requests = BloodRequest.objects.filter(request_date__gte=start_date).count()
+            fulfillment_rate = round(fulfilled_requests.count() / total_requests * 100, 2) if total_requests > 0 else 0
+
+            return {
+                'total_requests': total_requests,
+                'fulfilled_requests': fulfilled_requests.count(),
+                'fulfillment_rate': fulfillment_rate,
+                'safety_stock_status': safety_stock_status,
+                'average_stock_turnover': self.calculate_stock_turnover(start_date)
+            }
+        except Exception as e:
+            logger.error(f"Performance metrics error: {str(e)}")
+            return {
+                'total_requests': 0,
+                'fulfilled_requests': 0,
+                'fulfillment_rate': 0,
+                'safety_stock_status': [],
+                'average_stock_turnover': 0
+            }
+
+    def calculate_stock_turnover(self, start_date):
+        """Calcule la rotation moyenne des stocks"""
+        try:
+            total_used = BloodUnit.objects.filter(
+                collection_date__gte=start_date,
+                status='Used'
+            ).count()
+
+            avg_stock = BloodUnit.objects.filter(
+                collection_date__gte=start_date
+            ).count() / 2  # Approximation du stock moyen
+
+            return round(total_used / avg_stock, 2) if avg_stock > 0 else 0
+        except:
+            return 0
+
+
+@global_allow_any
+# ==================== REPORTING VIEWS ====================
+class ReportExportAPIView(BaseAPIView):
+    """Export de rapports en CSV"""
+
+    def get(self, request):
+        report_type = request.GET.get('type', 'inventory')
+        format_type = request.GET.get('format', 'csv')
+
+        try:
+            if report_type == 'inventory':
+                return self.export_inventory_report(format_type)
+            elif report_type == 'consumption':
+                return self.export_consumption_report(format_type)
+            elif report_type == 'waste':
+                return self.export_waste_report(format_type)
+            elif report_type == 'donors':
+                return self.export_donors_report(format_type)
+            else:
+                return Response(
+                    {'error': 'Type de rapport non supporté'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        except Exception as e:
+            logger.error(f"Report export error: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de l\'export du rapport'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def export_inventory_report(self, format_type):
+        """Export du rapport d'inventaire"""
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="inventory_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Unit ID', 'Blood Type', 'Status', 'Collection Date',
+            'Expiry Date', 'Volume (ml)', 'Hemoglobin (g/dl)',
+            'Site', 'Days to Expiry'
+        ])
+
+        units = BloodUnit.objects.select_related('donor', 'record__site').all()
+
+        for unit in units:
+            writer.writerow([
+                unit.unit_id,
+                unit.donor.blood_type,
+                unit.status,
+                unit.collection_date,
+                unit.date_expiration,
+                unit.volume_ml,
+                unit.hemoglobin_g_dl or '',
+                unit.record.site.nom,
+                unit.days_until_expiry
+            ])
+
+        return response
+
+    def export_consumption_report(self, format_type):
+        """Export du rapport de consommation"""
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="consumption_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Date', 'Unit ID', 'Blood Type', 'Patient',
+            'Department', 'Volume', 'Request ID'
+        ])
+
+        consumptions = BloodConsumption.objects.select_related(
+            'unit__donor', 'patient', 'request__department'
+        ).all()
+
+        for consumption in consumptions:
+            writer.writerow([
+                consumption.date,
+                consumption.unit.unit_id,
+                consumption.unit.donor.blood_type,
+                f"{consumption.patient.first_name} {consumption.patient.last_name}",
+                consumption.request.department.name,
+                consumption.volume,
+                consumption.request.request_id
+            ])
+
+        return response
+
+    def export_waste_report(self, format_type):
+        """Export du rapport de gaspillage"""
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="waste_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Unit ID', 'Blood Type', 'Collection Date',
+            'Expiry Date', 'Volume (ml)', 'Site', 'Days Expired'
+        ])
+
+        expired_units = BloodUnit.objects.filter(status='Expired').select_related('donor', 'record__site')
+
+        for unit in expired_units:
+            days_expired = (timezone.now().date() - unit.date_expiration).days
+            writer.writerow([
+                unit.unit_id,
+                unit.donor.blood_type,
+                unit.collection_date,
+                unit.date_expiration,
+                unit.volume_ml,
+                unit.record.site.nom,
+                days_expired
+            ])
+
+        return response
+
+    def export_donors_report(self, format_type):
+        """Export du rapport des donneurs"""
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="donors_report_{timezone.now().strftime("%Y%m%d")}.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Donor ID', 'Name', 'Age', 'Gender', 'Blood Type',
+            'Phone', 'Total Donations', 'Last Donation'
+        ])
+
+        donors = Donor.objects.all()
+
+        for donor in donors:
+            total_donations = BloodUnit.objects.filter(donor=donor).count()
+            last_donation = BloodUnit.objects.filter(donor=donor).order_by('-collection_date').first()
+            last_donation_date = last_donation.collection_date if last_donation else ''
+
+            writer.writerow([
+                donor.donor_id,
+                f"{donor.first_name} {donor.last_name}",
+                donor.age,
+                donor.get_gender_display(),
+                donor.blood_type,
+                donor.phone_number,
+                total_donations,
+                last_donation_date
+            ])
+
+        return response
 
 @global_allow_any
 # ==================== CONFIGURATION VIEWS ====================
