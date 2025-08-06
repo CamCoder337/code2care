@@ -148,6 +148,7 @@ export interface Patient {
   first_name: string
   last_name: string
   date_of_birth: string
+  gender: 'M' | 'F'
   blood_type: string
   patient_history: string
   age: number

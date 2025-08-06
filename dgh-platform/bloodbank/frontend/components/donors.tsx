@@ -17,8 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Progress } from "@/components/ui/progress"
 import {
   Users,
   Search,
@@ -34,17 +33,70 @@ import {
   AlertCircle,
   Edit,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Award,
+  TrendingUp,
+  Medal,
+  Crown,
+  Trophy,
+  Star,
+  BarChart3,
+  X
 } from "lucide-react"
 import { useDonors, useCreateDonor, useUpdateDonor, useDeleteDonor } from "../lib/hooks/useApi"
 import { Donor } from "../lib/api"
 import { toast } from "sonner"
+
+// Types étendus pour inclure les donations
+interface DonorWithStats extends Donor {
+  total_donations: number
+  total_volume_ml: number
+  last_donation_date?: string
+  donation_frequency: number
+  donor_rank: 'gold' | 'silver' | 'bronze' | 'new'
+  contributions: DonorContribution[]
+}
+
+interface DonorContribution {
+  id: string
+  donation_date: string
+  volume_ml: number
+  site_name: string
+  hemoglobin_level?: number
+  status: 'completed' | 'pending' | 'rejected'
+}
+
+// Mock data pour simuler les données étendues
+const generateMockStats = (donor: Donor): DonorWithStats => {
+  const donations = Math.floor(Math.random() * 15) + 1
+  const volume = donations * (450 + Math.random() * 50)
+
+  return {
+    ...donor,
+    total_donations: donations,
+    total_volume_ml: Math.floor(volume),
+    last_donation_date: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    donation_frequency: Math.floor(donations / 2) + 1,
+    donor_rank: donations > 10 ? 'gold' : donations > 5 ? 'silver' : donations > 2 ? 'bronze' : 'new',
+    contributions: Array.from({ length: donations }, (_, i) => ({
+      id: `contrib_${i + 1}`,
+      donation_date: new Date(Date.now() - i * 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      volume_ml: 450 + Math.floor(Math.random() * 50),
+      site_name: ['CHU Yaoundé', 'Hôpital Central', 'Centre de Don Essos'][Math.floor(Math.random() * 3)],
+      hemoglobin_level: 12 + Math.random() * 4,
+      status: 'completed' as const
+    }))
+  }
+}
 
 export function Donors() {
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBloodType, setFilterBloodType] = useState("all")
   const [filterGender, setFilterGender] = useState("all")
+  const [filterRank, setFilterRank] = useState("all")
+  const [sortBy, setSortBy] = useState("name")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
 
@@ -52,9 +104,10 @@ export function Donors() {
   const [showAddDonor, setShowAddDonor] = useState(false)
   const [showEditDonor, setShowEditDonor] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null)
+  const [showDonorDetails, setShowDonorDetails] = useState(false)
+  const [selectedDonor, setSelectedDonor] = useState<DonorWithStats | null>(null)
 
-  // Form state
+  // Form state (sans donor_id pour la modification)
   const [donorForm, setDonorForm] = useState({
     donor_id: "",
     first_name: "",
@@ -79,7 +132,38 @@ export function Donors() {
   const updateDonorMutation = useUpdateDonor()
   const deleteDonorMutation = useDeleteDonor()
 
-  const donors = donorsData?.results || []
+  // Transform donors with mock stats
+  const donorsWithStats = (donorsData?.results || []).map(generateMockStats)
+
+  // Apply client-side filtering and sorting
+  let filteredDonors = donorsWithStats.filter(donor => {
+    const matchesGender = filterGender === "all" || donor.gender === filterGender
+    const matchesRank = filterRank === "all" || donor.donor_rank === filterRank
+    return matchesGender && matchesRank
+  })
+
+  // Apply sorting
+  filteredDonors.sort((a, b) => {
+    let comparison = 0
+    switch (sortBy) {
+      case "name":
+        comparison = `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+        break
+      case "donations":
+        comparison = a.total_donations - b.total_donations
+        break
+      case "volume":
+        comparison = a.total_volume_ml - b.total_volume_ml
+        break
+      case "last_donation":
+        comparison = (a.last_donation_date || "").localeCompare(b.last_donation_date || "")
+        break
+      default:
+        comparison = 0
+    }
+    return sortOrder === "desc" ? -comparison : comparison
+  })
+
   const totalCount = donorsData?.count || 0
   const totalPages = Math.ceil(totalCount / pageSize)
 
@@ -115,7 +199,7 @@ export function Donors() {
     }
   }
 
-  // Handle update donor
+  // Handle update donor (sans donor_id)
   const handleUpdateDonor = async () => {
     if (!selectedDonor) return
 
@@ -152,11 +236,11 @@ export function Donors() {
     }
   }
 
-  // Open edit dialog
-  const openEditDialog = (donor: Donor) => {
+  // Open edit dialog (sans donor_id dans le formulaire)
+  const openEditDialog = (donor: DonorWithStats) => {
     setSelectedDonor(donor)
     setDonorForm({
-      donor_id: donor.donor_id,
+      donor_id: donor.donor_id, // Gardé pour référence mais pas modifiable
       first_name: donor.first_name,
       last_name: donor.last_name,
       blood_type: donor.blood_type,
@@ -167,10 +251,30 @@ export function Donors() {
     setShowEditDonor(true)
   }
 
+  // Open details dialog
+  const openDetailsDialog = (donor: DonorWithStats) => {
+    setSelectedDonor(donor)
+    setShowDonorDetails(true)
+  }
+
   // Open delete dialog
-  const openDeleteDialog = (donor: Donor) => {
+  const openDeleteDialog = (donor: DonorWithStats) => {
     setSelectedDonor(donor)
     setShowDeleteConfirm(true)
+  }
+
+  // Get rank icon and color
+  const getRankDetails = (rank: string) => {
+    switch (rank) {
+      case 'gold':
+        return { icon: Crown, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Donneur Or' }
+      case 'silver':
+        return { icon: Medal, color: 'text-gray-600', bg: 'bg-gray-50', label: 'Donneur Argent' }
+      case 'bronze':
+        return { icon: Trophy, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Donneur Bronze' }
+      default:
+        return { icon: Star, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Nouveau Donneur' }
+    }
   }
 
   // Calculate age
@@ -189,17 +293,19 @@ export function Donors() {
   // Handle search with debounce
   useEffect(() => {
     setCurrentPage(1) // Reset to first page when search changes
-  }, [searchTerm, filterBloodType, filterGender])
+  }, [searchTerm, filterBloodType, filterGender, filterRank, sortBy])
 
-  // Calculate statistics from current data
+  // Calculate statistics
   const totalDonors = totalCount
-  const activeDonors = donors.length // Assume all loaded donors are active
-  const newThisMonth = Math.floor(totalCount * 0.1) // Estimate
+  const goldDonors = filteredDonors.filter(d => d.donor_rank === 'gold').length
+  const activeDonors = filteredDonors.filter(d => d.total_donations > 0).length
+  const totalDonations = filteredDonors.reduce((sum, d) => sum + d.total_donations, 0)
 
   const donorStats = [
-    { label: "Total Donors", value: totalDonors.toLocaleString(), change: "+8%", icon: Users, color: "text-blue-600" },
-    { label: "Active Donors", value: activeDonors.toLocaleString(), change: "+12%", icon: Heart, color: "text-green-600" },
-    { label: "New This Month", value: newThisMonth.toLocaleString(), change: "+24%", icon: UserPlus, color: "text-teal-600" },
+    { label: "Total Donneurs", value: totalDonors.toLocaleString(), change: "+8%", icon: Users, color: "text-blue-600" },
+    { label: "Donneurs Actifs", value: activeDonors.toLocaleString(), change: "+12%", icon: Heart, color: "text-green-600" },
+    { label: "Donneurs Or", value: goldDonors.toLocaleString(), change: "+24%", icon: Crown, color: "text-yellow-600" },
+    { label: "Total Donations", value: totalDonations.toLocaleString(), change: "+15%", icon: Droplets, color: "text-red-600" },
   ]
 
   // Error state
@@ -232,7 +338,7 @@ export function Donors() {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-teal-600 to-green-600 bg-clip-text text-transparent">
               Gestion des Donneurs
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">Gérer et suivre les donneurs de sang</p>
+            <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">Gérer et suivre les donneurs de sang avec classement</p>
           </div>
           <div className="flex space-x-3">
             <Button
@@ -374,7 +480,7 @@ export function Donors() {
         </div>
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {donorStats.map((stat, index) => {
             const Icon = stat.icon
             return (
@@ -404,17 +510,17 @@ export function Donors() {
           })}
         </div>
 
-        {/* Search and Filters */}
+        {/* Enhanced Search and Filters */}
         <Card className="bg-white dark:bg-slate-800 shadow-xl border-0 rounded-2xl overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20">
             <CardTitle className="flex items-center text-xl font-bold">
               <Filter className="w-6 h-6 mr-3 text-blue-600" />
-              Recherche & Filtres
+              Recherche & Filtres Avancés
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+              <div className="lg:col-span-2">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <Input
@@ -451,6 +557,62 @@ export function Donors() {
                   <SelectItem value="F">Féminin</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={filterRank} onValueChange={setFilterRank}>
+                <SelectTrigger className="h-12 rounded-xl border-gray-200 dark:border-gray-700">
+                  <SelectValue placeholder="Classement" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les rangs</SelectItem>
+                  <SelectItem value="gold">🏆 Donneur Or</SelectItem>
+                  <SelectItem value="silver">🥈 Donneur Argent</SelectItem>
+                  <SelectItem value="bronze">🥉 Donneur Bronze</SelectItem>
+                  <SelectItem value="new">⭐ Nouveau</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Label className="text-sm font-medium">Trier par:</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-40 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Nom</SelectItem>
+                    <SelectItem value="donations">Nb Donations</SelectItem>
+                    <SelectItem value="volume">Volume Total</SelectItem>
+                    <SelectItem value="last_donation">Dernière Donation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  className="rounded-xl"
+                >
+                  {sortOrder === "asc" ? "↑" : "↓"}
+                </Button>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {(searchTerm || filterBloodType !== "all" || filterGender !== "all" || filterRank !== "all") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setFilterBloodType("all")
+                      setFilterGender("all")
+                      setFilterRank("all")
+                    }}
+                    className="rounded-xl"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Réinitialiser
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -460,10 +622,10 @@ export function Donors() {
           <CardHeader className="bg-gradient-to-r from-blue-50 to-teal-50 dark:from-blue-900/20 dark:to-teal-900/20">
             <CardTitle className="flex items-center text-xl font-bold">
               <Users className="w-6 h-6 mr-3 text-blue-600" />
-              Répertoire des Donneurs
+              Répertoire des Donneurs avec Classement
             </CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              Liste complète des donneurs enregistrés ({totalCount} total)
+              Liste complète des donneurs avec leurs contributions ({filteredDonors.length} affichés sur {totalCount} total)
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -472,7 +634,7 @@ export function Donors() {
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 <span className="ml-2 text-gray-600">Chargement des donneurs...</span>
               </div>
-            ) : donors.length === 0 ? (
+            ) : filteredDonors.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-600 mb-2">Aucun donneur trouvé</h3>
@@ -484,78 +646,129 @@ export function Donors() {
                   <TableHeader>
                     <TableRow className="border-gray-100 dark:border-gray-800">
                       <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Donneur</TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Classement</TableHead>
                       <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Groupe sanguin</TableHead>
-                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Âge</TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Total Donations</TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Volume Total</TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Dernière Donation</TableHead>
                       <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Contact</TableHead>
-                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Sexe</TableHead>
                       <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {donors.map((donor, index) => (
-                      <TableRow
-                        key={donor.donor_id}
-                        className="animate-slide-in-right hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-gray-100 dark:border-gray-800"
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <TableCell>
-                          <div className="flex items-center space-x-3">
-                            <Avatar className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 shadow-lg">
-                              <AvatarFallback className="text-white font-semibold text-lg">
-                                {donor.first_name[0]?.toUpperCase()}
-                                {donor.last_name[0]?.toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-semibold text-gray-800 dark:text-white">
-                                {donor.first_name} {donor.last_name}
+                    {filteredDonors.map((donor, index) => {
+                      const rankDetails = getRankDetails(donor.donor_rank)
+                      const RankIcon = rankDetails.icon
+
+                      return (
+                        <TableRow
+                          key={donor.donor_id}
+                          className="animate-slide-in-right hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-gray-100 dark:border-gray-800"
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <Avatar className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 shadow-lg">
+                                <AvatarFallback className="text-white font-semibold text-lg">
+                                  {donor.first_name[0]?.toUpperCase()}
+                                  {donor.last_name[0]?.toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-semibold text-gray-800 dark:text-white">
+                                  {donor.first_name} {donor.last_name}
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {donor.donor_id} • {calculateAge(donor.date_of_birth)} ans • {donor.gender === "M" ? "H" : "F"}
+                                </div>
                               </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">{donor.donor_id}</div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-medium">
-                            <Droplets className="w-3 h-3 mr-1" />
-                            {donor.blood_type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-gray-700 dark:text-gray-300">
-                          {calculateAge(donor.date_of_birth)} ans
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-1">
-                            <Phone className="w-3 h-3 text-gray-400" />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">{donor.phone_number}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium">
-                            {donor.gender === "M" ? "Masculin" : "Féminin"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openEditDialog(donor)}
-                              className="rounded-xl px-3 py-1"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openDeleteDialog(donor)}
-                              className="rounded-xl px-3 py-1 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${rankDetails.bg} ${rankDetails.color}`}>
+                              <RankIcon className="w-4 h-4 mr-2" />
+                              {rankDetails.label}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-medium">
+                              <Droplets className="w-3 h-3 mr-1" />
+                              {donor.blood_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-lg text-blue-600">{donor.total_donations}</span>
+                              <div className="flex items-center text-xs text-gray-500">
+                                <TrendingUp className="w-3 h-3 mr-1" />
+                                {donor.donation_frequency} /an
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-red-600">{(donor.total_volume_ml / 1000).toFixed(1)}L</span>
+                              <div className="text-xs text-gray-500">
+                                ({donor.total_volume_ml} ml)
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {donor.last_donation_date ? (
+                                <div>
+                                  <div className="font-medium text-gray-800 dark:text-white">
+                                    {new Date(donor.last_donation_date).toLocaleDateString('fr-FR')}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Il y a {Math.floor((Date.now() - new Date(donor.last_donation_date).getTime()) / (1000 * 60 * 60 * 24))} jours
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">Jamais</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-1">
+                              <Phone className="w-3 h-3 text-gray-400" />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">{donor.phone_number}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDetailsDialog(donor)}
+                                className="rounded-xl px-3 py-1"
+                                title="Voir détails"
+                              >
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditDialog(donor)}
+                                className="rounded-xl px-3 py-1"
+                                title="Modifier"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDeleteDialog(donor)}
+                                className="rounded-xl px-3 py-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -608,15 +821,205 @@ export function Donors() {
           </div>
         )}
 
-        {/* Edit Donor Dialog */}
+        {/* Donor Details Dialog */}
+        <Dialog open={showDonorDetails} onOpenChange={setShowDonorDetails}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold text-blue-700 flex items-center">
+                <div className="flex items-center space-x-3">
+                  <Avatar className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 shadow-lg">
+                    <AvatarFallback className="text-white font-semibold text-lg">
+                      {selectedDonor?.first_name[0]?.toUpperCase()}
+                      {selectedDonor?.last_name[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div>{selectedDonor?.first_name} {selectedDonor?.last_name}</div>
+                    {selectedDonor && (
+                      <div className="flex items-center space-x-2 mt-1">
+                        {(() => {
+                          const rankDetails = getRankDetails(selectedDonor.donor_rank)
+                          const RankIcon = rankDetails.icon
+                          return (
+                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${rankDetails.bg} ${rankDetails.color}`}>
+                              <RankIcon className="w-3 h-3 mr-1" />
+                              {rankDetails.label}
+                            </div>
+                          )
+                        })()}
+                        <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                          {selectedDonor.blood_type}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </DialogTitle>
+              <DialogDescription>
+                Informations détaillées et historique des contributions
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedDonor && (
+              <div className="space-y-6 mt-6">
+                {/* Overview Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">{selectedDonor.total_donations}</div>
+                    <div className="text-sm text-gray-600">Donations</div>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">{(selectedDonor.total_volume_ml / 1000).toFixed(1)}L</div>
+                    <div className="text-sm text-gray-600">Volume Total</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{selectedDonor.donation_frequency}</div>
+                    <div className="text-sm text-gray-600">Donations/An</div>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-orange-600">{calculateAge(selectedDonor.date_of_birth)}</div>
+                    <div className="text-sm text-gray-600">Ans</div>
+                  </div>
+                </div>
+
+                {/* Personal Info */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <Users className="w-5 h-5 mr-2" />
+                    Informations Personnelles
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">ID Donneur</Label>
+                      <div className="text-lg font-semibold">{selectedDonor.donor_id}</div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Sexe</Label>
+                      <div className="text-lg">{selectedDonor.gender === 'M' ? 'Masculin' : 'Féminin'}</div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Date de naissance</Label>
+                      <div className="text-lg">{new Date(selectedDonor.date_of_birth).toLocaleDateString('fr-FR')}</div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Téléphone</Label>
+                      <div className="text-lg">{selectedDonor.phone_number}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Donation Progress */}
+                <div className="bg-gradient-to-br from-blue-50 to-teal-50 dark:from-blue-900/20 dark:to-teal-900/20 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2" />
+                    Progression des Donations
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Vers le prochain niveau</span>
+                        <span>{selectedDonor.total_donations} / {selectedDonor.donor_rank === 'gold' ? '15+' : selectedDonor.donor_rank === 'silver' ? '10' : selectedDonor.donor_rank === 'bronze' ? '5' : '2'}</span>
+                      </div>
+                      <Progress
+                        value={selectedDonor.donor_rank === 'gold' ? 100 : (selectedDonor.total_donations / (selectedDonor.donor_rank === 'silver' ? 10 : selectedDonor.donor_rank === 'bronze' ? 5 : 2)) * 100}
+                        className="h-3"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contributions History */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center">
+                    <Droplets className="w-5 h-5 mr-2" />
+                    Historique des Contributions ({selectedDonor.contributions.length})
+                  </h3>
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border overflow-hidden">
+                    <div className="max-h-96 overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                          <TableRow>
+                            <TableHead className="text-left">Date</TableHead>
+                            <TableHead className="text-left">Volume</TableHead>
+                            <TableHead className="text-left">Site</TableHead>
+                            <TableHead className="text-left">Hémoglobine</TableHead>
+                            <TableHead className="text-left">Statut</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedDonor.contributions.map((contribution, index) => (
+                            <TableRow key={contribution.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <TableCell className="font-medium">
+                                {new Date(contribution.donation_date).toLocaleDateString('fr-FR')}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center space-x-1">
+                                  <Droplets className="w-4 h-4 text-red-500" />
+                                  <span>{contribution.volume_ml} ml</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>{contribution.site_name}</TableCell>
+                              <TableCell>
+                                {contribution.hemoglobin_level ? `${contribution.hemoglobin_level.toFixed(1)} g/dL` : 'N/A'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={contribution.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                                  {contribution.status === 'completed' ? 'Complété' : 'En attente'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-4 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowDonorDetails(false)}
+                className="rounded-xl"
+              >
+                Fermer
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedDonor) {
+                    setShowDonorDetails(false)
+                    openEditDialog(selectedDonor)
+                  }
+                }}
+                className="bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Modifier
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Donor Dialog (sans ID modifiable) */}
         <Dialog open={showEditDonor} onOpenChange={setShowEditDonor}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold text-blue-700">Modifier le donneur</DialogTitle>
-              <DialogDescription>Mettre à jour les informations du donneur</DialogDescription>
+              <DialogDescription>
+                Mettre à jour les informations du donneur {selectedDonor?.donor_id}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               <div className="space-y-4">
+                <div>
+                  <Label>ID Donneur (non modifiable)</Label>
+                  <Input
+                    value={donorForm.donor_id}
+                    disabled
+                    className="mt-1 rounded-xl bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
+                  />
+                </div>
                 <div>
                   <Label htmlFor="edit_first_name">Prénom</Label>
                   <Input
@@ -730,7 +1133,7 @@ export function Donors() {
                 <span className="font-semibold">
                   {selectedDonor?.first_name} {selectedDonor?.last_name}
                 </span>{" "}
-                ? Cette action est irréversible.
+                ? Cette action est irréversible et supprimera également son historique de {selectedDonor?.total_donations} donations.
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end space-x-4 mt-6">
