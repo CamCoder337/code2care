@@ -334,6 +334,21 @@ def appointments_view(request):
     GET: Liste tous les rendez-vous
     POST: Crée un nouveau rendez-vous
     """
+    # DEBUG: Log au début de la fonction
+    logger.info(f"=== APPOINTMENTS_VIEW CALLED ===")
+    logger.info(f"Method: {request.method}")
+    logger.info(f"User: {request.user}")
+    logger.info(f"Is authenticated: {request.user.is_authenticated}")
+    logger.info(f"User type: {getattr(request.user, 'user_type', 'NO_USER_TYPE')}")
+    
+    # Vérification manuelle de l'authentification pour debug
+    if not request.user.is_authenticated:
+        logger.error("❌ USER NOT AUTHENTICATED")
+        return Response(
+            {'error': 'Authentication required - DEBUG'}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
     if request.method == 'GET':
         return list_appointments(request)
     elif request.method == 'POST':
@@ -370,24 +385,53 @@ def list_appointments(request):
     user_id = None
     
     try:
-        # Déterminer le type d'utilisateur
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'  
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'  
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -425,23 +469,53 @@ def create_appointment_logic(request):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User au lieu de hasattr
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     appointment_data = request.data.copy()
@@ -452,6 +526,12 @@ def create_appointment_logic(request):
         'X-User-Type': user_type,
         'Authorization': request.headers.get('Authorization', '')
     }
+    
+    # DEBUG: Log des headers envoyés
+    logger.info(f"API Gateway sending to feedback-service:")
+    logger.info(f"  user_type: {user_type}")
+    logger.info(f"  user_id: {user_id}")
+    logger.info(f"  headers: {headers}")
     
     try:
         service_url = settings.MICROSERVICES.get('FEEDBACK_SERVICE')
@@ -485,23 +565,53 @@ def get_appointment(request, appointment_id):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -541,23 +651,53 @@ def update_appointment(request, appointment_id):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -607,23 +747,53 @@ def delete_appointment(request, appointment_id):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -663,23 +833,53 @@ def upcoming_appointments(request):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -719,23 +919,53 @@ def today_appointments(request):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -777,23 +1007,53 @@ def list_prescriptions(request):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {
@@ -881,23 +1141,53 @@ def get_prescription(request, prescription_id):
     user_id = None
     
     try:
-        if hasattr(request.user, 'patient'):
-            patient = Patient.objects.get(user=request.user)
-            user_type = 'patient'
-            user_id = str(patient.patient_id)
-        elif hasattr(request.user, 'professional'):
-            professional = Professional.objects.get(user=request.user)
-            user_type = 'professional'
-            user_id = str(professional.professional_id)
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
         else:
             return Response(
-                {'error': 'Type d\'utilisateur non supporté'}, 
+                {
+                    'error': 'Type d\'utilisateur non supporté',
+                    'debug_info': {
+                        'user_type_from_model': request.user.user_type,
+                        'user_id': str(request.user.id)
+                    }
+                }, 
                 status=status.HTTP_403_FORBIDDEN
             )
-    except (Patient.DoesNotExist, Professional.DoesNotExist):
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Profil utilisateur introuvable'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {
+                'error': 'Erreur lors de la vérification du profil utilisateur',
+                'debug_info': {
+                    'user_type_from_model': getattr(request.user, 'user_type', None),
+                    'user_id': str(request.user.id),
+                    'error_details': str(e)
+                }
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
     headers = {

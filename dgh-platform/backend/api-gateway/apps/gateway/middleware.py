@@ -89,12 +89,54 @@ class ServiceRoutingMiddleware(MiddlewareMixin):
             elif key in ['CONTENT_TYPE', 'CONTENT_LENGTH']:
                 headers[key.replace('_', '-').title()] = value
 
-        # Ajouter l'authentification si présente
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            headers['X-User-ID'] = str(request.user.id)
-            headers['X-User-Type'] = request.user.user_type
+        # Ajouter l'authentification JWT
+        user = self._authenticate_jwt(request)
+        if user and user.is_authenticated:
+            # Récupérer le bon ID selon le type d'utilisateur
+            user_id = self._get_user_specific_id(user)
+            headers['X-User-ID'] = str(user_id)
+            headers['X-User-Type'] = user.user_type
+            logger.info(f"Middleware adding headers: X-User-Type={user.user_type}, X-User-ID={user_id}")
 
         return headers
+    
+    def _authenticate_jwt(self, request):
+        """Authentifie l'utilisateur via JWT token"""
+        try:
+            from rest_framework_simplejwt.authentication import JWTAuthentication
+            from django.contrib.auth.models import AnonymousUser
+            
+            auth = JWTAuthentication()
+            result = auth.authenticate(request)
+            
+            if result:
+                user, token = result
+                return user
+            return AnonymousUser()
+            
+        except Exception as e:
+            logger.error(f"JWT Authentication error: {e}")
+            from django.contrib.auth.models import AnonymousUser
+            return AnonymousUser()
+    
+    def _get_user_specific_id(self, user):
+        """Récupère le bon ID selon le type d'utilisateur"""
+        try:
+            if user.user_type == 'patient':
+                from apps.users.models import Patient
+                patient = Patient.objects.get(user=user)
+                return patient.patient_id
+            elif user.user_type == 'professional':
+                from apps.users.models import Professional
+                professional = Professional.objects.get(user=user)
+                return professional.professional_id
+            elif user.user_type == 'admin':
+                return user.id  # Pour admin, utiliser l'ID user direct
+            else:
+                return user.id  # Fallback
+        except Exception as e:
+            logger.error(f"Error getting user specific ID: {e}")
+            return user.id  # Fallback vers user.id
 
 
 class RequestTracingMiddleware(MiddlewareMixin):
