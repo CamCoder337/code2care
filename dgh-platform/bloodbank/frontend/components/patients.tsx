@@ -10,8 +10,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/lib/i18n"
 import {
   UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Activity,
-  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users
+  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users,
+  RefreshCw, Wifi, WifiOff
 } from "lucide-react"
+// ✅ Import corrigé - ajouter usePatients
 import { usePatients, useCreatePatient, useUpdatePatient } from "@/lib/hooks/useApi"
 import { toast } from "sonner"
 
@@ -60,20 +62,38 @@ export function Patients() {
     page_size: filters.page_size,
   }
 
-  // Hooks API
+  // ✅ Hooks API avec gestion d'erreur améliorée
   const {
     data: patientsData,
     isLoading,
     isError,
     error,
-    refetch
-  } = usePatients(queryParams)
+    refetch,
+    isFetching
+  } = usePatients(queryParams, {
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    onError: (error) => {
+      console.error("❌ Error loading patients:", error)
+      // Ne pas afficher de toast ici pour éviter le spam
+    },
+    // Données de fallback en cas d'erreur réseau
+    placeholderData: {
+      results: [],
+      count: 0,
+      next: null,
+      previous: null
+    }
+  })
 
   const createPatientMutation = useCreatePatient({
     onSuccess: () => {
       setShowCreateModal(false)
       resetForm()
       refetch()
+    },
+    onError: (error) => {
+      console.error("❌ Error creating patient:", error)
     }
   })
 
@@ -83,6 +103,9 @@ export function Patients() {
       setEditingPatient(null)
       resetForm()
       refetch()
+    },
+    onError: (error) => {
+      console.error("❌ Error updating patient:", error)
     }
   })
 
@@ -218,7 +241,7 @@ export function Patients() {
     setShowEditModal(true)
   }
 
-  // Calculer les statistiques à partir des données
+  // ✅ Calculer les statistiques à partir des données avec fallback
   const getStatistics = () => {
     if (!patientsData?.results) {
       return {
@@ -244,7 +267,11 @@ export function Patients() {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("fr-FR")
+    try {
+      return new Date(dateString).toLocaleDateString("fr-FR")
+    } catch {
+      return "N/A"
+    }
   }
 
   const getPatientInitials = (firstName: string, lastName: string) => {
@@ -273,8 +300,63 @@ export function Patients() {
 
   const statistics = getStatistics()
 
-  // Affichage du loading
-  if (isLoading) {
+  // ✅ Gestion d'erreur améliorée - Éviter la page blanche
+  if (isError && !patientsData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <div className="p-6 lg:p-8 space-y-8">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Card className="max-w-md mx-auto p-6 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <div className="text-center space-y-4">
+                <div className="flex justify-center">
+                  <WifiOff className="w-12 h-12 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2">
+                    Connexion interrompue
+                  </h3>
+                  <p className="text-sm text-red-600 dark:text-red-300 mb-4">
+                    Impossible de se connecter au serveur. Vérifiez votre connexion internet.
+                  </p>
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => refetch()}
+                      disabled={isFetching}
+                    >
+                      {isFetching ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Reconnexion...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Réessayer
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full text-xs"
+                      onClick={openCreateModal}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Travailler en mode hors ligne
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ✅ Affichage du loading avec fallback
+  if (isLoading && !patientsData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         <div className="p-6 lg:p-8 space-y-8">
@@ -291,36 +373,7 @@ export function Patients() {
     )
   }
 
-  // Affichage des erreurs
-  if (isError) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-        <div className="p-6 lg:p-8 space-y-8">
-          <div className="flex items-center justify-center h-64">
-            <Card className="p-6 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <div className="flex items-center gap-3 text-red-700 dark:text-red-400">
-                <AlertCircle className="w-6 h-6" />
-                <div>
-                  <h3 className="font-semibold">Erreur de chargement</h3>
-                  <p className="text-sm">
-                    {error?.message || "Impossible de charger les patients"}
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-3"
-                    onClick={() => refetch()}
-                  >
-                    Réessayer
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  // ✅ Données avec fallback sécurisé
   const patients = patientsData?.results || []
   const totalCount = patientsData?.count || 0
   const hasNextPage = !!patientsData?.next
@@ -332,12 +385,28 @@ export function Patients() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent">
-              Gestion des Patients
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent">
+                Gestion des Patients
+              </h1>
+              {/* ✅ Indicateur de connexion */}
+              {isError ? (
+                <WifiOff className="w-6 h-6 text-red-500" title="Hors ligne" />
+              ) : isFetching ? (
+                <Loader2 className="w-5 h-5 text-blue-500 animate-spin" title="Synchronisation..." />
+              ) : (
+                <Wifi className="w-5 h-5 text-green-500" title="Connecté" />
+              )}
+            </div>
             <p className="text-lg text-gray-600 dark:text-gray-400">
               Suivi et gestion des patients nécessitant des transfusions sanguines
             </p>
+            {isError && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                <AlertCircle className="w-4 h-4" />
+                Mode hors ligne - Certaines fonctionnalités peuvent être limitées
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
@@ -454,6 +523,7 @@ export function Patients() {
             <CardTitle className="text-2xl font-bold">Liste des Patients</CardTitle>
             <CardDescription className="text-purple-100">
               {totalCount} patient{totalCount > 1 ? "s" : ""} au total, {patients.length} affiché{patients.length > 1 ? "s" : ""}
+              {isError && " (Mode hors ligne)"}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -461,21 +531,39 @@ export function Patients() {
               <div className="p-8 text-center">
                 <UserCheck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Aucun patient trouvé
+                  {isError ? "Données non disponibles" : "Aucun patient trouvé"}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  {searchTerm || filters.blood_type
+                  {isError
+                    ? "Impossible de charger les patients. Vérifiez votre connexion."
+                    : searchTerm || filters.blood_type
                     ? "Aucun patient ne correspond à vos critères de recherche."
                     : "Aucun patient enregistré dans le système."
                   }
                 </p>
-                <Button
-                  onClick={openCreateModal}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Ajouter le premier patient
-                </Button>
+                <div className="flex gap-2 justify-center">
+                  {isError && (
+                    <Button
+                      variant="outline"
+                      onClick={() => refetch()}
+                      disabled={isFetching}
+                    >
+                      {isFetching ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Réessayer
+                    </Button>
+                  )}
+                  <Button
+                    onClick={openCreateModal}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {isError ? "Ajouter en mode hors ligne" : "Ajouter le premier patient"}
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -523,7 +611,7 @@ export function Patients() {
                                   {patient.first_name} {patient.last_name}
                                 </p>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  ID: {patient.patient_id} • {patient.age} ans
+                                  ID: {patient.patient_id} • {patient.age || 'N/A'} ans
                                 </p>
                               </div>
                             </div>
@@ -587,7 +675,7 @@ export function Patients() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={!hasPreviousPage}
+                        disabled={!hasPreviousPage || isFetching}
                         onClick={() => handlePageChange(currentPage - 1)}
                       >
                         Précédent
@@ -595,7 +683,7 @@ export function Patients() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={!hasNextPage}
+                        disabled={!hasNextPage || isFetching}
                         onClick={() => handlePageChange(currentPage + 1)}
                       >
                         Suivant
@@ -620,6 +708,7 @@ export function Patients() {
                       <CardTitle className="text-xl font-bold">Nouveau Patient</CardTitle>
                       <CardDescription className="text-purple-100">
                         Ajouter un nouveau patient dans le système
+                        {isError && " (Mode hors ligne)"}
                       </CardDescription>
                     </div>
                   </div>
@@ -634,6 +723,14 @@ export function Patients() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
+                {isError && (
+                  <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Mode hors ligne: Les données seront synchronisées dès que la connexion sera rétablie.</span>
+                    </div>
+                  </div>
+                )}
                 <form onSubmit={handleCreateSubmit} className="space-y-6">
                   {/* Nom et Prénom */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -776,7 +873,7 @@ export function Patients() {
                       ) : (
                         <>
                           <Save className="w-4 h-4 mr-2" />
-                          Créer le patient
+                          {isError ? "Créer (hors ligne)" : "Créer le patient"}
                         </>
                       )}
                     </Button>
@@ -799,6 +896,7 @@ export function Patients() {
                       <CardTitle className="text-xl font-bold">Modifier Historique Patient</CardTitle>
                       <CardDescription className="text-green-100">
                         Modifier l'historique médical de {editingPatient.first_name} {editingPatient.last_name}
+                        {isError && " (Mode hors ligne)"}
                       </CardDescription>
                     </div>
                   </div>
@@ -813,6 +911,14 @@ export function Patients() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
+                {isError && (
+                  <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Mode hors ligne: Les modifications seront synchronisées dès que la connexion sera rétablie.</span>
+                    </div>
+                  </div>
+                )}
                 {/* Informations en lecture seule */}
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 mb-6 space-y-3">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
@@ -846,7 +952,7 @@ export function Patients() {
                     <div>
                       <span className="font-medium text-gray-600 dark:text-gray-400">Date de naissance:</span>
                       <span className="ml-2 text-gray-900 dark:text-gray-100">
-                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age} ans)
+                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age || 'N/A'} ans)
                       </span>
                     </div>
                   </div>
@@ -895,7 +1001,7 @@ export function Patients() {
                       ) : (
                         <>
                           <Save className="w-4 h-4 mr-2" />
-                          Sauvegarder l'historique
+                          {isError ? "Sauvegarder (hors ligne)" : "Sauvegarder l'historique"}
                         </>
                       )}
                     </Button>
@@ -973,7 +1079,7 @@ export function Patients() {
                       </label>
                       <p className="font-semibold flex items-center gap-2">
                         <CalendarDays className="w-4 h-4" />
-                        {selectedPatient.age} ans
+                        {selectedPatient.age || 'N/A'} ans
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -1007,9 +1113,10 @@ export function Patients() {
                       openEditModal(selectedPatient)
                     }}
                     className="flex items-center gap-2"
+                    disabled={isError}
                   >
                     <Edit className="w-4 h-4" />
-                    Modifier l'historique
+                    {isError ? "Modification indisponible" : "Modifier l'historique"}
                   </Button>
                   <Button
                     variant="outline"
