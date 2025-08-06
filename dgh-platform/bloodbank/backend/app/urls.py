@@ -1,7 +1,7 @@
 # app/urls.py - VERSION CORRIGÉE AVEC FALLBACKS
 from django.urls import path
 from . import views
-from .views import AISystemHealthView, AIMethodsView
+from .views import AISystemHealthView, AIMethodsView, DataImportAPIView, DataValidationAPIView, ImportHistoryAPIView
 
 urlpatterns = [
     # ==================== HEALTH CHECKS MULTIPLES ====================
@@ -52,6 +52,12 @@ urlpatterns = [
     # ==================== CONFIG ====================
     path('config/system/', views.SystemConfigAPIView.as_view(), name='system_config'),
     path('config/compatibility/', views.blood_compatibility, name='blood_compatibility'),
+
+    # ==================== DATA IMPORT (NOUVEAU) ====================
+    path('data/import/', DataImportAPIView.as_view(), name='data_import'),
+    path('data/validate/', DataValidationAPIView.as_view(), name='data_validation'),
+    path('data/template/', views.download_csv_template, name='csv_template'),
+    path('data/imports/history/', ImportHistoryAPIView.as_view(), name='import_history'),
 ]
 
 # Dans urls.py - Ajouter ces routes de debug

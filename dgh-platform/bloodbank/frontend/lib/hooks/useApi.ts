@@ -1,6 +1,6 @@
 // lib/hooks/useApi.ts
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query'
-import { apiService, handleApiError, DashboardOverview, Alert, BloodUnit, Donor, Patient, BloodRequest, Site, ForecastResult, SystemConfig } from '../api'
+import { apiService, handleApiError, DashboardOverview, Alert, BloodUnit, Donor, Patient, BloodRequest, Site, ForecastResult, SystemConfig, ImportResult, ValidationResult } from '../api'
 import { toast } from 'sonner'
 
 // ======================
@@ -38,6 +38,10 @@ export const queryKeys = {
   config: {
     system: ['config', 'system'] as const,
     compatibility: ['config', 'compatibility'] as const,
+  },
+  dataImport: {
+    history: (params?: any) => ['data-import', 'history', params] as const,
+    validation: (fileId: string) => ['data-import', 'validation', fileId] as const,
   },
   health: ['health'] as const,
 }
@@ -533,27 +537,122 @@ export const useBloodCompatibility = (
 // ======================
 
 export const useImportCSV = (
-  options?: UseMutationOptions<any, Error, File>
+  options?: UseMutationOptions<ImportResult, Error, File>
 ) => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (file: File) => apiService.importCSVData(file),
-    onSuccess: (data) => {
-      // Invalidate all relevant queries after import
+    mutationFn: (file: File) => {
+      console.log('🚀 Starting CSV import for file:', file.name)
+      return apiService.importCSVData(file)
+    },
+    onMutate: (file) => {
+      // Affichage immédiat du début d'import
+      toast.loading(`Import en cours: ${file.name}`, {
+        id: 'csv-import'
+      })
+    },
+    onSuccess: (data, file) => {
+      // Vider le toast de loading
+      toast.dismiss('csv-import')
+
+      // Invalider toutes les données pertinentes
       queryClient.invalidateQueries({ queryKey: ['donors'] })
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      queryClient.invalidateQueries({ queryKey: ['sites'] })
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.overview })
+      queryClient.invalidateQueries({ queryKey: queryKeys.dataImport.history() })
 
-      toast.success(`Import réussi: ${data.imported_records} enregistrements importés`)
+      if (data.success) {
+        const message = `Import réussi: ${data.imported_records} enregistrements importés`
+        toast.success(message, {
+          duration: 5000,
+          action: {
+            label: 'Voir détails',
+            onClick: () => {
+              console.log('📊 Import details:', data)
+            }
+          }
+        })
 
-      if (data.errors && data.errors.length > 0) {
-        toast.warning(`${data.total_errors} erreurs détectées lors de l'import`)
+        if (data.errors && data.errors.length > 0) {
+          toast.warning(`${data.total_errors} avertissements détectés`, {
+            duration: 4000
+          })
+        }
+      } else {
+        toast.error(`Échec de l'import: ${data.error}`)
       }
     },
-    onError: (error) => {
-      toast.error(`Erreur lors de l'import: ${handleApiError(error)}`)
+    onError: (error, file) => {
+      toast.dismiss('csv-import')
+      const errorMessage = `Erreur lors de l'import de ${file.name}: ${handleApiError(error)}`
+      toast.error(errorMessage, {
+        duration: 8000
+      })
+      console.error('❌ CSV Import error:', error)
     },
+    ...options,
+  })
+}
+
+export const useValidateCSV = (
+  options?: UseMutationOptions<ValidationResult, Error, File>
+) => {
+  return useMutation({
+    mutationFn: (file: File) => {
+      console.log('🔍 Validating CSV file:', file.name)
+      return apiService.validateCSVData(file)
+    },
+    onSuccess: (data, file) => {
+      if (data.valid) {
+        toast.success(`Fichier ${file.name} validé avec succès`, {
+          description: `${data.valid_rows}/${data.total_rows} lignes valides`
+        })
+      } else {
+        toast.warning(`Validation échouée pour ${file.name}`, {
+          description: `${data.errors.length} erreurs détectées`
+        })
+      }
+    },
+    onError: (error, file) => {
+      toast.error(`Erreur de validation: ${handleApiError(error)}`)
+      console.error('❌ CSV Validation error:', error)
+    },
+    ...options,
+  })
+}
+
+export const useDownloadTemplate = (
+  options?: UseMutationOptions<void, Error, void>
+) => {
+  return useMutation({
+    mutationFn: () => apiService.downloadCSVTemplate(),
+    onSuccess: () => {
+      toast.success('Template CSV téléchargé avec succès')
+    },
+    onError: (error) => {
+      toast.error(`Erreur lors du téléchargement: ${handleApiError(error)}`)
+      console.error('❌ Template download error:', error)
+    },
+    ...options,
+  })
+}
+
+export const useImportHistory = (
+  params?: {
+    page?: number
+    page_size?: number
+    date_from?: string
+    date_to?: string
+  },
+  options?: UseQueryOptions<any>
+) => {
+  return useQuery({
+    queryKey: queryKeys.dataImport.history(params),
+    queryFn: () => apiService.getImportHistory(params),
+    keepPreviousData: true,
+    staleTime: 60000, // 1 minute
     ...options,
   })
 }
@@ -619,6 +718,47 @@ export const useClearCache = () => {
   }
 }
 
+
+export const useFileValidation = () => {
+  return {
+    validateFileSize: (file: File, maxSizeMB: number = 10) => {
+      const maxSizeBytes = maxSizeMB * 1024 * 1024
+      if (file.size > maxSizeBytes) {
+        throw new Error(`Fichier trop volumineux. Taille max: ${maxSizeMB}MB`)
+      }
+      return true
+    },
+
+    validateFileType: (file: File, allowedTypes: string[] = ['text/csv']) => {
+      if (!allowedTypes.includes(file.type) && !file.name.endsWith('.csv')) {
+        throw new Error('Format de fichier non supporté. Utilisez uniquement des fichiers CSV.')
+      }
+      return true
+    },
+
+    validateFileName: (file: File) => {
+      const nameRegex = /^[a-zA-Z0-9._-]+\.csv$/
+      if (!nameRegex.test(file.name)) {
+        throw new Error('Nom de fichier invalide. Utilisez uniquement des lettres, chiffres, points, tirets et underscores.')
+      }
+      return true
+    },
+
+    validateFile: (file: File) => {
+      try {
+        this.validateFileType(file)
+        this.validateFileSize(file)
+        this.validateFileName(file)
+        return { valid: true, errors: [] }
+      } catch (error) {
+        return {
+          valid: false,
+          errors: [error instanceof Error ? error.message : 'Erreur de validation']
+        }
+      }
+    }
+  }
+}
 // Export types for use in other files
 export type { ForecastResult }
 
@@ -673,6 +813,10 @@ export const useApi = () => {
 
     // Import/Export
     useImportCSV,
+    useValidateCSV,
+    useDownloadTemplate,
+    useImportHistory,
+    useFileValidation,
     useExportReport,
 
     // Health
@@ -681,6 +825,11 @@ export const useApi = () => {
     // Utils
     useRefreshAll,
     useClearCache,
+
+    // Méthodes directes pour compatibilité
+    importCSVData: apiService.importCSVData,
+    validateCSVData: apiService.validateCSVData,
+    downloadCSVTemplate: apiService.downloadCSVTemplate,
   }
 }
 

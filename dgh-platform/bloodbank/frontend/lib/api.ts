@@ -231,6 +231,31 @@ export interface PaginatedResponse<T> {
   previous: string | null
 }
 
+export interface ImportResult {
+  success: boolean
+  imported_records?: number
+  errors?: string[]
+  total_errors?: number
+  error?: string
+  warnings?: string[]
+  skipped_records?: number
+  processing_time?: number
+  summary?: {
+    donors_created: number
+    blood_units_created: number
+    sites_created: number
+    records_updated: number
+  }
+}
+
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  preview: any[]
+  total_rows: number
+  valid_rows: number
+}
 // ======================
 // API SERVICE
 // ======================
@@ -553,16 +578,117 @@ export const apiService = {
 
 
   // Data Import
-  async importCSVData(file: File) {
+  async importCSVData(file: File): Promise<ImportResult> {
     const formData = new FormData()
     formData.append('csv_file', file)
 
-    const response = await api.post('/data/import/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
-    return response.data
+    console.log('📤 Uploading CSV file:', file.name, 'Size:', file.size)
+
+    try {
+      const response = await api.post('/data/import/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 120000, // 2 minutes pour les gros fichiers
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1)
+          )
+          console.log(`📊 Upload progress: ${percentCompleted}%`)
+        },
+      })
+
+      console.log('✅ Import successful:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error('❌ Import failed:', error)
+
+      // Gestion spécifique des erreurs d'import
+      if (error.response?.status === 413) {
+        throw new Error('Fichier trop volumineux (max 10MB)')
+      }
+
+      if (error.response?.status === 415) {
+        throw new Error('Format de fichier non supporté. Utilisez uniquement des fichiers CSV.')
+      }
+
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error)
+      }
+
+      throw new Error(handleApiError(error))
+    }
+  },
+
+  async validateCSVData(file: File): Promise<ValidationResult> {
+    const formData = new FormData()
+    formData.append('csv_file', file)
+
+    try {
+      const response = await api.post('/data/validate/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000, // 1 minute pour la validation
+      })
+
+      return response.data
+    } catch (error: any) {
+      console.error('❌ Validation failed:', error)
+      throw new Error(handleApiError(error))
+    }
+  },
+
+  async downloadCSVTemplate(): Promise<void> {
+    try {
+      const response = await api.get('/data/template/', {
+        responseType: 'blob'
+      })
+
+      // Créer le lien de téléchargement
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+
+      // Obtenir le nom du fichier depuis les headers
+      const contentDisposition = response.headers['content-disposition']
+      let filename = 'blood_bank_template.csv'
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      console.log('✅ Template downloaded:', filename)
+    } catch (error: any) {
+      console.error('❌ Template download failed:', error)
+      throw new Error(handleApiError(error))
+    }
+  },
+
+  // Méthode utilitaire pour obtenir les statistiques d'import
+  async getImportHistory(params?: {
+    page?: number
+    page_size?: number
+    date_from?: string
+    date_to?: string
+  }): Promise<any> {
+    try {
+      const response = await api.get('/data/imports/history/', { params })
+      return response.data
+    } catch (error: any) {
+      console.error('❌ Failed to fetch import history:', error)
+      throw new Error(handleApiError(error))
+    }
   },
 
   // Reports Export
