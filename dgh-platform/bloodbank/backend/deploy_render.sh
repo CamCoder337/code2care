@@ -220,8 +220,8 @@ try:
 
     # Configuration MAXIMISÉE pour ML haute performance
     SCALE_CONFIG = {
-        'donors': 8000,          # 8K donneurs pour diversité maximale
-        'patients': 2500,        # 2.5K patients
+        'donors': 15000,          # 8K donneurs pour diversité maximale
+        'patients': 25000,        # 2.5K patients
         'sites': 12,             # 12 sites pour diversité géographique
         'history_days': 400,     # 400 jours = 13+ mois d'historique
         'collections_per_day': 50,    # 50 collections/jour en moyenne
@@ -869,7 +869,20 @@ try:
     if not blood_departments:
         blood_departments = created_departments[:8]  # Fallback étendu
 
-    all_patients = list(Patient.objects.all())
+    def column_exists(table_name, column_name):
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s
+        """, [table_name, column_name])
+        return cursor.fetchone() is not None
+
+    if not column_exists('app_patient', 'gender'):
+        print("⚠️ Colonne 'gender' absente. Utilisation de champs limités pour patients...")
+        all_patients = Patient.objects.values('patient_id', 'first_name', 'last_name', 'date_of_birth', 'blood_type', 'patient_history')
+    else:
+        all_patients = Patient.objects.all()
     requests_created = 0
     consumptions_created = 0
 
