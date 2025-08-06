@@ -25,21 +25,72 @@ export default function HomePage() {
     const languagesRef = useRef<HTMLElement>(null)
     const ctaRef = useRef<HTMLElement>(null)
 
+    // Fonction pour réinitialiser les styles GSAP
+    const resetGSAPStyles = () => {
+        if (typeof gsap !== 'undefined') {
+            gsap.set(".hero-title, .hero-subtitle, .hero-button", {clearProps: "all"})
+            gsap.set(".header-logo, .header-nav", {clearProps: "all"})
+            gsap.set(".feature-card", {clearProps: "all"})
+            gsap.set(".language-badge", {clearProps: "all"})
+            gsap.set(".cta-content", {clearProps: "all"})
+        }
+    }
+
     useEffect(() => {
         if (hasHydrated && !isLoading && isAuthenticated) {
             redirectToRoleDashboard()
         }
     }, [hasHydrated, isAuthenticated, isLoading, redirectToRoleDashboard])
 
+    // Réinitialiser les styles quand on revient sur la page
+    useEffect(() => {
+        resetGSAPStyles()
+        
+        // Forcer la visibilité des éléments essentiels
+        const ensureVisibility = () => {
+            const heroElements = document.querySelectorAll('.hero-title, .hero-subtitle, .hero-button, .header-logo, .header-nav')
+            heroElements.forEach(el => {
+                if (el instanceof HTMLElement) {
+                    el.style.opacity = '1'
+                    el.style.transform = 'none'
+                }
+            })
+        }
+        
+        // S'assurer que les éléments sont visibles immédiatement et après un court délai
+        ensureVisibility()
+        setTimeout(ensureVisibility, 100)
+        
+        // Écouter les changements de visibilité de la page
+        const handleVisibilityChange = () => {
+            if (!document.hidden && !isLoading && !isAuthenticated) {
+                setTimeout(() => {
+                    ensureVisibility()
+                    resetGSAPStyles()
+                }, 50)
+            }
+        }
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [isLoading, isAuthenticated])
+
     // Animations GSAP
     useEffect(() => {
-        if (isLoading || isAuthenticated) return
+        // Ne pas lancer les animations si l'utilisateur est encore en train de charger ou s'il est authentifié et va être redirigé
+        if (isLoading || (isAuthenticated && hasHydrated)) return
 
         // Vérifier si GSAP est disponible
         if (typeof gsap === 'undefined') {
             console.warn('GSAP not loaded, using CSS fallbacks')
             return
         }
+
+        // Réinitialiser d'abord tous les éléments pour éviter les conflits
+        resetGSAPStyles()
 
         // Masquer les éléments avant animation
         gsap.set(".feature-card", {opacity: 0, y: 100, scale: 0.8})
@@ -245,7 +296,7 @@ export default function HomePage() {
         return () => {
             ScrollTrigger.getAll().forEach(trigger => trigger.kill())
         }
-    }, [isLoading, isAuthenticated])
+    }, [isLoading, isAuthenticated, hasHydrated])
 
     if (!hasHydrated || isLoading) {
         return (

@@ -62,9 +62,20 @@
     /* Fallbacks pour s'assurer que les éléments sont visibles */
     .feature-card,
     .language-badge,
-    .cta-content {
+    .cta-content,
+    .hero-title,
+    .hero-subtitle,
+    .hero-button,
+    .header-logo,
+    .header-nav {
         opacity: 1 !important;
         transform: translateY(0) !important;
+    }
+
+    /* S'assurer que le hero section reste visible */
+    .hero-section {
+        opacity: 1;
+        background-color: transparent !important;
     }
 
     /* Animation de chargement simple */
