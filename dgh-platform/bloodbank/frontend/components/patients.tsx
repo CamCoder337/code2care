@@ -9,10 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/lib/i18n"
 import {
-  UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Phone, Mail, Activity,
-  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays
+  UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Activity,
+  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users
 } from "lucide-react"
-import { usePatients, useCreatePatient, useUpdatePatient, useDeletePatient } from "@/lib/hooks/useApi"
+import { usePatients, useCreatePatient, useUpdatePatient } from "@/lib/hooks/useApi"
 import { toast } from "sonner"
 
 interface PatientFormData {
@@ -20,6 +20,7 @@ interface PatientFormData {
   first_name: string
   last_name: string
   date_of_birth: string
+  gender: 'M' | 'F' | ''
   blood_type: string
   patient_history: string
 }
@@ -44,6 +45,7 @@ export function Patients() {
     first_name: "",
     last_name: "",
     date_of_birth: "",
+    gender: '',
     blood_type: "",
     patient_history: ""
   })
@@ -84,12 +86,6 @@ export function Patients() {
     }
   })
 
-  const deletePatientMutation = useDeletePatient({
-    onSuccess: () => {
-      refetch()
-    }
-  })
-
   // Effet pour gérer les changements de recherche avec debounce
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -113,6 +109,7 @@ export function Patients() {
       first_name: "",
       last_name: "",
       date_of_birth: "",
+      gender: '',
       blood_type: "",
       patient_history: ""
     })
@@ -120,39 +117,40 @@ export function Patients() {
   }
 
   // Validation du formulaire
-  const validateForm = (): boolean => {
+  const validateForm = (isEdit: boolean = false): boolean => {
     const errors: Record<string, string> = {}
 
-    if (!formData.patient_id.trim()) {
-      errors.patient_id = "L'ID patient est requis"
-    }
-
-    if (!formData.first_name.trim()) {
-      errors.first_name = "Le prénom est requis"
-    }
-
-    if (!formData.last_name.trim()) {
-      errors.last_name = "Le nom est requis"
-    }
-
-    if (!formData.date_of_birth) {
-      errors.date_of_birth = "La date de naissance est requise"
-    } else {
-      const birthDate = new Date(formData.date_of_birth)
-      const today = new Date()
-      if (birthDate >= today) {
-        errors.date_of_birth = "La date de naissance doit être antérieure à aujourd'hui"
+    if (!isEdit) {
+      if (!formData.first_name.trim()) {
+        errors.first_name = "Le prénom est requis"
       }
 
-      // Vérifier l'âge minimum (par exemple, au moins 1 an)
-      const age = today.getFullYear() - birthDate.getFullYear()
-      if (age > 120) {
-        errors.date_of_birth = "Âge non valide"
+      if (!formData.last_name.trim()) {
+        errors.last_name = "Le nom est requis"
       }
-    }
 
-    if (!formData.blood_type) {
-      errors.blood_type = "Le groupe sanguin est requis"
+      if (!formData.date_of_birth) {
+        errors.date_of_birth = "La date de naissance est requise"
+      } else {
+        const birthDate = new Date(formData.date_of_birth)
+        const today = new Date()
+        if (birthDate >= today) {
+          errors.date_of_birth = "La date de naissance doit être antérieure à aujourd'hui"
+        }
+
+        const age = today.getFullYear() - birthDate.getFullYear()
+        if (age > 120) {
+          errors.date_of_birth = "Âge non valide"
+        }
+      }
+
+      if (!formData.gender) {
+        errors.gender = "Le sexe est requis"
+      }
+
+      if (!formData.blood_type) {
+        errors.blood_type = "Le groupe sanguin est requis"
+      }
     }
 
     setFormErrors(errors)
@@ -163,13 +161,17 @@ export function Patients() {
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm()) {
+    if (!validateForm(false)) {
       toast.error("Veuillez corriger les erreurs du formulaire")
       return
     }
 
     try {
-      await createPatientMutation.mutateAsync(formData)
+      const patientData = {
+        ...formData,
+        patient_id: generatePatientId() // ID généré automatiquement
+      }
+      await createPatientMutation.mutateAsync(patientData)
     } catch (error) {
       console.error("Erreur lors de la création:", error)
     }
@@ -179,15 +181,16 @@ export function Patients() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm() || !editingPatient) {
-      toast.error("Veuillez corriger les erreurs du formulaire")
+    if (!editingPatient) {
+      toast.error("Aucun patient sélectionné pour modification")
       return
     }
 
     try {
+      // Seul l'historique peut être modifié
       await updatePatientMutation.mutateAsync({
         patientId: editingPatient.patient_id,
-        patient: formData
+        patient: { patient_history: formData.patient_history }
       })
     } catch (error) {
       console.error("Erreur lors de la modification:", error)
@@ -197,10 +200,6 @@ export function Patients() {
   // Ouvrir le modal de création
   const openCreateModal = () => {
     resetForm()
-    setFormData(prev => ({
-      ...prev,
-      patient_id: generatePatientId()
-    }))
     setShowCreateModal(true)
   }
 
@@ -212,21 +211,11 @@ export function Patients() {
       first_name: patient.first_name,
       last_name: patient.last_name,
       date_of_birth: patient.date_of_birth,
+      gender: patient.gender,
       blood_type: patient.blood_type,
       patient_history: patient.patient_history || ""
     })
     setShowEditModal(true)
-  }
-
-  // Gestion de la suppression
-  const handleDelete = async (patientId: string, patientName: string) => {
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le patient ${patientName} ?`)) {
-      try {
-        await deletePatientMutation.mutateAsync(patientId)
-      } catch (error) {
-        console.error("Erreur lors de la suppression:", error)
-      }
-    }
   }
 
   // Calculer les statistiques à partir des données
@@ -235,30 +224,21 @@ export function Patients() {
       return {
         totalPatients: 0,
         activePatients: 0,
-        transfusionsThisMonth: 0,
-        emergencies: 0
+        malePatients: 0,
+        femalePatients: 0
       }
     }
 
     const totalPatients = patientsData.count || 0
     const activePatients = patientsData.results.length || 0
+    const malePatients = patientsData.results.filter(p => p.gender === 'M').length || 0
+    const femalePatients = patientsData.results.filter(p => p.gender === 'F').length || 0
 
     return {
       totalPatients,
       activePatients,
-      transfusionsThisMonth: 0,
-      emergencies: 0
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-      case "inactive":
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
-      default:
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+      malePatients,
+      femalePatients
     }
   }
 
@@ -269,6 +249,14 @@ export function Patients() {
 
   const getPatientInitials = (firstName: string, lastName: string) => {
     return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase()
+  }
+
+  const getGenderLabel = (gender: string) => {
+    return gender === 'M' ? 'Masculin' : gender === 'F' ? 'Féminin' : 'N/A'
+  }
+
+  const getGenderIcon = (gender: string) => {
+    return gender === 'M' ? '♂' : gender === 'F' ? '♀' : '?'
   }
 
   const handlePageChange = (newPage: number) => {
@@ -439,22 +427,22 @@ export function Patients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Transfusions ce mois</p>
-                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{statistics.transfusionsThisMonth}</p>
+                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Hommes</p>
+                  <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{statistics.malePatients}</p>
                 </div>
-                <Calendar className="w-8 h-8 text-blue-600" />
+                <Users className="w-8 h-8 text-blue-600" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-800/20 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
+          <Card className="bg-gradient-to-br from-pink-50 to-rose-100 dark:from-pink-900/20 dark:to-rose-800/20 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-orange-600 dark:text-orange-400">Urgences</p>
-                  <p className="text-3xl font-bold text-orange-700 dark:text-orange-300">{statistics.emergencies}</p>
+                  <p className="text-sm font-medium text-pink-600 dark:text-pink-400">Femmes</p>
+                  <p className="text-3xl font-bold text-pink-700 dark:text-pink-300">{statistics.femalePatients}</p>
                 </div>
-                <Activity className="w-8 h-8 text-orange-600" />
+                <Users className="w-8 h-8 text-pink-600" />
               </div>
             </CardContent>
           </Card>
@@ -499,6 +487,9 @@ export function Patients() {
                           Patient
                         </th>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Sexe
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
                           Groupe Sanguin
                         </th>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -520,7 +511,11 @@ export function Patients() {
                         >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                patient.gender === 'M' 
+                                  ? 'bg-gradient-to-br from-blue-500 to-cyan-500' 
+                                  : 'bg-gradient-to-br from-pink-500 to-purple-500'
+                              }`}>
                                 {getPatientInitials(patient.first_name, patient.last_name)}
                               </div>
                               <div>
@@ -531,6 +526,12 @@ export function Patients() {
                                   ID: {patient.patient_id} • {patient.age} ans
                                 </p>
                               </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{getGenderIcon(patient.gender)}</span>
+                              <span className="text-sm font-medium">{getGenderLabel(patient.gender)}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -565,14 +566,6 @@ export function Patients() {
                                 onClick={() => openEditModal(patient)}
                               >
                                 <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="hover:bg-red-50 dark:hover:bg-red-900/20 bg-transparent text-red-600"
-                                onClick={() => handleDelete(patient.patient_id, `${patient.first_name} ${patient.last_name}`)}
-                              >
-                                <X className="w-4 h-4" />
                               </Button>
                             </div>
                           </td>
@@ -642,24 +635,6 @@ export function Patients() {
               </CardHeader>
               <CardContent className="p-6">
                 <form onSubmit={handleCreateSubmit} className="space-y-6">
-                  {/* ID Patient */}
-                  <div className="space-y-2">
-                    <Label htmlFor="patient_id" className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      ID Patient
-                    </Label>
-                    <Input
-                      id="patient_id"
-                      value={formData.patient_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, patient_id: e.target.value }))}
-                      placeholder="ID unique du patient"
-                      className={formErrors.patient_id ? "border-red-500" : ""}
-                    />
-                    {formErrors.patient_id && (
-                      <p className="text-sm text-red-600">{formErrors.patient_id}</p>
-                    )}
-                  </div>
-
                   {/* Nom et Prénom */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -691,7 +666,7 @@ export function Patients() {
                     </div>
                   </div>
 
-                  {/* Date de naissance et Groupe sanguin */}
+                  {/* Date de naissance et Sexe */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="date_of_birth" className="flex items-center gap-2">
@@ -711,32 +686,55 @@ export function Patients() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="blood_type" className="flex items-center gap-2">
-                        <Droplets className="w-4 h-4" />
-                        Groupe sanguin
+                      <Label htmlFor="gender" className="flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Sexe
                       </Label>
                       <select
-                        id="blood_type"
-                        value={formData.blood_type}
-                        onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
+                        id="gender"
+                        value={formData.gender}
+                        onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as 'M' | 'F' | '' }))}
                         className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
-                          formErrors.blood_type ? "border-red-500" : "border-gray-300"
+                          formErrors.gender ? "border-red-500" : "border-gray-300"
                         }`}
                       >
-                        <option value="">Sélectionner un groupe sanguin</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
+                        <option value="">Sélectionner le sexe</option>
+                        <option value="M">♂ Masculin</option>
+                        <option value="F">♀ Féminin</option>
                       </select>
-                      {formErrors.blood_type && (
-                        <p className="text-sm text-red-600">{formErrors.blood_type}</p>
+                      {formErrors.gender && (
+                        <p className="text-sm text-red-600">{formErrors.gender}</p>
                       )}
                     </div>
+                  </div>
+
+                  {/* Groupe sanguin */}
+                  <div className="space-y-2">
+                    <Label htmlFor="blood_type" className="flex items-center gap-2">
+                      <Droplets className="w-4 h-4" />
+                      Groupe sanguin
+                    </Label>
+                    <select
+                      id="blood_type"
+                      value={formData.blood_type}
+                      onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
+                        formErrors.blood_type ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <option value="">Sélectionner un groupe sanguin</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                    {formErrors.blood_type && (
+                      <p className="text-sm text-red-600">{formErrors.blood_type}</p>
+                    )}
                   </div>
 
                   {/* Historique médical */}
@@ -789,7 +787,7 @@ export function Patients() {
           </div>
         )}
 
-        {/* Edit Patient Modal */}
+        {/* Edit Patient Modal - Seul l'historique peut être modifié */}
         {showEditModal && editingPatient && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -798,9 +796,9 @@ export function Patients() {
                   <div className="flex items-center gap-3">
                     <Edit className="w-6 h-6" />
                     <div>
-                      <CardTitle className="text-xl font-bold">Modifier Patient</CardTitle>
+                      <CardTitle className="text-xl font-bold">Modifier Historique Patient</CardTitle>
                       <CardDescription className="text-green-100">
-                        Modifier les informations de {editingPatient.first_name} {editingPatient.last_name}
+                        Modifier l'historique médical de {editingPatient.first_name} {editingPatient.last_name}
                       </CardDescription>
                     </div>
                   </div>
@@ -815,102 +813,47 @@ export function Patients() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
+                {/* Informations en lecture seule */}
+                <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 mb-6 space-y-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                    Informations du patient (lecture seule)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">ID Patient:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">{editingPatient.patient_id}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Nom complet:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {editingPatient.first_name} {editingPatient.last_name}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Sexe:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {getGenderIcon(editingPatient.gender)} {getGenderLabel(editingPatient.gender)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Groupe sanguin:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold ml-1">
+                          {editingPatient.blood_type}
+                        </Badge>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Date de naissance:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age} ans)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <form onSubmit={handleEditSubmit} className="space-y-6">
-                  {/* ID Patient (lecture seule) */}
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_patient_id" className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      ID Patient
-                    </Label>
-                    <Input
-                      id="edit_patient_id"
-                      value={formData.patient_id}
-                      disabled
-                      className="bg-gray-100 dark:bg-gray-800"
-                    />
-                    <p className="text-xs text-gray-500">L'ID patient ne peut pas être modifié</p>
-                  </div>
-
-                  {/* Nom et Prénom */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_first_name">Prénom</Label>
-                      <Input
-                        id="edit_first_name"
-                        value={formData.first_name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
-                        placeholder="Prénom du patient"
-                        className={formErrors.first_name ? "border-red-500" : ""}
-                      />
-                      {formErrors.first_name && (
-                        <p className="text-sm text-red-600">{formErrors.first_name}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_last_name">Nom</Label>
-                      <Input
-                        id="edit_last_name"
-                        value={formData.last_name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
-                        placeholder="Nom de famille du patient"
-                        className={formErrors.last_name ? "border-red-500" : ""}
-                      />
-                      {formErrors.last_name && (
-                        <p className="text-sm text-red-600">{formErrors.last_name}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Date de naissance et Groupe sanguin */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_date_of_birth" className="flex items-center gap-2">
-                        <CalendarDays className="w-4 h-4" />
-                        Date de naissance
-                      </Label>
-                      <Input
-                        id="edit_date_of_birth"
-                        type="date"
-                        value={formData.date_of_birth}
-                        onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
-                        className={formErrors.date_of_birth ? "border-red-500" : ""}
-                      />
-                      {formErrors.date_of_birth && (
-                        <p className="text-sm text-red-600">{formErrors.date_of_birth}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit_blood_type" className="flex items-center gap-2">
-                        <Droplets className="w-4 h-4" />
-                        Groupe sanguin
-                      </Label>
-                      <select
-                        id="edit_blood_type"
-                        value={formData.blood_type}
-                        onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
-                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
-                          formErrors.blood_type ? "border-red-500" : "border-gray-300"
-                        }`}
-                      >
-                        <option value="">Sélectionner un groupe sanguin</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                      </select>
-                      {formErrors.blood_type && (
-                        <p className="text-sm text-red-600">{formErrors.blood_type}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Historique médical */}
+                  {/* Historique médical - Seul champ modifiable */}
                   <div className="space-y-2">
                     <Label htmlFor="edit_patient_history" className="flex items-center gap-2">
                       <FileText className="w-4 h-4" />
@@ -920,10 +863,13 @@ export function Patients() {
                       id="edit_patient_history"
                       value={formData.patient_history}
                       onChange={(e) => setFormData(prev => ({ ...prev, patient_history: e.target.value }))}
-                      placeholder="Historique médical du patient (optionnel)"
-                      rows={4}
+                      placeholder="Ajouter ou modifier l'historique médical du patient..."
+                      rows={6}
                       className="resize-none"
                     />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Note: Seul l'historique médical peut être modifié. Les autres informations du patient sont protégées.
+                    </p>
                   </div>
 
                   {/* Boutons d'action */}
@@ -949,7 +895,7 @@ export function Patients() {
                       ) : (
                         <>
                           <Save className="w-4 h-4 mr-2" />
-                          Sauvegarder
+                          Sauvegarder l'historique
                         </>
                       )}
                     </Button>
@@ -967,7 +913,11 @@ export function Patients() {
               <CardHeader className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                      selectedPatient.gender === 'M' 
+                        ? 'bg-white/20' 
+                        : 'bg-white/20'
+                    }`}>
                       {getPatientInitials(selectedPatient.first_name, selectedPatient.last_name)}
                     </div>
                     <div>
@@ -975,7 +925,7 @@ export function Patients() {
                         {selectedPatient.first_name} {selectedPatient.last_name}
                       </CardTitle>
                       <CardDescription className="text-blue-100">
-                        ID: {selectedPatient.patient_id}
+                        ID: {selectedPatient.patient_id} • {getGenderLabel(selectedPatient.gender)}
                       </CardDescription>
                     </div>
                   </div>
@@ -997,6 +947,15 @@ export function Patients() {
                     Informations personnelles
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Sexe
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{getGenderIcon(selectedPatient.gender)}</span>
+                        <span className="font-semibold">{getGenderLabel(selectedPatient.gender)}</span>
+                      </div>
+                    </div>
                     <div className="space-y-1">
                       <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
                         Groupe Sanguin
@@ -1033,7 +992,7 @@ export function Patients() {
                     Historique médical
                   </h3>
                   <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
-                    <p className="text-gray-700 dark:text-gray-300">
+                    <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                       {selectedPatient.patient_history || "Aucun historique médical disponible"}
                     </p>
                   </div>
@@ -1050,7 +1009,7 @@ export function Patients() {
                     className="flex items-center gap-2"
                   >
                     <Edit className="w-4 h-4" />
-                    Modifier
+                    Modifier l'historique
                   </Button>
                   <Button
                     variant="outline"

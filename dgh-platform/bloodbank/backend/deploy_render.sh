@@ -203,6 +203,7 @@ try:
                 first_name VARCHAR(100) NOT NULL,
                 last_name VARCHAR(100) NOT NULL,
                 date_of_birth DATE NOT NULL,
+                gender VARCHAR(2) NOT NULL,
                 blood_type VARCHAR(3) NOT NULL,
                 patient_history TEXT
             );
@@ -789,11 +790,21 @@ try:
             except ValueError:
                 blood_type = random.choice(blood_types)
 
+            # Génération du sexe selon l'âge
+            if age < 18:
+                gender = random.choice(['M', 'F'])
+            elif age < 50:
+                # Plus de femmes en âge de procréer dans les données médicales
+                gender = random.choices(['M', 'F'], weights=[0.45, 0.55])[0]
+            else:
+                gender = random.choices(['M', 'F'], weights=[0.48, 0.52])[0]
+
             batch_patients.append(Patient(
                 patient_id=patient_id,
                 first_name=f'Patient_{patient_num}',
                 last_name='Anonymisé',
                 date_of_birth=birth_date,
+                gender=gender,
                 blood_type=blood_type,
                 patient_history=patient_history
             ))

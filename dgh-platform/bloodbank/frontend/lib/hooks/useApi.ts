@@ -236,29 +236,6 @@ export const useDeleteDonor = (
 // PATIENTS HOOKS
 // ======================
 
-export const usePatients = (
-  params?: {
-    search?: string
-    blood_type?: string
-    page?: number
-    page_size?: number
-  },
-  options?: UseQueryOptions<{
-    results: Patient[]
-    count: number
-    next: string | null
-    previous: string | null
-  }>
-) => {
-  return useQuery({
-    queryKey: queryKeys.patients.list(params),
-    queryFn: () => apiService.getPatients(params),
-    keepPreviousData: true,
-    staleTime: 60000,
-    ...options,
-  })
-}
-
 export const useCreatePatient = (
   options?: UseMutationOptions<Patient, Error, Omit<Patient, 'age'>>
 ) => {
@@ -288,7 +265,7 @@ export const useUpdatePatient = (
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['patients'] })
       queryClient.setQueryData(queryKeys.patients.detail(data.patient_id), data)
-      toast.success(`Patient ${data.first_name} ${data.last_name} mis à jour`)
+      toast.success(`Historique de ${data.first_name} ${data.last_name} mis à jour`)
     },
     onError: (error) => {
       toast.error(`Erreur lors de la mise à jour: ${handleApiError(error)}`)
@@ -297,25 +274,6 @@ export const useUpdatePatient = (
   })
 }
 
-export const useDeletePatient = (
-  options?: UseMutationOptions<void, Error, string>
-) => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (patientId: string) => apiService.deletePatient(patientId),
-    onSuccess: (_, patientId) => {
-      queryClient.invalidateQueries({ queryKey: ['patients'] })
-      queryClient.removeQueries({ queryKey: queryKeys.patients.detail(patientId) })
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.overview })
-      toast.success('Patient supprimé avec succès')
-    },
-    onError: (error) => {
-      toast.error(`Erreur lors de la suppression: ${handleApiError(error)}`)
-    },
-    ...options,
-  })
-}
 
 // ======================
 // SITES HOOKS

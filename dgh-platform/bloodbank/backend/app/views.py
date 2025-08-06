@@ -2446,11 +2446,6 @@ class BloodRequestListCreateAPIView(generics.ListCreateAPIView):
 
         return queryset.order_by('-request_date', 'priority')
 
-
-
-
-
-
 @global_allow_any
 class BloodRequestDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """Détail, mise à jour et suppression d'une demande de sang"""
@@ -2465,7 +2460,6 @@ class BloodRequestDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         except BloodRequest.DoesNotExist:
             from django.http import Http404
             raise Http404("Demande de sang non trouvée")
-
 
 @global_allow_any
 class BloodConsumptionListCreateAPIView(generics.ListCreateAPIView):
