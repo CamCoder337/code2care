@@ -74,13 +74,74 @@ python manage.py collectstatic --noinput --clear
 echo "🧹 NETTOYAGE COMPLET de la base de données PostgreSQL..."
 echo "⚠️  Suppression de TOUTES les anciennes données..."
 
-# Migrations en mode fresh (reset complet)
-echo "🗄️ Reset complet des migrations..."
-python manage.py migrate --noinput
+# Fonction de nettoyage robuste
+clean_database() {
+    echo "🗑️ Tentative 1: Vidage avec flush..."
+    if python manage.py flush --noinput; then
+        echo "✅ Flush réussi"
+        return 0
+    fi
 
-# Utilisation du flag --force-clean pour vider complètement la BD
-echo "🗑️ Vidage complet des tables existantes..."
-python manage.py flush --noinput || echo "⚠️ Flush failed, continuing with generation..."
+    echo "🗑️ Tentative 2: Suppression manuelle des tables..."
+    python manage.py shell << 'EOF' || echo "⚠️ Suppression manuelle échouée"
+import os
+import django
+from django.db import connection, transaction
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbank.settings')
+django.setup()
+
+try:
+    with connection.cursor() as cursor:
+        # Désactiver les contraintes foreign key temporairement
+        cursor.execute('SET session_replication_role = replica;')
+
+        # Tables dans l'ordre pour éviter les contraintes
+        tables_to_truncate = [
+            'app_bloodconsumption',
+            'app_prevision',
+            'app_bloodrequest',
+            'app_bloodunit',
+            'app_bloodrecord',
+            'app_patient',
+            'app_department',
+            'app_donor',
+            'app_site'
+        ]
+
+        for table in tables_to_truncate:
+            try:
+                cursor.execute(f'TRUNCATE TABLE "{table}" CASCADE')
+                print(f'✅ Table {table} vidée')
+            except Exception as e:
+                print(f'⚠️ Échec {table}: {str(e)[:30]}')
+
+        # Réactiver les contraintes
+        cursor.execute('SET session_replication_role = DEFAULT;')
+        cursor.execute('COMMIT;')
+        print('✅ Nettoyage manuel réussi')
+
+except Exception as e:
+    print(f'❌ Erreur nettoyage: {str(e)[:50]}')
+EOF
+
+    echo "🗑️ Tentative 3: Reset migrations complet..."
+    # Fake les migrations pour éviter les conflits
+    python manage.py migrate --fake app zero || echo "⚠️ Reset app migrations échoué"
+    python manage.py migrate --fake || echo "⚠️ Fake migrations échoué"
+}
+
+# Exécuter le nettoyage
+clean_database
+
+# Migrations propres
+echo "🗄️ Application des migrations propres..."
+python manage.py migrate --noinput || {
+    echo "⚠️ Migrations standards échouées, tentative avec --fake-initial..."
+    python manage.py migrate --fake-initial --noinput || {
+        echo "⚠️ Migrations avec fake-initial échouées, continuons..."
+    }
+}
 
 # ==================== GÉNÉRATION MASSIVE DE DONNÉES OPTIMISÉES ====================
 echo ""
@@ -101,6 +162,14 @@ generate_massive_data() {
     echo "   - Années d'historique: $years"
     echo "   - Patterns saisonniers: $with_seasonality"
     echo "   - Nettoyage forcé: OUI"
+
+    # Vérifier que la commande existe
+    if ! python manage.py help generate_production_data >/dev/null 2>&1; then
+        echo "❌ Commande generate_production_data non trouvée!"
+        echo "📂 Vérification des commandes disponibles..."
+        python manage.py help | grep -E "(generate|data|production)" || echo "Aucune commande de génération trouvée"
+        return 1
+    fi
 
     # Construction de la commande
     local cmd="python manage.py generate_production_data"
@@ -136,7 +205,10 @@ generate_massive_data() {
             }
             ;;
         *)
-            $cmd || return 1
+            timeout 300 $cmd || {   # 5 minutes par défaut
+                echo "❌ Timeout génération, tentative alternative..."
+                return 1
+            }
             ;;
     esac
 
@@ -184,6 +256,16 @@ if [ "$GENERATION_SUCCESS" = "false" ]; then
         echo "❌ Toutes les tentatives de génération ont échoué!"
         echo "🔧 Génération de données de base pour éviter l'échec total..."
 
+        # Vérifier si la commande existe avant de générer des données de secours
+        if python manage.py help generate_production_data >/dev/null 2>&1; then
+            echo "⚠️ Commande trouvée mais échec d'exécution, données de secours..."
+        else
+            echo "❌ Commande generate_production_data non trouvée!"
+            echo "📋 Commandes Django disponibles:"
+            python manage.py help | head -20
+            echo ""
+        fi
+
         # Génération de secours ultra-basique
         python manage.py shell << 'EOF' || echo "❌ Génération de secours échouée"
 import os
@@ -194,38 +276,134 @@ import random
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbank.settings')
 django.setup()
 
-from app.models import Site, Donor, BloodRecord, BloodUnit
+try:
+    from app.models import Site, Donor, BloodRecord, BloodUnit, Department, Patient
+    print("🚨 Génération de données de secours...")
 
-print("🚨 Génération de données de secours...")
-
-# Créer au moins un site
-site, _ = Site.objects.get_or_create(
-    site_id="SITE_EMERGENCY",
-    defaults={
-        'nom': 'Site de Secours',
-        'ville': 'Douala',
-        'type': 'hospital',
-        'capacity': 100,
-        'status': 'active'
-    }
-)
-
-# Créer quelques donneurs de base
-blood_types = ['O+', 'A+', 'B+', 'AB+']
-for i in range(100):
-    donor_id = f"EMERGENCY_DONOR_{i:03d}"
-    Donor.objects.get_or_create(
-        donor_id=donor_id,
+    # Créer au moins un site
+    site, created = Site.objects.get_or_create(
+        site_id="SITE_EMERGENCY",
         defaults={
-            'first_name': f'Donneur{i}',
-            'last_name': 'Urgence',
-            'date_of_birth': date(1990, 1, 1),
-            'blood_type': random.choice(blood_types),
-            'gender': 'M'
+            'nom': 'Site de Secours Render',
+            'ville': 'Douala',
+            'type': 'hospital',
+            'capacity': 100,
+            'status': 'active',
+            'blood_bank': True
         }
     )
+    print(f"Site: {'créé' if created else 'existant'}")
 
-print("✅ Données de secours créées")
+    # Créer un département
+    dept, created = Department.objects.get_or_create(
+        department_id="DEPT_EMERGENCY",
+        defaults={
+            'site': site,
+            'name': 'Urgences',
+            'department_type': 'emergency',
+            'bed_capacity': 20,
+            'current_occupancy': 10,
+            'is_active': True,
+            'requires_blood_products': True
+        }
+    )
+    print(f"Département: {'créé' if created else 'existant'}")
+
+    # Créer quelques donneurs de base
+    blood_types = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-']
+    donors_created = 0
+
+    for i in range(50):  # 50 donneurs minimum
+        donor_id = f"EMERGENCY_DONOR_{i:03d}"
+        donor, created = Donor.objects.get_or_create(
+            donor_id=donor_id,
+            defaults={
+                'first_name': f'Donneur{i}',
+                'last_name': 'Urgence',
+                'date_of_birth': date(1990, 1, 1),
+                'blood_type': random.choice(blood_types),
+                'gender': random.choice(['M', 'F']),
+                'phone_number': f'69012345{i:02d}'
+            }
+        )
+        if created:
+            donors_created += 1
+
+    # Créer quelques patients
+    patients_created = 0
+    for i in range(20):
+        patient_id = f"EMERGENCY_PATIENT_{i:03d}"
+        patient, created = Patient.objects.get_or_create(
+            patient_id=patient_id,
+            defaults={
+                'first_name': f'Patient{i}',
+                'last_name': 'Urgence',
+                'date_of_birth': date(1980, 1, 1),
+                'blood_type': random.choice(blood_types),
+                'patient_history': 'Urgence médicale'
+            }
+        )
+        if created:
+            patients_created += 1
+
+    # Créer quelques records et unités avec historique
+    records_created = 0
+    units_created = 0
+
+    donors = list(Donor.objects.all()[:30])  # Utiliser max 30 donneurs
+
+    for days_ago in range(30):  # 30 jours d'historique minimum
+        record_date = date.today() - timedelta(days=days_ago)
+
+        # 1-3 dons par jour
+        daily_donations = random.randint(1, 3)
+
+        for donation in range(daily_donations):
+            record_id = f"EMERGENCY_REC_{days_ago}_{donation}"
+            donor = random.choice(donors)
+
+            record, created = BloodRecord.objects.get_or_create(
+                record_id=record_id,
+                defaults={
+                    'site': site,
+                    'screening_results': 'Valid',
+                    'record_date': record_date,
+                    'quantity': 1
+                }
+            )
+
+            if created:
+                records_created += 1
+
+                # Créer une unité pour chaque record valide
+                unit_id = f"EMERGENCY_UNIT_{days_ago}_{donation}"
+                unit, unit_created = BloodUnit.objects.get_or_create(
+                    unit_id=unit_id,
+                    defaults={
+                        'donor': donor,
+                        'record': record,
+                        'collection_date': record_date,
+                        'volume_ml': random.randint(400, 500),
+                        'hemoglobin_g_dl': round(random.uniform(12.0, 16.0), 1),
+                        'date_expiration': record_date + timedelta(days=120),
+                        'status': random.choice(['Available', 'Used']) if days_ago > 7 else 'Available'
+                    }
+                )
+
+                if unit_created:
+                    units_created += 1
+
+    print(f"✅ Données de secours créées:")
+    print(f"  - Donneurs: {donors_created}")
+    print(f"  - Patients: {patients_created}")
+    print(f"  - Records: {records_created}")
+    print(f"  - Unités: {units_created}")
+    print(f"  - Historique: 30 jours")
+
+except Exception as e:
+    print(f"❌ Erreur génération secours: {str(e)}")
+    import traceback
+    traceback.print_exc()
 EOF
         GENERATION_SUCCESS=true
     fi
