@@ -450,7 +450,7 @@ export default function EnhancedBloodInventory() {
                   <SelectValue placeholder="Groupe sanguin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tous les groupes</SelectItem>
+                  <SelectItem value="all">Tous les groupes</SelectItem>
                   {bloodTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       <div className="flex items-center gap-2">
@@ -468,7 +468,7 @@ export default function EnhancedBloodInventory() {
                   <SelectValue placeholder="Statut" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tous les statuts</SelectItem>
+                  <SelectItem value="all">Tous les statuts</SelectItem>
                   {statuses.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status === 'Available' ? 'Disponible' :
@@ -486,7 +486,7 @@ export default function EnhancedBloodInventory() {
                   <SelectValue placeholder="Expiration" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Toutes les dates</SelectItem>
+                  <SelectItem value="all">Toutes les dates</SelectItem>
                   <SelectItem value="1">Expire dans 1 jour</SelectItem>
                   <SelectItem value="3">Expire dans 3 jours</SelectItem>
                   <SelectItem value="7">Expire dans 7 jours</SelectItem>
