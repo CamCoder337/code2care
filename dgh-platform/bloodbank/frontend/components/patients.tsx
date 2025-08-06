@@ -691,3 +691,380 @@ export function Patients() {
                         onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
                         placeholder="Prénom du patient"
                         className={formErrors.first_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.first_name && (
+                        <p className="text-sm text-red-600">{formErrors.first_name}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name">Nom</Label>
+                      <Input
+                        id="last_name"
+                        value={formData.last_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                        placeholder="Nom de famille du patient"
+                        className={formErrors.last_name ? "border-red-500" : ""}
+                      />
+                      {formErrors.last_name && (
+                        <p className="text-sm text-red-600">{formErrors.last_name}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Date de naissance et Sexe */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date_of_birth" className="flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        Date de naissance
+                      </Label>
+                      <Input
+                        id="date_of_birth"
+                        type="date"
+                        value={formData.date_of_birth}
+                        onChange={(e) => setFormData(prev => ({ ...prev, date_of_birth: e.target.value }))}
+                        className={formErrors.date_of_birth ? "border-red-500" : ""}
+                      />
+                      {formErrors.date_of_birth && (
+                        <p className="text-sm text-red-600">{formErrors.date_of_birth}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gender" className="flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Sexe
+                      </Label>
+                      <select
+                        id="gender"
+                        value={formData.gender}
+                        onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as 'M' | 'F' | '' }))}
+                        className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
+                          formErrors.gender ? "border-red-500" : "border-gray-300"
+                        }`}
+                      >
+                        <option value="">Sélectionner le sexe</option>
+                        <option value="M">♂ Masculin</option>
+                        <option value="F">♀ Féminin</option>
+                      </select>
+                      {formErrors.gender && (
+                        <p className="text-sm text-red-600">{formErrors.gender}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Groupe sanguin */}
+                  <div className="space-y-2">
+                    <Label htmlFor="blood_type" className="flex items-center gap-2">
+                      <Droplets className="w-4 h-4" />
+                      Groupe sanguin
+                    </Label>
+                    <select
+                      id="blood_type"
+                      value={formData.blood_type}
+                      onChange={(e) => setFormData(prev => ({ ...prev, blood_type: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-gray-600 ${
+                        formErrors.blood_type ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <option value="">Sélectionner un groupe sanguin</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                    {formErrors.blood_type && (
+                      <p className="text-sm text-red-600">{formErrors.blood_type}</p>
+                    )}
+                  </div>
+
+                  {/* Historique médical */}
+                  <div className="space-y-2">
+                    <Label htmlFor="patient_history" className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Historique médical
+                    </Label>
+                    <Textarea
+                      id="patient_history"
+                      value={formData.patient_history}
+                      onChange={(e) => setFormData(prev => ({ ...prev, patient_history: e.target.value }))}
+                      placeholder="Historique médical du patient (optionnel)"
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowCreateModal(false)}
+                      disabled={createPatientMutation.isPending}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                      disabled={createPatientMutation.isPending}
+                    >
+                      {createPatientMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Création...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Créer le patient
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Edit Patient Modal - Seul l'historique peut être modifié */}
+        {showEditModal && editingPatient && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Edit className="w-6 h-6" />
+                    <div>
+                      <CardTitle className="text-xl font-bold">Modifier Historique Patient</CardTitle>
+                      <CardDescription className="text-green-100">
+                        Modifier l'historique médical de {editingPatient.first_name} {editingPatient.last_name}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setShowEditModal(false)}
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {/* Informations en lecture seule */}
+                <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 mb-6 space-y-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                    Informations du patient (lecture seule)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">ID Patient:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">{editingPatient.patient_id}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Nom complet:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {editingPatient.first_name} {editingPatient.last_name}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Sexe:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {getGenderIcon(editingPatient.gender)} {getGenderLabel(editingPatient.gender)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Groupe sanguin:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold ml-1">
+                          {editingPatient.blood_type}
+                        </Badge>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">Date de naissance:</span>
+                      <span className="ml-2 text-gray-900 dark:text-gray-100">
+                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age || calculateAge(editingPatient.date_of_birth)} ans)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <form onSubmit={handleEditSubmit} className="space-y-6">
+                  {/* Historique médical - Seul champ modifiable */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_patient_history" className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Historique médical
+                    </Label>
+                    <Textarea
+                      id="edit_patient_history"
+                      value={formData.patient_history}
+                      onChange={(e) => setFormData(prev => ({ ...prev, patient_history: e.target.value }))}
+                      placeholder="Ajouter ou modifier l'historique médical du patient..."
+                      rows={6}
+                      className="resize-none"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Note: Seul l'historique médical peut être modifié. Les autres informations du patient sont protégées.
+                    </p>
+                  </div>
+
+                  {/* Boutons d'action */}
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowEditModal(false)}
+                      disabled={updatePatientMutation.isPending}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                      disabled={updatePatientMutation.isPending}
+                    >
+                      {updatePatientMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Modification...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Sauvegarder l'historique
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Patient Detail Modal */}
+        {selectedPatient && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg bg-white/20`}>
+                      {getPatientInitials(selectedPatient.first_name, selectedPatient.last_name)}
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl font-bold">
+                        {selectedPatient.first_name} {selectedPatient.last_name}
+                      </CardTitle>
+                      <CardDescription className="text-blue-100">
+                        ID: {selectedPatient.patient_id} • {getGenderLabel(selectedPatient.gender)}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setSelectedPatient(null)}
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                {/* Informations personnelles */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Informations personnelles
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Sexe
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{getGenderIcon(selectedPatient.gender)}</span>
+                        <span className="font-semibold">{getGenderLabel(selectedPatient.gender)}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Groupe Sanguin
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Droplets className="w-4 h-4 text-red-500" />
+                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
+                          {selectedPatient.blood_type}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Âge
+                      </label>
+                      <p className="font-semibold flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        {selectedPatient.age || calculateAge(selectedPatient.date_of_birth)} ans
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Date de Naissance
+                      </label>
+                      <p className="font-semibold">{formatDate(selectedPatient.date_of_birth)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Historique médical */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Historique médical
+                  </h3>
+                  <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                    <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                      {selectedPatient.patient_history || "Aucun historique médical disponible"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedPatient(null)
+                      openEditModal(selectedPatient)
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Modifier l'historique
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedPatient(null)}
+                  >
+                    Fermer
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
