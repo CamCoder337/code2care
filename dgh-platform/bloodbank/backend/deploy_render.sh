@@ -55,238 +55,96 @@ pip cache purge
 python -m compileall . -q || true
 
 # ==================== NETTOYAGE DB ET MIGRATIONS ROBUSTE ====================
-echo "🗄️ Nettoyage et migrations de base de données ROBUSTE..."
+echo "🗄️ Préparation et migrations de base de données ROBUSTE..."
 
-# Nettoyer les tables existantes et les migrations
-python manage.py shell << 'EOF'
-import os
-import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbank.settings')
-django.setup()
-
-from django.db import connection
-from django.core.management import call_command
-
-print('🧹 NETTOYAGE COMPLET DE LA BASE DE DONNÉES...')
-
-try:
-    with connection.cursor() as cursor:
-        print('🗑️ Suppression des tables existantes...')
-
-        # Liste des tables à supprimer (dans l'ordre des dépendances)
-        tables_to_drop = [
-            'app_bloodconsumption',
-            'app_prevision',
-            'app_bloodrequest',
-            'app_bloodunit',
-            'app_bloodrecord',
-            'app_patient',
-            'app_department',
-            'app_donor',
-            'app_site',
-            'blood_record',
-            'blood_unit',
-            'blood_request',
-            'blood_consumption',
-            'prevision',
-            'site',
-            'department',
-            'donor',
-            'patient'
-        ]
-
-        # Désactiver les contraintes FK temporairement
-        cursor.execute('SET session_replication_role = replica;')
-
-        for table in tables_to_drop:
-            try:
-                cursor.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
-                print(f'  ✅ Table {table} supprimée')
-            except Exception as e:
-                print(f'  ⚪ Table {table} ignorée: {str(e)[:30]}')
-
-        # Réactiver les contraintes
-        cursor.execute('SET session_replication_role = DEFAULT;')
-
-        # Nettoyer les migrations de l'app
-        cursor.execute("DELETE FROM django_migrations WHERE app = 'app'")
-        print('✅ Migrations app nettoyées')
-
-        # VACUUM pour récupérer l'espace
-        cursor.execute('VACUUM')
-        print('✅ Base de données nettoyée')
-
-except Exception as e:
-    print(f'⚠️ Erreur nettoyage: {str(e)[:50]}')
-    print('🔄 Continuons malgré tout...')
-EOF
-
-# Supprimer les fichiers de migration existants
-echo "📝 Nettoyage des migrations..."
-rm -rf app/migrations/00*.py 2>/dev/null || true
-rm -rf app/migrations/__pycache__ 2>/dev/null || true
+# Éviter la suppression agressive des migrations
+echo "📝 Vérification des migrations existantes..."
+# Supprimer uniquement les fichiers de migration obsolètes si nécessaire
+find app/migrations/ -name "00*.py" -not -name "0001_initial.py" -delete 2>/dev/null || true
+find app/migrations/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Créer une nouvelle migration propre
 echo "📝 Création de nouvelles migrations..."
-python manage.py makemigrations app --name fresh_start_$(date +%s) --verbosity=0
+python manage.py makemigrations app --name fresh_start_$(date +%s) --verbosity=1 || {
+    echo "❌ Échec de la création des migrations. Vérifiez les modèles."
+    exit 1
+}
 
 # Appliquer les migrations avec stratégie robuste
 echo "🔄 Application des migrations ROBUSTE..."
-if timeout 180 python manage.py migrate --verbosity=0 2>/dev/null; then
+if timeout 180 python manage.py migrate --noinput --verbosity=1; then
     echo "✅ Migrations appliquées avec succès"
-elif timeout 120 python manage.py migrate --fake-initial --verbosity=0 2>/dev/null; then
-    echo "✅ Migrations appliquées avec fake-initial"
-elif timeout 60 python manage.py migrate --fake --verbosity=0 2>/dev/null; then
-    echo "⚠️ Migrations appliquées avec fake (forcé)"
 else
     echo "❌ Échec des migrations, tentative de récupération..."
-
-    # Création manuelle des tables essentielles
     python manage.py shell << 'EOF'
-import os
-import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bloodbank.settings')
-django.setup()
-
 from django.db import connection
 
-try:
+def check_column(table_name, column_name):
     with connection.cursor() as cursor:
-        print("🚨 Création manuelle des tables...")
-
-        # Table Site
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_site (
-                site_id VARCHAR(50) PRIMARY KEY,
-                nom VARCHAR(200) NOT NULL,
-                ville VARCHAR(100) NOT NULL,
-                type VARCHAR(50) NOT NULL DEFAULT 'hospital',
-                address TEXT,
-                capacity INTEGER DEFAULT 0,
-                status VARCHAR(20) DEFAULT 'active',
-                blood_bank BOOLEAN DEFAULT false
-            );
-        ''')
-
-        # Table Department
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_department (
-                department_id VARCHAR(50) PRIMARY KEY,
-                site_id VARCHAR(50) REFERENCES app_site(site_id) ON DELETE CASCADE,
-                name VARCHAR(200) NOT NULL,
-                department_type VARCHAR(50) NOT NULL,
-                description TEXT,
-                bed_capacity INTEGER DEFAULT 0,
-                current_occupancy INTEGER DEFAULT 0,
-                is_active BOOLEAN DEFAULT true,
-                requires_blood_products BOOLEAN DEFAULT false
-            );
-        ''')
-
-        # Table Donor
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_donor (
-                donor_id VARCHAR(50) PRIMARY KEY,
-                first_name VARCHAR(100) NOT NULL,
-                last_name VARCHAR(100) NOT NULL,
-                date_of_birth DATE NOT NULL,
-                gender VARCHAR(1) NOT NULL,
-                blood_type VARCHAR(3) NOT NULL,
-                phone_number VARCHAR(15)
-            );
-        ''')
-
-        # Table Patient
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_patient (
-                patient_id VARCHAR(50) PRIMARY KEY,
-                first_name VARCHAR(100) NOT NULL,
-                last_name VARCHAR(100) NOT NULL,
-                date_of_birth DATE NOT NULL,
-                gender VARCHAR(2) NOT NULL,
-                blood_type VARCHAR(3) NOT NULL,
-                patient_history TEXT
-            );
-        ''')
-
-        # Table BloodRecord
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_bloodrecord (
-                record_id VARCHAR(50) PRIMARY KEY,
-                site_id VARCHAR(50) REFERENCES app_site(site_id) ON DELETE CASCADE,
-                screening_results VARCHAR(150) NOT NULL,
-                record_date DATE NOT NULL,
-                quantity INTEGER NOT NULL DEFAULT 1
-            );
-        ''')
-
-        # Table BloodUnit
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_bloodunit (
-                unit_id VARCHAR(50) PRIMARY KEY,
-                donor_id VARCHAR(50) REFERENCES app_donor(donor_id) ON DELETE CASCADE,
-                record_id VARCHAR(50) REFERENCES app_bloodrecord(record_id) ON DELETE CASCADE,
-                collection_date DATE NOT NULL,
-                volume_ml INTEGER NOT NULL,
-                hemoglobin_g_dl DECIMAL(4,1),
-                date_expiration DATE NOT NULL,
-                status VARCHAR(20) DEFAULT 'Available'
-            );
-        ''')
-
-        # Table BloodRequest
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_bloodrequest (
-                request_id VARCHAR(50) PRIMARY KEY,
-                department_id VARCHAR(50) REFERENCES app_department(department_id) ON DELETE CASCADE,
-                site_id VARCHAR(50) REFERENCES app_site(site_id) ON DELETE CASCADE,
-                blood_type VARCHAR(3) NOT NULL,
-                quantity INTEGER NOT NULL,
-                priority VARCHAR(20) DEFAULT 'Routine',
-                status VARCHAR(20) DEFAULT 'Pending',
-                request_date DATE NOT NULL
-            );
-        ''')
-
-        # Table BloodConsumption
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_bloodconsumption (
-                id SERIAL PRIMARY KEY,
-                request_id VARCHAR(50) REFERENCES app_bloodrequest(request_id) ON DELETE CASCADE,
-                unit_id VARCHAR(50) REFERENCES app_bloodunit(unit_id) ON DELETE CASCADE,
-                patient_id VARCHAR(50) REFERENCES app_patient(patient_id) ON DELETE CASCADE,
-                date DATE NOT NULL,
-                volume INTEGER NOT NULL
-            );
-        ''')
-
-        # Table Prevision
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS app_prevision (
-                prevision_id VARCHAR(50) PRIMARY KEY,
-                blood_type VARCHAR(3) NOT NULL,
-                prevision_date DATE NOT NULL,
-                previsional_volume INTEGER NOT NULL,
-                fiability DECIMAL(3,2) NOT NULL
-            );
-        ''')
-
-        print("✅ Tables créées manuellement")
-
-        # Marquer les migrations comme appliquées
         cursor.execute("""
-            INSERT INTO django_migrations (app, name, applied)
-            VALUES ('app', 'fresh_start_manual', NOW())
-            ON CONFLICT DO NOTHING
-        """)
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s
+        """, [table_name, column_name])
+        return cursor.fetchone() is not None
 
-except Exception as e:
-    print(f"❌ Erreur création manuelle: {str(e)}")
-    raise
+# Vérifier si la colonne gender existe dans app_patient
+if not check_column('app_patient', 'gender'):
+    print("⚠️ Colonne 'gender' manquante dans app_patient. Ajout de la colonne...")
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                ALTER TABLE app_patient ADD COLUMN gender VARCHAR(2) NOT NULL DEFAULT 'M';
+            """)
+        print("✅ Colonne 'gender' ajoutée avec succès")
+    except Exception as e:
+        print(f"❌ Erreur lors de l'ajout de la colonne gender: {str(e)}")
+        raise
+else:
+    print("✅ Colonne 'gender' déjà présente dans app_patient")
 EOF
-
-    echo "✅ Tables créées manuellement"
+    # Réessayer les migrations après correction
+    timeout 120 python manage.py migrate --noinput --verbosity=1 || {
+        echo "❌ Échec définitif des migrations. Vérifiez la configuration de la base de données."
+        exit 1
+    }
 fi
+
+# Vérification finale de la structure de la base de données
+echo "🔍 Vérification finale de la structure de la base de données..."
+python manage.py shell << 'EOF'
+from django.db import connection
+
+def check_column(table_name, column_name):
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s
+        """, [table_name, column_name])
+        return cursor.fetchone() is not None
+
+tables_columns = {
+    'app_patient': ['patient_id', 'first_name', 'last_name', 'date_of_birth', 'gender', 'blood_type', 'patient_history'],
+    'app_donor': ['donor_id', 'first_name', 'last_name', 'date_of_birth', 'gender', 'blood_type', 'phone_number'],
+    'app_site': ['site_id', 'nom', 'ville', 'type', 'address', 'capacity', 'status', 'blood_bank'],
+    'app_department': ['department_id', 'site_id', 'name', 'department_type', 'description', 'bed_capacity', 'current_occupancy', 'is_active', 'requires_blood_products'],
+    'app_bloodrecord': ['record_id', 'site_id', 'screening_results', 'record_date', 'quantity'],
+    'app_bloodunit': ['unit_id', 'donor_id', 'record_id', 'collection_date', 'volume_ml', 'hemoglobin_g_dl', 'date_expiration', 'status'],
+    'app_bloodrequest': ['request_id', 'department_id', 'site_id', 'blood_type', 'quantity', 'priority', 'status', 'request_date'],
+    'app_bloodconsumption': ['id', 'request_id', 'unit_id', 'patient_id', 'date', 'volume'],
+    'app_prevision': ['prevision_id', 'blood_type', 'prevision_date', 'previsional_volume', 'fiability']
+}
+
+for table, columns in tables_columns.items():
+    print(f"Vérification de la table {table}...")
+    for column in columns:
+        if check_column(table, column):
+            print(f"  ✅ Colonne {column} existe")
+        else:
+            print(f"  ❌ Colonne {column} MANQUANTE")
+            raise Exception(f"Colonne {column} manquante dans {table}")
+EOF
 
 # ==================== DJANGO SETUP ====================
 echo "⚙️ Configuration Django..."
