@@ -3,10 +3,10 @@
  * Gère toutes les requêtes vers l'API Gateway
  */
 
-import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse } from './config'
+import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment } from './config'
 
 // Export des types pour usage externe
-export type { ApiResponse, PaginatedResponse }
+export type { ApiResponse, PaginatedResponse, Appointment }
 
 // Classe principale pour les requêtes API
 export class ApiService {
@@ -145,6 +145,9 @@ export class ApiService {
 
     // Patients
     async getPatients(token: string) {
+        console.log('🔗 API Service - getPatients called')
+        console.log('📍 Endpoint:', API_ENDPOINTS.PATIENTS.LIST)
+        console.log('🌐 Full URL:', `${this.baseUrl}${API_ENDPOINTS.PATIENTS.LIST}`)
         return this.get(API_ENDPOINTS.PATIENTS.LIST, token)
     }
 
@@ -153,17 +156,24 @@ export class ApiService {
     }
 
     // Appointments
-    async getAppointments(token: string, params?: URLSearchParams) {
-        const endpoint = params 
-            ? `${API_ENDPOINTS.APPOINTMENTS.LIST}?${params.toString()}`
-            : API_ENDPOINTS.APPOINTMENTS.LIST
+    async getAppointments(token: string, params?: URLSearchParams): Promise<PaginatedResponse<Appointment>> {
+        // Ajouter la pagination par défaut si pas spécifiée
+        const searchParams = new URLSearchParams(params)
+        if (!searchParams.has('page')) {
+            searchParams.set('page', '1')
+        }
+        if (!searchParams.has('page_size')) {
+            searchParams.set('page_size', '20')
+        }
+        
+        const endpoint = `${API_ENDPOINTS.APPOINTMENTS.LIST}?${searchParams.toString()}`
         
         console.log('🔗 API Service - getAppointments called')
         console.log('📍 Endpoint:', endpoint)
         console.log('🔑 Token:', token ? 'Present' : 'Missing')
         console.log('🌐 Full URL:', `${this.baseUrl}${endpoint}`)
         
-        return this.get(endpoint, token)
+        return this.get<PaginatedResponse<Appointment>>(endpoint, token)
     }
 
     async getAppointment(appointmentId: string, token: string) {

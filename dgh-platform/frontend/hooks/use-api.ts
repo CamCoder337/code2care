@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { apiService } from '@/lib/api'
+import { apiService, type PaginatedResponse, type Appointment } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 interface UseApiState<T> {
@@ -124,7 +124,7 @@ export function useApiMutation<T, TVariables = any>() {
             })
             throw error
         }
-    }, [user?.accessToken])
+    }, [hasHydrated, accessToken])
 
     return {
         ...state,
@@ -143,7 +143,14 @@ export function useApiMutation<T, TVariables = any>() {
 // Appointments
 export function useAppointments(params?: URLSearchParams) {
     const { user, hasHydrated, accessToken } = useAuthStore()
-    const [appointments, setAppointments] = useState<any[]>([])
+    const [appointments, setAppointments] = useState<Appointment[]>([])
+    const [paginationData, setPaginationData] = useState<{
+        count: number;
+        next: string | null;
+        previous: string | null;
+        currentPage: number;
+        totalPages: number;
+    }>({ count: 0, next: null, previous: null, currentPage: 1, totalPages: 0 })
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -173,9 +180,36 @@ export function useAppointments(params?: URLSearchParams) {
         setError(null)
 
         try {
-            const data = await apiService.getAppointments(accessToken, params)
-            console.log('✅ API Response:', data)
-            setAppointments(data || [])
+            const response = await apiService.getAppointments(accessToken, params)
+            console.log('✅ API Response:', response)
+            
+            if (response && response.results) {
+                setAppointments(response.results)
+                
+                // Calculer les informations de pagination
+                const pageSize = parseInt(params?.get('page_size') || '20')
+                const currentPage = parseInt(params?.get('page') || '1')
+                const totalPages = Math.ceil(response.count / pageSize)
+                
+                setPaginationData({
+                    count: response.count,
+                    next: response.next,
+                    previous: response.previous,
+                    currentPage,
+                    totalPages
+                })
+            } else {
+                // Fallback pour les anciennes réponses sans pagination
+                const appointmentList = Array.isArray(response) ? response : []
+                setAppointments(appointmentList)
+                setPaginationData({
+                    count: appointmentList.length,
+                    next: null,
+                    previous: null,
+                    currentPage: 1,
+                    totalPages: 1
+                })
+            }
         } catch (err) {
             console.error('💥 API Error:', err)
             setError(err instanceof Error ? err.message : 'Failed to fetch appointments')
@@ -219,6 +253,7 @@ export function useAppointments(params?: URLSearchParams) {
 
     return {
         appointments,
+        pagination: paginationData,
         isLoading,
         error,
         refetch: fetchAppointments,
@@ -230,13 +265,17 @@ export function useAppointments(params?: URLSearchParams) {
 
 // Prescriptions
 export function usePrescriptions(params?: URLSearchParams) {
-    const { user } = useAuthStore()
+    const { user, hasHydrated, accessToken } = useAuthStore()
     const [prescriptions, setPrescriptions] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     const fetchPrescriptions = useCallback(async () => {
-        if (!user?.accessToken) {
+        if (!hasHydrated) {
+            return
+        }
+        
+        if (!accessToken) {
             setError('Authentication token not found')
             setIsLoading(false)
             return
@@ -246,47 +285,47 @@ export function usePrescriptions(params?: URLSearchParams) {
         setError(null)
 
         try {
-            const data = await apiService.getPrescriptions(user.accessToken, params)
+            const data = await apiService.getPrescriptions(accessToken, params)
             setPrescriptions(data || [])
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch prescriptions')
         } finally {
             setIsLoading(false)
         }
-    }, [user?.accessToken, params])
+    }, [accessToken, params, hasHydrated])
 
     useEffect(() => {
         fetchPrescriptions()
     }, [fetchPrescriptions])
 
     const createPrescription = useCallback(async (prescriptionData: any) => {
-        if (!user?.accessToken) {
+        if (!hasHydrated || !accessToken) {
             throw new Error('Authentication token not found')
         }
 
-        const newPrescription = await apiService.createPrescription(prescriptionData, user.accessToken)
+        const newPrescription = await apiService.createPrescription(prescriptionData, accessToken)
         setPrescriptions(prev => [newPrescription, ...prev])
         return newPrescription
-    }, [user?.accessToken])
+    }, [hasHydrated, accessToken])
 
     const updatePrescription = useCallback(async (prescriptionId: string, prescriptionData: any) => {
-        if (!user?.accessToken) {
+        if (!hasHydrated || !accessToken) {
             throw new Error('Authentication token not found')
         }
 
-        const updatedPrescription = await apiService.updatePrescription(prescriptionId, prescriptionData, user.accessToken)
+        const updatedPrescription = await apiService.updatePrescription(prescriptionId, prescriptionData, accessToken)
         setPrescriptions(prev => prev.map(pres => pres.prescription_id === prescriptionId ? updatedPrescription : pres))
         return updatedPrescription
-    }, [user?.accessToken])
+    }, [hasHydrated, accessToken])
 
     const deletePrescription = useCallback(async (prescriptionId: string) => {
-        if (!user?.accessToken) {
+        if (!hasHydrated || !accessToken) {
             throw new Error('Authentication token not found')
         }
 
-        await apiService.deletePrescription(prescriptionId, user.accessToken)
+        await apiService.deletePrescription(prescriptionId, accessToken)
         setPrescriptions(prev => prev.filter(pres => pres.prescription_id !== prescriptionId))
-    }, [user?.accessToken])
+    }, [hasHydrated, accessToken])
 
     return {
         prescriptions,
@@ -301,7 +340,50 @@ export function usePrescriptions(params?: URLSearchParams) {
 
 // Patients
 export function usePatients() {
-    return useApiGet<any[]>('/auth/patients/')
+    const { user, hasHydrated, accessToken } = useAuthStore()
+    const [patients, setPatients] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    const fetchPatients = useCallback(async () => {
+        if (!hasHydrated) {
+            return
+        }
+        
+        if (!accessToken) {
+            setError('Authentication token not found')
+            setIsLoading(false)
+            return
+        }
+
+        setIsLoading(true)
+        setError(null)
+
+        try {
+            console.log('🔍 Fetching patients...')
+            const data = await apiService.getPatients(accessToken)
+            console.log('✅ Patients data received:', data)
+            setPatients(data?.patients || data || [])
+        } catch (err) {
+            console.error('❌ Error fetching patients:', err)
+            setError(err instanceof Error ? err.message : 'Failed to fetch patients')
+        } finally {
+            setIsLoading(false)
+        }
+    }, [accessToken, hasHydrated])
+
+    useEffect(() => {
+        if (hasHydrated) {
+            fetchPatients()
+        }
+    }, [fetchPatients])
+
+    return {
+        data: { patients },
+        isLoading,
+        error,
+        refetch: fetchPatients,
+    }
 }
 
 // Medications

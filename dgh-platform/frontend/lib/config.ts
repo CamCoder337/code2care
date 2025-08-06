@@ -20,7 +20,7 @@ export const API_ENDPOINTS = {
     },
     // Patients
     PATIENTS: {
-        LIST: '/auth/patients/',
+        LIST: '/auth/patients/', // Endpoint: GET /api/v1/auth/patients/
         PROFILE: (patientId: string) => `/patient/${patientId}/profile/`,
     },
     // Appointments
@@ -65,4 +65,20 @@ export interface PaginatedResponse<T> {
     next: string | null
     previous: string | null
     results: T[]
+}
+
+// Interface pour les appointments avec les nouvelles données
+export interface Appointment {
+    appointment_id: string
+    scheduled: string // Format ISO: "2025-08-06T16:30:00+01:00"
+    type: string
+    type_display: string
+    patient_id: string
+    professional_id: string
+    created_at: string
+    updated_at: string
+    patient_name: string // Enrichi par le backend
+    status?: "scheduled" | "completed" | "cancelled"
+    notes?: string
+    duration?: number
 }

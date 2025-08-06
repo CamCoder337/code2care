@@ -1,48 +1,53 @@
 "use client"
 
 import type React from "react"
-import {useState} from "react"
+import {useState, useEffect} from "react"
 import {Button} from "@/components/ui/button"
 import {Input} from "@/components/ui/input"
 import {Label} from "@/components/ui/label"
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select"
-import {Textarea} from "@/components/ui/textarea"
 import {DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@/components/ui/dialog"
-import {Calendar, Clock, FileText, Stethoscope, User} from "lucide-react"
+import {Calendar, Clock, Stethoscope, User, Loader2} from "lucide-react"
+import {usePatients} from "@/hooks/use-api"
+import {useAuthStore} from "@/stores/auth-store"
 
 interface AddAppointmentFormProps {
     onSubmit: (appointment: any) => void
     onCancel: () => void
-    patients?: any[]
 }
 
-export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppointmentFormProps) {
+interface Patient {
+    patient_id: string
+    first_name: string
+    last_name: string
+    user: {
+        id: string
+        phone_number: string
+    }
+}
+
+export function AddAppointmentForm({onSubmit, onCancel}: AddAppointmentFormProps) {
+    const {user} = useAuthStore()
     const [formData, setFormData] = useState({
         patientId: "",
         scheduledDate: "",
         scheduledTime: "",
         type: "",
-        duration: "30",
-        professionalId: "PROF001", // Default to current doctor
-        department: "Cardiology",
-        notes: "",
-        status: "scheduled",
     })
 
+    // Fetch patients using the API hook
+    const {data: patientsResponse, isLoading: loadingPatients, error: patientsError} = usePatients()
+    const patients = patientsResponse?.patients || []
+
     const appointmentTypes = [
-        "Consultation",
-        "Follow-up",
-        "Routine Check",
-        "Emergency",
-        "Vaccination",
-        "Lab Results Review",
-        "Procedure",
-        "Surgery Consultation",
+        { value: "consultation", label: "Consultation" },
+        { value: "suivi", label: "Suivi" },
+        { value: "examen", label: "Examen" },
     ]
 
     const timeSlots = [
         "08:00",
-        "08:30",
+        "08:30", 
         "09:00",
         "09:30",
         "10:00",
@@ -61,24 +66,23 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        const selectedPatient = patients.find((p) => p.id === formData.patientId)
-
-        const newAppointment = {
-            id: `APT${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`,
-            patient: selectedPatient || {
-                name: "Unknown Patient",
-                id: formData.patientId,
-                phone: "+0000000000",
-                avatar: "UP",
-            },
-            professional: {
-                name: "Dr. Sarah Johnson",
-                department: formData.department,
-            },
-            ...formData,
+        
+        // Combine date and time into ISO format
+        const scheduledDateTime = `${formData.scheduledDate}T${formData.scheduledTime}:00Z`
+        
+        // Create appointment data in the required format
+        const appointmentData = {
+            scheduled: scheduledDateTime,
+            type: formData.type,
+            patient_id: formData.patientId,
+            professional_id: user?.professional_id || user?.id // Use professional ID from current user
         }
-        onSubmit(newAppointment)
+
+        console.log('📝 Creating appointment with data:', appointmentData)
+        onSubmit(appointmentData)
     }
+
+    const isFormValid = formData.patientId && formData.scheduledDate && formData.scheduledTime && formData.type
 
     return (
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -96,23 +100,33 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
                     <div className="space-y-2">
                         <Label htmlFor="patientId">Select Patient *</Label>
                         <div className="relative">
-                            <User
-                                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
-                            <Select
-                                value={formData.patientId}
-                                onValueChange={(value) => setFormData({...formData, patientId: value})}
-                            >
-                                <SelectTrigger className="pl-10 h-12">
-                                    <SelectValue placeholder="Choose a patient"/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {patients.map((patient) => (
-                                        <SelectItem key={patient.id} value={patient.id}>
-                                            {patient.name} ({patient.id})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
+                            {loadingPatients ? (
+                                <div className="flex items-center justify-center h-12 border rounded-md">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span className="ml-2 text-sm text-muted-foreground">Loading patients...</span>
+                                </div>
+                            ) : patientsError ? (
+                                <div className="flex items-center justify-center h-12 border rounded-md bg-red-50">
+                                    <span className="text-sm text-red-600">Error loading patients</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.patientId}
+                                    onValueChange={(value) => setFormData({...formData, patientId: value})}
+                                >
+                                    <SelectTrigger className="pl-10 h-12">
+                                        <SelectValue placeholder="Choose a patient"/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {patients.map((patient: Patient) => (
+                                            <SelectItem key={patient.patient_id} value={patient.patient_id}>
+                                                {patient.first_name} {patient.last_name} ({patient.patient_id.substring(0, 8)}...)
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -124,8 +138,7 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
                         <div className="space-y-2">
                             <Label htmlFor="scheduledDate">Date *</Label>
                             <div className="relative">
-                                <Calendar
-                                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
+                                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
                                 <Input
                                     id="scheduledDate"
                                     type="date"
@@ -140,8 +153,7 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
                         <div className="space-y-2">
                             <Label htmlFor="scheduledTime">Time *</Label>
                             <div className="relative">
-                                <Clock
-                                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
+                                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
                                 <Select
                                     value={formData.scheduledTime}
                                     onValueChange={(value) => setFormData({...formData, scheduledTime: value})}
@@ -161,62 +173,25 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="type">Appointment Type *</Label>
-                            <div className="relative">
-                                <Stethoscope
-                                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
-                                <Select value={formData.type}
-                                        onValueChange={(value) => setFormData({...formData, type: value})}>
-                                    <SelectTrigger className="pl-10 h-12">
-                                        <SelectValue placeholder="Select type"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {appointmentTypes.map((type) => (
-                                            <SelectItem key={type} value={type}>
-                                                {type}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="duration">Duration (minutes)</Label>
-                            <Select
-                                value={formData.duration}
-                                onValueChange={(value) => setFormData({...formData, duration: value})}
+                    <div className="space-y-2">
+                        <Label htmlFor="type">Appointment Type *</Label>
+                        <div className="relative">
+                            <Stethoscope className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4"/>
+                            <Select 
+                                value={formData.type}
+                                onValueChange={(value) => setFormData({...formData, type: value})}
                             >
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Select duration"/>
+                                <SelectTrigger className="pl-10 h-12">
+                                    <SelectValue placeholder="Select type"/>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="15">15 minutes</SelectItem>
-                                    <SelectItem value="30">30 minutes</SelectItem>
-                                    <SelectItem value="45">45 minutes</SelectItem>
-                                    <SelectItem value="60">1 hour</SelectItem>
-                                    <SelectItem value="90">1.5 hours</SelectItem>
+                                    {appointmentTypes.map((type) => (
+                                        <SelectItem key={type.value} value={type.value}>
+                                            {type.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Additional Information */}
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-accent-600">Additional Information</h3>
-                    <div className="space-y-2">
-                        <Label htmlFor="notes">Notes</Label>
-                        <div className="relative">
-                            <FileText className="absolute left-3 top-3 text-muted-foreground w-4 h-4"/>
-                            <Textarea
-                                id="notes"
-                                value={formData.notes}
-                                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                                placeholder="Additional notes about the appointment..."
-                                className="pl-10 min-h-[100px]"
-                            />
                         </div>
                     </div>
                 </div>
@@ -228,7 +203,8 @@ export function AddAppointmentForm({onSubmit, onCancel, patients = []}: AddAppoi
                     </Button>
                     <Button
                         type="submit"
-                        className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-300"
+                        disabled={!isFormValid}
+                        className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Schedule Appointment
                     </Button>
