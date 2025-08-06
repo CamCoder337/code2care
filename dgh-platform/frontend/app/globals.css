@@ -2,6 +2,168 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Animations personnalisées pour GSAP */
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fadeInUp 0.8s ease-out forwards;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Animation de pulsation subtile */
+  .animate-pulse-subtle {
+    animation: pulseSubtle 3s ease-in-out infinite;
+  }
+
+  @keyframes pulseSubtle {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  /* Effet de brillance sur hover */
+  .shine-effect {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shine-effect::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    transition: left 0.5s;
+  }
+
+  .shine-effect:hover::before {
+    left: 100%;
+  }
+
+  /* Fallbacks pour s'assurer que les éléments sont visibles */
+  .feature-card,
+  .language-badge,
+  .cta-content {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+  }
+
+  /* Animation de chargement simple */
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .feature-card {
+    animation: slideInUp 0.6s ease-out;
+    animation-fill-mode: both;
+  }
+
+  .feature-card:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .language-badge {
+    animation: slideInUp 0.4s ease-out;
+    animation-fill-mode: both;
+  }
+
+  .language-badge:nth-child(2) { animation-delay: 0.1s; }
+  .language-badge:nth-child(3) { animation-delay: 0.2s; }
+  .language-badge:nth-child(4) { animation-delay: 0.3s; }
+  .language-badge:nth-child(5) { animation-delay: 0.4s; }
+
+  /* Animation de fond animé pour CTA */
+  .animated-bg {
+    background-size: 300% 300%;
+    animation: gradientShift 8s ease infinite;
+  }
+
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    25% {
+      background-position: 100% 50%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    75% {
+      background-position: 0% 100%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  /* Animation de pulsation pour les particules */
+  @keyframes particlePulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.2);
+    }
+  }
+
+  /* Effet de lueur sur les éléments interactifs */
+  .glow-on-hover {
+    transition: all 0.3s ease;
+  }
+
+  .glow-on-hover:hover {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(16, 185, 129, 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Hero section stable - pas d'animation de parallaxe */
+  .hero-title, .hero-subtitle {
+    transition: transform 0.3s ease;
+  }
+
+  .hero-title:hover {
+    transform: scale(1.02);
+  }
+
+  /* Protection contre les chevauchements */
+  .hero-section {
+    position: relative;
+    z-index: 10;
+  }
+
+  .hero-section * {
+    position: relative;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

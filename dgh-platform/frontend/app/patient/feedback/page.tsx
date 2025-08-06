@@ -9,10 +9,10 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/contexts/language-context"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { LanguageSelector } from "@/components/language-selector"
 
 export default function FeedbackPage() {
-  // const { t } = useLanguage()
-  // 2. Initialiser le routeur
+  const { t } = useLanguage()
   const router = useRouter()
   return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-blue-950 dark:to-indigo-950">
@@ -27,7 +27,7 @@ export default function FeedbackPage() {
                   onClick={() => router.back()} // Cette fonction dit au navigateur de revenir en arrière
               >
                 <ArrowLeft className="h-4 w-4" />
-                {("common.back")}
+                {t("common.back")}
               </Button>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-md flex items-center justify-center">
@@ -37,6 +37,9 @@ export default function FeedbackPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <div className="hidden sm:block">
+                <LanguageSelector variant="select" size="sm" showLabel={false} />
+              </div>
               <ThemeToggle />
             </div>
           </div>
@@ -49,10 +52,10 @@ export default function FeedbackPage() {
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <CardTitle className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-blue-800 dark:from-white dark:to-blue-200 bg-clip-text text-transparent">
-                {("feedback.title")}
+                {t("feedback.title")}
               </CardTitle>
               <CardDescription className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                {("feedback.subtitle")}
+                {t("feedback.subtitle")}
               </CardDescription>
             </CardHeader>
             <CardContent>

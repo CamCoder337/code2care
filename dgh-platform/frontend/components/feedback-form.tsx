@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/language-context"
 import { useDepartments } from "@/hooks/use-departments"
 import { apiService, FeedbackPayload } from "@/lib/api-service"
-import { usePatientAuth } from "@/components/patient-auth-context"
+import { useUnifiedAuth, type PatientUser } from "@/contexts/unified-auth-context"
 
 
 interface FormState {
@@ -78,8 +78,9 @@ function useDebounce(value: string, delay: number): string {
 export function FeedbackForm() {
   const { t } = useLanguage();
   const { toast } = useToast();
-  // Retrieve accessToken AND patient from the authentication context
-  const { accessToken, patient } = usePatientAuth(); // <-- UPDATED LINE
+  // Retrieve accessToken AND user from the unified authentication context
+  const { accessToken, user } = useUnifiedAuth();
+  const patient = user as PatientUser;
 
   const [state, dispatch] = useReducer(formReducer, initialState);
   const {

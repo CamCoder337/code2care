@@ -67,6 +67,24 @@ const translations = {
     "lang.duala": "Duala",
     "lang.bassa": "Bassa",
     "lang.ewondo": "Ewondo",
+
+    // Feedback System
+    "feedback.title": "Share Your Medical Experience",
+    "feedback.subtitle": "Your feedback helps us improve our healthcare services",
+    "feedback.department": "Select Department",
+    "feedback.department_select": "Choose the department you want to provide feedback about",
+    "feedback.department_placeholder": "Select a department...",
+    "feedback.general_rating": "Overall Experience Rating",
+    "feedback.rate_experience": "How would you rate your overall experience?",
+    "feedback.written_feedback": "Written Feedback",
+    "feedback.voice_feedback": "Voice Feedback",
+    "feedback.describe_experience": "Please describe your experience in detail",
+    "feedback.record_message": "Record your message by speaking into your microphone",
+    "feedback.placeholder": "Share your thoughts, suggestions, or concerns...",
+    "feedback.sending": "Sending feedback...",
+    "feedback.send_feedback": "Send Feedback",
+    "feedback.stars": "stars",
+    "feedback.star": "star",
   },
   fr: {
     // Navigation & General
@@ -123,6 +141,24 @@ const translations = {
     "lang.duala": "Duala",
     "lang.bassa": "Bassa",
     "lang.ewondo": "Ewondo",
+
+    // Feedback System
+    "feedback.title": "Partagez votre Expérience Médicale",
+    "feedback.subtitle": "Vos commentaires nous aident à améliorer nos services de santé",
+    "feedback.department": "Sélectionner le Département",
+    "feedback.department_select": "Choisissez le département sur lequel vous souhaitez donner votre avis",
+    "feedback.department_placeholder": "Sélectionnez un département...",
+    "feedback.general_rating": "Évaluation de l'Expérience Globale",
+    "feedback.rate_experience": "Comment évalueriez-vous votre expérience globale ?",
+    "feedback.written_feedback": "Commentaire Écrit",
+    "feedback.voice_feedback": "Commentaire Vocal",
+    "feedback.describe_experience": "Veuillez décrire votre expérience en détail",
+    "feedback.record_message": "Enregistrez votre message en parlant dans votre microphone",
+    "feedback.placeholder": "Partagez vos pensées, suggestions ou préoccupations...",
+    "feedback.sending": "Envoi du commentaire...",
+    "feedback.send_feedback": "Envoyer le Commentaire",
+    "feedback.stars": "étoiles",
+    "feedback.star": "étoile",
   },
   duala: {
     // Basic translations for Duala (simplified for demo)
