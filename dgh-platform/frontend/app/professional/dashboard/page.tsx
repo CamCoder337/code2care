@@ -1,25 +1,26 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { useAuth } from "@/contexts/auth-context"
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card"
+import {Button} from "@/components/ui/button"
+import {Badge} from "@/components/ui/badge"
+import {Progress} from "@/components/ui/progress"
+import {type ProfessionalUser, useAuthStore} from "@/stores/auth-store"
 import {
-    Users,
-    Calendar,
-    FileText,
-    Star,
-    Clock,
-    CheckCircle,
-    AlertCircle,
-    TrendingUp,
-    Plus,
     Activity,
+    AlertCircle,
+    Calendar,
+    CheckCircle,
+    Clock,
+    FileText,
+    Plus,
+    Star,
+    TrendingUp,
+    Users,
 } from "lucide-react"
 
 export default function DashboardPage() {
-    const { professional } = useAuth()
+    const {user} = useAuthStore()
+    const professional = user as ProfessionalUser
     const stats = [
         {
             title: "Total Patients",
@@ -120,7 +121,8 @@ export default function DashboardPage() {
     return (
         <div className="space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in">
             {/* Header */}
-            <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
+            <div
+                className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
                 <div className="min-w-0 flex-1">
                     <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
                         {`Welcome, ${professional?.first_name || "Professional"}`}
@@ -129,8 +131,9 @@ export default function DashboardPage() {
                         {"Here's what's happening today"}
                     </p>
                 </div>
-                <Button className="btn-responsive bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 gap-1 sm:gap-2 w-full sm:w-auto">
-                    <Plus className="icon-responsive-sm" />
+                <Button
+                    className="btn-responsive bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 gap-1 sm:gap-2 w-full sm:w-auto">
+                    <Plus className="icon-responsive-sm"/>
                     <span className="truncate">New Appointment</span>
                 </Button>
             </div>
@@ -141,7 +144,7 @@ export default function DashboardPage() {
                     <Card
                         key={stat.title}
                         className={`card-hover animate-scale-in ${stat.bgColor} border-0 shadow-lg w-full`}
-                        style={{ animationDelay: `${index * 0.1}s` }}
+                        style={{animationDelay: `${index * 0.1}s`}}
                     >
                         <CardContent className="p-3 sm:p-4 lg:p-6">
                             <div className="flex items-center justify-between gap-2">
@@ -151,12 +154,14 @@ export default function DashboardPage() {
                                     </p>
                                     <p className="text-lg sm:text-xl lg:text-2xl xl:text-3xl font-bold truncate">{stat.value}</p>
                                     <div className="flex items-center gap-1 mt-1 sm:mt-2">
-                                        <TrendingUp className="icon-responsive-sm text-green-500 flex-shrink-0" />
-                                        <span className="text-xs sm:text-sm text-green-500 font-medium truncate">{stat.change}</span>
+                                        <TrendingUp className="icon-responsive-sm text-green-500 flex-shrink-0"/>
+                                        <span
+                                            className="text-xs sm:text-sm text-green-500 font-medium truncate">{stat.change}</span>
                                     </div>
                                 </div>
-                                <div className={`p-2 sm:p-3 rounded-full bg-gradient-to-r ${stat.color} shadow-lg flex-shrink-0`}>
-                                    <stat.icon className="icon-responsive text-white" />
+                                <div
+                                    className={`p-2 sm:p-3 rounded-full bg-gradient-to-r ${stat.color} shadow-lg flex-shrink-0`}>
+                                    <stat.icon className="icon-responsive text-white"/>
                                 </div>
                             </div>
                         </CardContent>
@@ -169,11 +174,13 @@ export default function DashboardPage() {
                 <Card className="card-hover shadow-lg border-0 glass-effect w-full">
                     <CardHeader className="pb-3 sm:pb-4">
                         <div className="flex items-center gap-2 sm:gap-3">
-                            <div className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 flex-shrink-0">
-                                <Calendar className="icon-responsive text-white" />
+                            <div
+                                className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 flex-shrink-0">
+                                <Calendar className="icon-responsive text-white"/>
                             </div>
                             <div className="min-w-0 flex-1">
-                                <CardTitle className="text-base sm:text-lg lg:text-xl truncate">{"Today's Appointments"}</CardTitle>
+                                <CardTitle
+                                    className="text-base sm:text-lg lg:text-xl truncate">{"Today's Appointments"}</CardTitle>
                                 <p className="text-xs sm:text-sm text-muted-foreground truncate">Scheduled for today</p>
                             </div>
                         </div>
@@ -183,14 +190,15 @@ export default function DashboardPage() {
                             <div
                                 key={appointment.id}
                                 className="flex items-center gap-2 sm:gap-3 lg:gap-4 p-2 sm:p-3 lg:p-4 rounded-lg bg-background/50 hover:bg-background/80 transition-all duration-200 animate-fade-in w-full"
-                                style={{ animationDelay: `${index * 0.1}s` }}
+                                style={{animationDelay: `${index * 0.1}s`}}
                             >
                                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 min-w-0">
-                                    <Clock className="icon-responsive-sm text-muted-foreground flex-shrink-0" />
+                                    <Clock className="icon-responsive-sm text-muted-foreground flex-shrink-0"/>
                                     <span className="font-medium text-xs sm:text-sm truncate">{appointment.time}</span>
                                 </div>
                                 <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                    <div
+                                        className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                                         {appointment.avatar}
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -207,9 +215,9 @@ export default function DashboardPage() {
                                     }`}
                                 >
                                     {appointment.status === "completed" ? (
-                                        <CheckCircle className="w-2 h-2 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
+                                        <CheckCircle className="w-2 h-2 sm:w-3 sm:h-3 mr-0.5 sm:mr-1"/>
                                     ) : (
-                                        <Clock className="w-2 h-2 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
+                                        <Clock className="w-2 h-2 sm:w-3 sm:h-3 mr-0.5 sm:mr-1"/>
                                     )}
                                     <span className="hidden sm:inline truncate">{appointment.status}</span>
                                 </Badge>
@@ -222,11 +230,13 @@ export default function DashboardPage() {
                 <Card className="card-hover shadow-lg border-0 glass-effect w-full">
                     <CardHeader className="pb-3 sm:pb-4">
                         <div className="flex items-center gap-2 sm:gap-3">
-                            <div className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 flex-shrink-0">
-                                <AlertCircle className="icon-responsive text-white" />
+                            <div
+                                className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 flex-shrink-0">
+                                <AlertCircle className="icon-responsive text-white"/>
                             </div>
                             <div className="min-w-0 flex-1">
-                                <CardTitle className="text-base sm:text-lg lg:text-xl truncate">Pending Tasks</CardTitle>
+                                <CardTitle className="text-base sm:text-lg lg:text-xl truncate">Pending
+                                    Tasks</CardTitle>
                                 <p className="text-xs sm:text-sm text-muted-foreground truncate">Need your attention</p>
                             </div>
                         </div>
@@ -236,7 +246,7 @@ export default function DashboardPage() {
                             <div
                                 key={task.id}
                                 className="flex items-center gap-2 sm:gap-3 lg:gap-4 p-2 sm:p-3 lg:p-4 rounded-lg bg-background/50 hover:bg-background/80 transition-all duration-200 animate-fade-in w-full"
-                                style={{ animationDelay: `${index * 0.1}s` }}
+                                style={{animationDelay: `${index * 0.1}s`}}
                             >
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium text-xs sm:text-sm truncate">{task.title}</p>
@@ -263,8 +273,9 @@ export default function DashboardPage() {
             <Card className="card-hover shadow-lg border-0 glass-effect w-full">
                 <CardHeader>
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-purple-500 to-purple-600 flex-shrink-0">
-                            <Activity className="icon-responsive text-white" />
+                        <div
+                            className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-r from-purple-500 to-purple-600 flex-shrink-0">
+                            <Activity className="icon-responsive text-white"/>
                         </div>
                         <div className="min-w-0 flex-1">
                             <CardTitle className="text-base sm:text-lg lg:text-xl truncate">Weekly Activity</CardTitle>
@@ -275,24 +286,25 @@ export default function DashboardPage() {
                 <CardContent className="space-y-4 sm:space-y-6">
                     <div className="space-y-3 sm:space-y-4">
                         <div className="flex justify-between items-center gap-2">
-                            <span className="text-xs sm:text-sm font-medium truncate flex-1">Appointments Completed</span>
+                            <span
+                                className="text-xs sm:text-sm font-medium truncate flex-1">Appointments Completed</span>
                             <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">85%</span>
                         </div>
-                        <Progress value={85} className="h-1.5 sm:h-2" />
+                        <Progress value={85} className="h-1.5 sm:h-2"/>
                     </div>
                     <div className="space-y-3 sm:space-y-4">
                         <div className="flex justify-between items-center gap-2">
                             <span className="text-xs sm:text-sm font-medium truncate flex-1">Prescriptions Issued</span>
                             <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">92%</span>
                         </div>
-                        <Progress value={92} className="h-1.5 sm:h-2" />
+                        <Progress value={92} className="h-1.5 sm:h-2"/>
                     </div>
                     <div className="space-y-3 sm:space-y-4">
                         <div className="flex justify-between items-center gap-2">
                             <span className="text-xs sm:text-sm font-medium truncate flex-1">Patient Satisfaction</span>
                             <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">96%</span>
                         </div>
-                        <Progress value={96} className="h-1.5 sm:h-2" />
+                        <Progress value={96} className="h-1.5 sm:h-2"/>
                     </div>
                 </CardContent>
             </Card>

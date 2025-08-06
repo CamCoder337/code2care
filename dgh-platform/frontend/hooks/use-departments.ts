@@ -1,8 +1,8 @@
 // C:/Users/User/IdeaProjects/HIGH5_Code2care/dgh-platform/frontend/hooks/use-departments.ts
 
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { apiService, Department } from "@/lib/api-service";
+import {useEffect, useState} from "react";
+import {useToast} from "@/hooks/use-toast";
+import {apiService, Department} from "@/lib/api-service";
 
 interface UseDepartmentsReturn {
     departments: Department[];
@@ -13,7 +13,7 @@ interface UseDepartmentsReturn {
 // The key is this line: `export function ...`
 // This makes it a NAMED export.
 export function useDepartments(): UseDepartmentsReturn {
-    const { toast } = useToast();
+    const {toast} = useToast();
     const [departments, setDepartments] = useState<Department[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -40,5 +40,5 @@ export function useDepartments(): UseDepartmentsReturn {
         fetchDepartments();
     }, [toast]);
 
-    return { departments, isLoading, error };
+    return {departments, isLoading, error};
 }
