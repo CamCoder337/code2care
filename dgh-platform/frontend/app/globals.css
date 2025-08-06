@@ -4,642 +4,654 @@
 
 /* Animations personnalisées pour GSAP */
 @layer utilities {
-  .animate-fade-in-up {
-    animation: fadeInUp 0.8s ease-out forwards;
-  }
-
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
+    .animate-fade-in-up {
+        animation: fadeInUp 0.8s ease-out forwards;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
-  }
 
-  /* Animation de pulsation subtile */
-  .animate-pulse-subtle {
-    animation: pulseSubtle 3s ease-in-out infinite;
-  }
-
-  @keyframes pulseSubtle {
-    0%, 100% {
-      opacity: 1;
+    /* Animation de pulsation subtile */
+    .animate-pulse-subtle {
+        animation: pulseSubtle 3s ease-in-out infinite;
     }
-    50% {
-      opacity: 0.8;
+
+    @keyframes pulseSubtle {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.8;
+        }
     }
-  }
 
-  /* Effet de brillance sur hover */
-  .shine-effect {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .shine-effect::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.2),
-      transparent
-    );
-    transition: left 0.5s;
-  }
-
-  .shine-effect:hover::before {
-    left: 100%;
-  }
-
-  /* Fallbacks pour s'assurer que les éléments sont visibles */
-  .feature-card,
-  .language-badge,
-  .cta-content {
-    opacity: 1 !important;
-    transform: translateY(0) !important;
-  }
-
-  /* Animation de chargement simple */
-  @keyframes slideInUp {
-    from {
-      opacity: 0;
-      transform: translateY(30px);
+    /* Effet de brillance sur hover */
+    .shine-effect {
+        position: relative;
+        overflow: hidden;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+
+    .shine-effect::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+        );
+        transition: left 0.5s;
     }
-  }
 
-  .feature-card {
-    animation: slideInUp 0.6s ease-out;
-    animation-fill-mode: both;
-  }
-
-  .feature-card:nth-child(2) {
-    animation-delay: 0.2s;
-  }
-
-  .language-badge {
-    animation: slideInUp 0.4s ease-out;
-    animation-fill-mode: both;
-  }
-
-  .language-badge:nth-child(2) { animation-delay: 0.1s; }
-  .language-badge:nth-child(3) { animation-delay: 0.2s; }
-  .language-badge:nth-child(4) { animation-delay: 0.3s; }
-  .language-badge:nth-child(5) { animation-delay: 0.4s; }
-
-  /* Animation de fond animé pour CTA */
-  .animated-bg {
-    background-size: 300% 300%;
-    animation: gradientShift 8s ease infinite;
-  }
-
-  @keyframes gradientShift {
-    0% {
-      background-position: 0% 50%;
+    .shine-effect:hover::before {
+        left: 100%;
     }
-    25% {
-      background-position: 100% 50%;
+
+    /* Fallbacks pour s'assurer que les éléments sont visibles */
+    .feature-card,
+    .language-badge,
+    .cta-content {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
     }
-    50% {
-      background-position: 100% 100%;
+
+    /* Animation de chargement simple */
+    @keyframes slideInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
-    75% {
-      background-position: 0% 100%;
+
+    .feature-card {
+        animation: slideInUp 0.6s ease-out;
+        animation-fill-mode: both;
     }
-    100% {
-      background-position: 0% 50%;
+
+    .feature-card:nth-child(2) {
+        animation-delay: 0.2s;
     }
-  }
 
-  /* Animation de pulsation pour les particules */
-  @keyframes particlePulse {
-    0%, 100% {
-      opacity: 0.3;
-      transform: scale(1);
+    .language-badge {
+        animation: slideInUp 0.4s ease-out;
+        animation-fill-mode: both;
     }
-    50% {
-      opacity: 0.8;
-      transform: scale(1.2);
+
+    .language-badge:nth-child(2) {
+        animation-delay: 0.1s;
     }
-  }
 
-  /* Effet de lueur sur les éléments interactifs */
-  .glow-on-hover {
-    transition: all 0.3s ease;
-  }
+    .language-badge:nth-child(3) {
+        animation-delay: 0.2s;
+    }
 
-  .glow-on-hover:hover {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(16, 185, 129, 0.3);
-    transform: translateY(-2px);
-  }
+    .language-badge:nth-child(4) {
+        animation-delay: 0.3s;
+    }
 
-  /* Hero section stable - pas d'animation de parallaxe */
-  .hero-title, .hero-subtitle {
-    transition: transform 0.3s ease;
-  }
+    .language-badge:nth-child(5) {
+        animation-delay: 0.4s;
+    }
 
-  .hero-title:hover {
-    transform: scale(1.02);
-  }
+    /* Animation de fond animé pour CTA */
+    .animated-bg {
+        background-size: 300% 300%;
+        animation: gradientShift 8s ease infinite;
+    }
 
-  /* Protection contre les chevauchements */
-  .hero-section {
-    position: relative;
-    z-index: 10;
-  }
+    @keyframes gradientShift {
+        0% {
+            background-position: 0% 50%;
+        }
+        25% {
+            background-position: 100% 50%;
+        }
+        50% {
+            background-position: 100% 100%;
+        }
+        75% {
+            background-position: 0% 100%;
+        }
+        100% {
+            background-position: 0% 50%;
+        }
+    }
 
-  .hero-section * {
-    position: relative;
-  }
+    /* Animation de pulsation pour les particules */
+    @keyframes particlePulse {
+        0%, 100% {
+            opacity: 0.3;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 0.8;
+            transform: scale(1.2);
+        }
+    }
+
+    /* Effet de lueur sur les éléments interactifs */
+    .glow-on-hover {
+        transition: all 0.3s ease;
+    }
+
+    .glow-on-hover:hover {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(16, 185, 129, 0.3);
+        transform: translateY(-2px);
+    }
+
+    /* Hero section stable - pas d'animation de parallaxe */
+    .hero-title, .hero-subtitle {
+        transition: transform 0.3s ease;
+    }
+
+    .hero-title:hover {
+        transform: scale(1.02);
+    }
+
+    /* Protection contre les chevauchements */
+    .hero-section {
+        position: relative;
+        z-index: 10;
+    }
+
+    .hero-section * {
+        position: relative;
+    }
 }
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.75rem;
-  }
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 222.2 84% 4.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+        --primary: 221.2 83.2% 53.3%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96%;
+        --secondary-foreground: 222.2 84% 4.9%;
+        --muted: 210 40% 96%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 210 40% 96%;
+        --accent-foreground: 222.2 84% 4.9%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 221.2 83.2% 53.3%;
+        --radius: 0.75rem;
+    }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
-  }
+    .dark {
+        --background: 222.2 84% 4.9%;
+        --foreground: 210 40% 98%;
+        --card: 222.2 84% 4.9%;
+        --card-foreground: 210 40% 98%;
+        --popover: 222.2 84% 4.9%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 217.2 91.2% 59.8%;
+        --primary-foreground: 222.2 84% 4.9%;
+        --secondary: 217.2 32.6% 17.5%;
+        --secondary-foreground: 210 40% 98%;
+        --muted: 217.2 32.6% 17.5%;
+        --muted-foreground: 215 20.2% 65.1%;
+        --accent: 217.2 32.6% 17.5%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 217.2 32.6% 17.5%;
+        --input: 217.2 32.6% 17.5%;
+        --ring: 224.3 76.3% 94.1%;
+    }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+    * {
+        @apply border-border;
+    }
 
-  html {
-    @apply overflow-x-hidden;
-  }
+    html {
+        @apply overflow-x-hidden;
+    }
 
-  body {
-    @apply bg-background text-foreground overflow-x-hidden;
-    width: 100vw;
-    max-width: 100vw;
-  }
+    body {
+        @apply bg-background text-foreground overflow-x-hidden;
+        width: 100vw;
+        max-width: 100vw;
+    }
 
-  * {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
+    * {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
 }
 
 @layer components {
 
-  .ripple-container {
-    @apply relative flex items-center justify-center;
-  }
-
-  .ripple-container::before,
-  .ripple-container::after {
-    content: '';
-    @apply absolute h-full w-full rounded-full bg-blue-500/50 dark:bg-blue-400/50;
-    animation: ripple 1.5s infinite;
-    opacity: 0;
-  }
-
-  .ripple-container::after {
-    animation-delay: 0.5s;
-  }
-  @keyframes ripple {
-    0% {
-      transform: scale(0.9);
-      opacity: 1;
+    .ripple-container {
+        @apply relative flex items-center justify-center;
     }
-    100% {
-      transform: scale(1.4);
-      opacity: 0;
-    }}
+
+    .ripple-container::before,
+    .ripple-container::after {
+        content: '';
+        @apply absolute h-full w-full rounded-full bg-blue-500/50 dark:bg-blue-400/50;
+        animation: ripple 1.5s infinite;
+        opacity: 0;
+    }
+
+    .ripple-container::after {
+        animation-delay: 0.5s;
+    }
+
+    @keyframes ripple {
+        0% {
+            transform: scale(0.9);
+            opacity: 1;
+        }
+        100% {
+            transform: scale(1.4);
+            opacity: 0;
+        }
+    }
 
 
-  /* SYSTÈME DE RESPONSIVITÉ INTELLIGENT */
+    /* SYSTÈME DE RESPONSIVITÉ INTELLIGENT */
+    /* === BOUTONS ADAPTATIFS === */
+    .btn-adaptive {
+        /* Téléphones (375px-640px) */
+        @apply h-8 px-2 text-xs;
+        /* Téléphones standards (640px-768px) */
+        @apply sm:h-9 sm:px-3 sm:text-sm;
+        /* Tablettes (768px-1024px) */
+        @apply md:h-10 md:px-4 md:text-sm;
+        /* Laptops (1024px-1280px) */
+        @apply lg:h-11 lg:px-5 lg:text-base;
+        /* Desktop (1280px-1536px) */
+        @apply xl:h-12 xl:px-6 xl:text-base;
+        /* Grands écrans (1536px-1920px) */
+        @apply 2xl:h-14 2xl:px-8 2xl:text-lg;
+        /* TV/4K (1920px+) */
+        @apply 3xl:h-16 3xl:px-10 3xl:text-xl;
+        @apply 4xl:h-20 4xl:px-12 4xl:text-2xl;
+    }
 
-  /* === BOUTONS ADAPTATIFS === */
-  .btn-adaptive {
-    /* Téléphones (375px-640px) */
-    @apply h-8 px-2 text-xs;
-    /* Téléphones standards (640px-768px) */
-    @apply sm:h-9 sm:px-3 sm:text-sm;
-    /* Tablettes (768px-1024px) */
-    @apply md:h-10 md:px-4 md:text-sm;
-    /* Laptops (1024px-1280px) */
-    @apply lg:h-11 lg:px-5 lg:text-base;
-    /* Desktop (1280px-1536px) */
-    @apply xl:h-12 xl:px-6 xl:text-base;
-    /* Grands écrans (1536px-1920px) */
-    @apply 2xl:h-14 2xl:px-8 2xl:text-lg;
-    /* TV/4K (1920px+) */
-    @apply 3xl:h-16 3xl:px-10 3xl:text-xl;
-    @apply 4xl:h-20 4xl:px-12 4xl:text-2xl;
-  }
+    .btn-adaptive-sm {
+        @apply h-6 px-1 text-xs;
+        @apply sm:h-7 sm:px-2 sm:text-xs;
+        @apply md:h-8 md:px-2 md:text-sm;
+        @apply lg:h-9 lg:px-3 lg:text-sm;
+        @apply xl:h-10 xl:px-4 xl:text-base;
+        @apply 2xl:h-11 2xl:px-5 2xl:text-base;
+        @apply 3xl:h-12 3xl:px-6 3xl:text-lg;
+        @apply 4xl:h-16 4xl:px-8 4xl:text-xl;
+    }
 
-  .btn-adaptive-sm {
-    @apply h-6 px-1 text-xs;
-    @apply sm:h-7 sm:px-2 sm:text-xs;
-    @apply md:h-8 md:px-2 md:text-sm;
-    @apply lg:h-9 lg:px-3 lg:text-sm;
-    @apply xl:h-10 xl:px-4 xl:text-base;
-    @apply 2xl:h-11 2xl:px-5 2xl:text-base;
-    @apply 3xl:h-12 3xl:px-6 3xl:text-lg;
-    @apply 4xl:h-16 4xl:px-8 4xl:text-xl;
-  }
+    .btn-adaptive-icon {
+        @apply w-8 h-8 p-1;
+        @apply sm:w-9 sm:h-9 sm:p-1.5;
+        @apply md:w-10 md:h-10 md:p-2;
+        @apply lg:w-11 lg:h-11 lg:p-2;
+        @apply xl:w-12 xl:h-12 xl:p-2.5;
+        @apply 2xl:w-14 2xl:h-14 2xl:p-3;
+        @apply 3xl:w-16 3xl:h-16 3xl:p-4;
+        @apply 4xl:w-20 4xl:h-20 4xl:p-5;
+    }
 
-  .btn-adaptive-icon {
-    @apply w-8 h-8 p-1;
-    @apply sm:w-9 sm:h-9 sm:p-1.5;
-    @apply md:w-10 md:h-10 md:p-2;
-    @apply lg:w-11 lg:h-11 lg:p-2;
-    @apply xl:w-12 xl:h-12 xl:p-2.5;
-    @apply 2xl:w-14 2xl:h-14 2xl:p-3;
-    @apply 3xl:w-16 3xl:h-16 3xl:p-4;
-    @apply 4xl:w-20 4xl:h-20 4xl:p-5;
-  }
+    /* === ICÔNES ADAPTATIVES === */
+    .icon-adaptive {
+        @apply w-3 h-3;
+        @apply sm:w-3.5 sm:h-3.5;
+        @apply md:w-4 md:h-4;
+        @apply lg:w-4 lg:h-4;
+        @apply xl:w-5 xl:h-5;
+        @apply 2xl:w-6 2xl:h-6;
+        @apply 3xl:w-7 3xl:h-7;
+        @apply 4xl:w-8 4xl:h-8;
+    }
 
-  /* === ICÔNES ADAPTATIVES === */
-  .icon-adaptive {
-    @apply w-3 h-3;
-    @apply sm:w-3.5 sm:h-3.5;
-    @apply md:w-4 md:h-4;
-    @apply lg:w-4 lg:h-4;
-    @apply xl:w-5 xl:h-5;
-    @apply 2xl:w-6 2xl:h-6;
-    @apply 3xl:w-7 3xl:h-7;
-    @apply 4xl:w-8 4xl:h-8;
-  }
+    .icon-adaptive-sm {
+        @apply w-2.5 h-2.5;
+        @apply sm:w-3 sm:h-3;
+        @apply md:w-3 md:h-3;
+        @apply lg:w-3.5 lg:h-3.5;
+        @apply xl:w-4 xl:h-4;
+        @apply 2xl:w-4 2xl:h-4;
+        @apply 3xl:w-5 3xl:h-5;
+        @apply 4xl:w-6 4xl:h-6;
+    }
 
-  .icon-adaptive-sm {
-    @apply w-2.5 h-2.5;
-    @apply sm:w-3 sm:h-3;
-    @apply md:w-3 md:h-3;
-    @apply lg:w-3.5 lg:h-3.5;
-    @apply xl:w-4 xl:h-4;
-    @apply 2xl:w-4 2xl:h-4;
-    @apply 3xl:w-5 3xl:h-5;
-    @apply 4xl:w-6 4xl:h-6;
-  }
+    /* === TEXTES ADAPTATIFS === */
+    .text-adaptive-title {
+        @apply text-lg;
+        @apply sm:text-xl;
+        @apply md:text-2xl;
+        @apply lg:text-3xl;
+        @apply xl:text-4xl;
+        @apply 2xl:text-5xl;
+        @apply 3xl:text-6xl;
+        @apply 4xl:text-7xl;
+    }
 
-  /* === TEXTES ADAPTATIFS === */
-  .text-adaptive-title {
-    @apply text-lg;
-    @apply sm:text-xl;
-    @apply md:text-2xl;
-    @apply lg:text-3xl;
-    @apply xl:text-4xl;
-    @apply 2xl:text-5xl;
-    @apply 3xl:text-6xl;
-    @apply 4xl:text-7xl;
-  }
+    .text-adaptive-subtitle {
+        @apply text-xs;
+        @apply sm:text-sm;
+        @apply md:text-base;
+        @apply lg:text-lg;
+        @apply xl:text-xl;
+        @apply 2xl:text-2xl;
+        @apply 3xl:text-3xl;
+        @apply 4xl:text-4xl;
+    }
 
-  .text-adaptive-subtitle {
-    @apply text-xs;
-    @apply sm:text-sm;
-    @apply md:text-base;
-    @apply lg:text-lg;
-    @apply xl:text-xl;
-    @apply 2xl:text-2xl;
-    @apply 3xl:text-3xl;
-    @apply 4xl:text-4xl;
-  }
+    .text-adaptive-body {
+        @apply text-xs;
+        @apply sm:text-sm;
+        @apply md:text-sm;
+        @apply lg:text-base;
+        @apply xl:text-base;
+        @apply 2xl:text-lg;
+        @apply 3xl:text-xl;
+        @apply 4xl:text-2xl;
+    }
 
-  .text-adaptive-body {
-    @apply text-xs;
-    @apply sm:text-sm;
-    @apply md:text-sm;
-    @apply lg:text-base;
-    @apply xl:text-base;
-    @apply 2xl:text-lg;
-    @apply 3xl:text-xl;
-    @apply 4xl:text-2xl;
-  }
+    .text-adaptive-small {
+        @apply text-xs;
+        @apply sm:text-xs;
+        @apply md:text-xs;
+        @apply lg:text-sm;
+        @apply xl:text-sm;
+        @apply 2xl:text-base;
+        @apply 3xl:text-lg;
+        @apply 4xl:text-xl;
+    }
 
-  .text-adaptive-small {
-    @apply text-xs;
-    @apply sm:text-xs;
-    @apply md:text-xs;
-    @apply lg:text-sm;
-    @apply xl:text-sm;
-    @apply 2xl:text-base;
-    @apply 3xl:text-lg;
-    @apply 4xl:text-xl;
-  }
+    /* === AVATARS ADAPTATIFS === */
+    .avatar-adaptive {
+        @apply w-10 h-10;
+        @apply sm:w-12 sm:h-12;
+        @apply md:w-14 md:h-14;
+        @apply lg:w-16 lg:h-16;
+        @apply xl:w-20 xl:h-20;
+        @apply 2xl:w-24 2xl:h-24;
+        @apply 3xl:w-28 3xl:h-28;
+        @apply 4xl:w-32 4xl:h-32;
+    }
 
-  /* === AVATARS ADAPTATIFS === */
-  .avatar-adaptive {
-    @apply w-10 h-10;
-    @apply sm:w-12 sm:h-12;
-    @apply md:w-14 md:h-14;
-    @apply lg:w-16 lg:h-16;
-    @apply xl:w-20 xl:h-20;
-    @apply 2xl:w-24 2xl:h-24;
-    @apply 3xl:w-28 3xl:h-28;
-    @apply 4xl:w-32 4xl:h-32;
-  }
+    .avatar-adaptive-sm {
+        @apply w-8 h-8;
+        @apply sm:w-10 sm:h-10;
+        @apply md:w-12 md:h-12;
+        @apply lg:w-14 lg:h-14;
+        @apply xl:w-16 xl:h-16;
+        @apply 2xl:w-20 2xl:h-20;
+        @apply 3xl:w-24 3xl:h-24;
+        @apply 4xl:w-28 4xl:h-28;
+    }
 
-  .avatar-adaptive-sm {
-    @apply w-8 h-8;
-    @apply sm:w-10 sm:h-10;
-    @apply md:w-12 md:h-12;
-    @apply lg:w-14 lg:h-14;
-    @apply xl:w-16 xl:h-16;
-    @apply 2xl:w-20 2xl:h-20;
-    @apply 3xl:w-24 3xl:h-24;
-    @apply 4xl:w-28 4xl:h-28;
-  }
+    /* === ESPACEMENT ADAPTATIF === */
+    .spacing-adaptive {
+        @apply gap-2;
+        @apply sm:gap-3;
+        @apply md:gap-4;
+        @apply lg:gap-5;
+        @apply xl:gap-6;
+        @apply 2xl:gap-8;
+        @apply 3xl:gap-10;
+        @apply 4xl:gap-12;
+    }
 
-  /* === ESPACEMENT ADAPTATIF === */
-  .spacing-adaptive {
-    @apply gap-2;
-    @apply sm:gap-3;
-    @apply md:gap-4;
-    @apply lg:gap-5;
-    @apply xl:gap-6;
-    @apply 2xl:gap-8;
-    @apply 3xl:gap-10;
-    @apply 4xl:gap-12;
-  }
+    .spacing-adaptive-sm {
+        @apply gap-1;
+        @apply sm:gap-2;
+        @apply md:gap-2;
+        @apply lg:gap-3;
+        @apply xl:gap-4;
+        @apply 2xl:gap-5;
+        @apply 3xl:gap-6;
+        @apply 4xl:gap-8;
+    }
 
-  .spacing-adaptive-sm {
-    @apply gap-1;
-    @apply sm:gap-2;
-    @apply md:gap-2;
-    @apply lg:gap-3;
-    @apply xl:gap-4;
-    @apply 2xl:gap-5;
-    @apply 3xl:gap-6;
-    @apply 4xl:gap-8;
-  }
+    .padding-adaptive {
+        @apply p-2;
+        @apply sm:p-3;
+        @apply md:p-4;
+        @apply lg:p-5;
+        @apply xl:p-6;
+        @apply 2xl:p-8;
+        @apply 3xl:p-10;
+        @apply 4xl:p-12;
+    }
 
-  .padding-adaptive {
-    @apply p-2;
-    @apply sm:p-3;
-    @apply md:p-4;
-    @apply lg:p-5;
-    @apply xl:p-6;
-    @apply 2xl:p-8;
-    @apply 3xl:p-10;
-    @apply 4xl:p-12;
-  }
+    .padding-adaptive-sm {
+        @apply p-1;
+        @apply sm:p-2;
+        @apply md:p-2;
+        @apply lg:p-3;
+        @apply xl:p-4;
+        @apply 2xl:p-5;
+        @apply 3xl:p-6;
+        @apply 4xl:p-8;
+    }
 
-  .padding-adaptive-sm {
-    @apply p-1;
-    @apply sm:p-2;
-    @apply md:p-2;
-    @apply lg:p-3;
-    @apply xl:p-4;
-    @apply 2xl:p-5;
-    @apply 3xl:p-6;
-    @apply 4xl:p-8;
-  }
+    /* === LAYOUTS ADAPTATIFS === */
+    .container-adaptive {
+        @apply w-full max-w-full;
+        @apply px-2;
+        @apply sm:px-3;
+        @apply md:px-4;
+        @apply lg:px-6;
+        @apply xl:px-8;
+        @apply 2xl:px-12;
+        @apply 3xl:px-16;
+        @apply 4xl:px-20;
+    }
 
-  /* === LAYOUTS ADAPTATIFS === */
-  .container-adaptive {
-    @apply w-full max-w-full;
-    @apply px-2;
-    @apply sm:px-3;
-    @apply md:px-4;
-    @apply lg:px-6;
-    @apply xl:px-8;
-    @apply 2xl:px-12;
-    @apply 3xl:px-16;
-    @apply 4xl:px-20;
-  }
+    .grid-adaptive {
+        @apply grid gap-2;
+        @apply sm:gap-3;
+        @apply md:gap-4;
+        @apply lg:gap-5;
+        @apply xl:gap-6;
+        @apply 2xl:gap-8;
+        @apply 3xl:gap-10;
+        @apply 4xl:gap-12;
+    }
 
-  .grid-adaptive {
-    @apply grid gap-2;
-    @apply sm:gap-3;
-    @apply md:gap-4;
-    @apply lg:gap-5;
-    @apply xl:gap-6;
-    @apply 2xl:gap-8;
-    @apply 3xl:gap-10;
-    @apply 4xl:gap-12;
-  }
+    .flex-adaptive {
+        @apply flex gap-2;
+        @apply sm:gap-3;
+        @apply md:gap-4;
+        @apply lg:gap-5;
+        @apply xl:gap-6;
+        @apply 2xl:gap-8;
+        @apply 3xl:gap-10;
+        @apply 4xl:gap-12;
+    }
 
-  .flex-adaptive {
-    @apply flex gap-2;
-    @apply sm:gap-3;
-    @apply md:gap-4;
-    @apply lg:gap-5;
-    @apply xl:gap-6;
-    @apply 2xl:gap-8;
-    @apply 3xl:gap-10;
-    @apply 4xl:gap-12;
-  }
+    /* === GROUPES DE BOUTONS === */
+    .button-group-adaptive {
+        @apply flex flex-wrap gap-1;
+        @apply sm:gap-2;
+        @apply md:gap-2;
+        @apply lg:gap-3;
+        @apply xl:gap-4;
+        @apply 2xl:gap-5;
+        @apply 3xl:gap-6;
+        @apply 4xl:gap-8;
+    }
 
-  /* === GROUPES DE BOUTONS === */
-  .button-group-adaptive {
-    @apply flex flex-wrap gap-1;
-    @apply sm:gap-2;
-    @apply md:gap-2;
-    @apply lg:gap-3;
-    @apply xl:gap-4;
-    @apply 2xl:gap-5;
-    @apply 3xl:gap-6;
-    @apply 4xl:gap-8;
-  }
+    .button-group-adaptive > * {
+        @apply flex-shrink-0 min-w-0;
+    }
 
-  .button-group-adaptive > * {
-    @apply flex-shrink-0 min-w-0;
-  }
+    /* === BADGES ADAPTATIFS === */
+    .badge-adaptive {
+        @apply px-1 py-0.5 text-xs;
+        @apply sm:px-1.5 sm:text-xs;
+        @apply md:px-2 md:text-xs;
+        @apply lg:px-2 lg:text-sm;
+        @apply xl:px-3 xl:text-sm;
+        @apply 2xl:px-4 2xl:text-base;
+        @apply 3xl:px-5 3xl:text-lg;
+        @apply 4xl:px-6 4xl:text-xl;
+    }
 
-  /* === BADGES ADAPTATIFS === */
-  .badge-adaptive {
-    @apply px-1 py-0.5 text-xs;
-    @apply sm:px-1.5 sm:text-xs;
-    @apply md:px-2 md:text-xs;
-    @apply lg:px-2 lg:text-sm;
-    @apply xl:px-3 xl:text-sm;
-    @apply 2xl:px-4 2xl:text-base;
-    @apply 3xl:px-5 3xl:text-lg;
-    @apply 4xl:px-6 4xl:text-xl;
-  }
+    /* === INPUTS ADAPTATIFS === */
+    .input-adaptive {
+        @apply h-8 px-2 text-xs;
+        @apply sm:h-9 sm:px-3 sm:text-sm;
+        @apply md:h-10 md:px-4 md:text-sm;
+        @apply lg:h-11 lg:px-5 lg:text-base;
+        @apply xl:h-12 xl:px-6 xl:text-base;
+        @apply 2xl:h-14 2xl:px-8 2xl:text-lg;
+        @apply 3xl:h-16 3xl:px-10 3xl:text-xl;
+        @apply 4xl:h-20 4xl:px-12 4xl:text-2xl;
+    }
 
-  /* === INPUTS ADAPTATIFS === */
-  .input-adaptive {
-    @apply h-8 px-2 text-xs;
-    @apply sm:h-9 sm:px-3 sm:text-sm;
-    @apply md:h-10 md:px-4 md:text-sm;
-    @apply lg:h-11 lg:px-5 lg:text-base;
-    @apply xl:h-12 xl:px-6 xl:text-base;
-    @apply 2xl:h-14 2xl:px-8 2xl:text-lg;
-    @apply 3xl:h-16 3xl:px-10 3xl:text-xl;
-    @apply 4xl:h-20 4xl:px-12 4xl:text-2xl;
-  }
+    /* === CLASSES DE COMPATIBILITÉ === */
+    .btn-responsive {
+        @apply btn-adaptive;
+    }
 
-  /* === CLASSES DE COMPATIBILITÉ === */
-  .btn-responsive {
-    @apply btn-adaptive;
-  }
+    .btn-responsive-sm {
+        @apply btn-adaptive-sm;
+    }
 
-  .btn-responsive-sm {
-    @apply btn-adaptive-sm;
-  }
+    .btn-responsive-icon-sm {
+        @apply btn-adaptive-icon;
+    }
 
-  .btn-responsive-icon-sm {
-    @apply btn-adaptive-icon;
-  }
+    .icon-responsive {
+        @apply icon-adaptive;
+    }
 
-  .icon-responsive {
-    @apply icon-adaptive;
-  }
+    .icon-responsive-sm {
+        @apply icon-adaptive-sm;
+    }
 
-  .icon-responsive-sm {
-    @apply icon-adaptive-sm;
-  }
+    .button-group-responsive {
+        @apply button-group-adaptive;
+    }
 
-  .button-group-responsive {
-    @apply button-group-adaptive;
-  }
+    .mobile-container {
+        @apply container-adaptive;
+    }
 
-  .mobile-container {
-    @apply container-adaptive;
-  }
+    .mobile-content {
+        @apply w-full max-w-full;
+    }
 
-  .mobile-content {
-    @apply w-full max-w-full;
-  }
-
-  .responsive-grid {
-    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6;
-  }
+    .responsive-grid {
+        @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6;
+    }
 }
 
 /* Styles existants conservés */
 .glass-effect {
-  backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .dark .glass-effect {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .gradient-bg {
-  background: linear-gradient(135deg, #4f46e5 0%, #10b981 50%, #06b6d4 100%);
+    background: linear-gradient(135deg, #4f46e5 0%, #10b981 50%, #06b6d4 100%);
 }
 
 .card-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .dark .card-hover:hover {
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
 }
 
 .floating-card {
-  animation: float 6s ease-in-out infinite;
+    animation: float 6s ease-in-out infinite;
 }
 
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
 }
 
 .slide-up {
-  animation: slideUp 0.5s ease-out;
+    animation: slideUp 0.5s ease-out;
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .bounce-in {
-  animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 @keyframes bounceIn {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+    0% {
+        transform: scale(0.3);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .glow-effect {
-  box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
-  transition: box-shadow 0.3s ease;
+    box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+    transition: box-shadow 0.3s ease;
 }
 
 .glow-effect:hover {
-  box-shadow: 0 0 30px rgba(79, 70, 229, 0.5);
+    box-shadow: 0 0 30px rgba(79, 70, 229, 0.5);
 }
 
 .medical-gradient {
-  background: linear-gradient(135deg, #4f46e5 0%, #10b981 25%, #06b6d4 50%, #8b5cf6 75%, #f59e0b 100%);
+    background: linear-gradient(135deg, #4f46e5 0%, #10b981 25%, #06b6d4 50%, #8b5cf6 75%, #f59e0b 100%);
 }

@@ -41,7 +41,7 @@ async function getDepartments(): Promise<Department[]> {
 
         // Keep checks for string type, non-empty, and uniqueness
         if (typeof id === 'string' && id.length > 0 && typeof name === 'string' && name.length > 0 && !seen.has(id)) {
-            validDepartments.push({ id, name });
+            validDepartments.push({id, name});
             seen.add(id);
         } else {
             // This detailed log will still help you if other issues arise

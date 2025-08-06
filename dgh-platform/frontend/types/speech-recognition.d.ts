@@ -9,9 +9,13 @@ interface SpeechGrammar {
 
 interface SpeechGrammarList {
     readonly length: number;
+
     item(index: number): SpeechGrammar;
+
     [index: number]: SpeechGrammar;
+
     addFromURI(src: string, weight?: number): void;
+
     addFromString(string: string, weight?: number): void;
 }
 
@@ -36,13 +40,17 @@ interface SpeechRecognitionErrorEvent extends Event {
 interface SpeechRecognitionResult {
     readonly isFinal: boolean;
     readonly length: number;
+
     item(index: number): SpeechRecognitionAlternative;
+
     [index: number]: SpeechRecognitionAlternative;
 }
 
 interface SpeechRecognitionResultList {
     readonly length: number;
+
     item(index: number): SpeechRecognitionResult;
+
     [index: number]: SpeechRecognitionResult;
 }
 
@@ -57,19 +65,22 @@ interface SpeechRecognition extends EventTarget {
     continuous: boolean;
     interimResults: boolean;
     maxAlternatives: number;
-    start(): void;
-    stop(): void;
-    abort(): void;
     // --- Correction ici ---
     onstart: ((this: SpeechRecognition, ev: Event) => any) | null; // Ajout de la propriété manquante
     onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
     onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
     onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+
+    start(): void;
+
+    stop(): void;
+
+    abort(): void;
 }
 
 declare var SpeechRecognition: {
     prototype: SpeechRecognition;
-    new (): SpeechRecognition;
+    new(): SpeechRecognition;
 };
 
 interface Window {

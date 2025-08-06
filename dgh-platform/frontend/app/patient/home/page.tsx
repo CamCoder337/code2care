@@ -2,38 +2,41 @@
 
 import type React from "react"
 // import { useLanguage } from "@/contexts/language-context"
-import { usePatientAuth } from "@/components/patient-auth-context"
+import {usePatientAuth} from "@/components/patient-auth-context"
 import Image from "next/image"
 // import { LanguageSelector } from "@/components/language-selector"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import {ThemeToggle} from "@/components/theme-toggle"
+import {Button} from "@/components/ui/button"
+import {Card, CardDescription, CardTitle} from "@/components/ui/card"
 import Link from "next/link"
-import { MessageSquare, Calendar, ChevronRight } from "lucide-react"
+import {Calendar, ChevronRight, MessageSquare} from "lucide-react"
 
 export default function PatientHomePage() {
     // const { t } = useLanguage()
-    const { patient, logout } = usePatientAuth()
+    const {patient, logout} = usePatientAuth()
 
     return (
         <div className="min-h-screen">
             {/* Mobile-first responsive header */}
-            <header className="border-b border-white/20 backdrop-blur-sm bg-white/10 dark:bg-gray-900/10 sticky top-0 z-50">
+            <header
+                className="border-b border-white/20 backdrop-blur-sm bg-white/10 dark:bg-gray-900/10 sticky top-0 z-50">
                 <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <Image src="/logo.png" alt="HIGH5 Logo" width={32} height={32} className="rounded-md" />
+                                <Image src="/logo.png" alt="HIGH5 Logo" width={32} height={32} className="rounded-md"/>
                                 <div>
-                  <span className="font-bold text-lg sm:text-xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+                  <span
+                      className="font-bold text-lg sm:text-xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
                     HIGH5
                   </span>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Your health, our priority</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Your health,
+                                        our priority</p>
                                 </div>
                             </div>
                             <div className="sm:hidden flex items-center gap-2">
                                 {/*<LanguageSelector />*/}
-                                <ThemeToggle />
+                                <ThemeToggle/>
                             </div>
                         </div>
 
@@ -45,8 +48,9 @@ export default function PatientHomePage() {
                             </div>
                             <div className="hidden sm:flex items-center gap-2">
                                 {/*<LanguageSelector />*/}
-                                <ThemeToggle />
-                                <Button variant="outline" size="sm" onClick={logout} className="bg-white/80 dark:bg-gray-800/80" aria-label="Logout">
+                                <ThemeToggle/>
+                                <Button variant="outline" size="sm" onClick={logout}
+                                        className="bg-white/80 dark:bg-gray-800/80" aria-label="Logout">
                                     Logout
                                 </Button>
                             </div>
@@ -77,7 +81,7 @@ export default function PatientHomePage() {
                 {/* Mobile-first responsive cards - Only 2 cards for patients */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 max-w-4xl mx-auto">
                     <PatientFeatureCard
-                        icon={<MessageSquare className="h-6 w-6 text-white" />}
+                        icon={<MessageSquare className="h-6 w-6 text-white"/>}
                         title="Give Feedback"
                         description="Your opinion is valuable. Help us improve our services by sharing your experience."
                         href="/patient/feedback"
@@ -86,7 +90,7 @@ export default function PatientHomePage() {
                     />
 
                     <PatientFeatureCard
-                        icon={<Calendar className="h-6 w-6 text-white" />}
+                        icon={<Calendar className="h-6 w-6 text-white"/>}
                         title="My Reminders"
                         description="Check your upcoming appointments and medication reminders."
                         href="/patient/reminders"
@@ -121,7 +125,8 @@ function PatientFeatureCard(
                 className={`h-full overflow-hidden relative transition-all duration-300 border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm group-hover:shadow-2xl group-hover:-translate-y-2`}
             >
                 {/* Decorative gradient flare */}
-                <div className={`absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-gradient-to-r ${gradient} rounded-full opacity-20 blur-3xl group-hover:opacity-40 transition-opacity duration-500`} />
+                <div
+                    className={`absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-gradient-to-r ${gradient} rounded-full opacity-20 blur-3xl group-hover:opacity-40 transition-opacity duration-500`}/>
 
                 <div className="p-6 flex flex-col h-full">
                     <div
@@ -132,13 +137,16 @@ function PatientFeatureCard(
                     <CardTitle className="text-xl font-bold text-gray-900 dark:text-white leading-tight mb-2">
                         {title}
                     </CardTitle>
-                    <CardDescription className="text-base text-gray-600 dark:text-gray-300 leading-relaxed flex-grow mb-6">
+                    <CardDescription
+                        className="text-base text-gray-600 dark:text-gray-300 leading-relaxed flex-grow mb-6">
                         {description}
                     </CardDescription>
                     <div className="mt-auto">
-                        <div className={`inline-flex items-center gap-2 font-semibold text-sm ${gradient.includes("blue") ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`}>
+                        <div
+                            className={`inline-flex items-center gap-2 font-semibold text-sm ${gradient.includes("blue") ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`}>
                             {buttonText}
-                            <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                            <ChevronRight
+                                className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"/>
                         </div>
                     </div>
                 </div>
