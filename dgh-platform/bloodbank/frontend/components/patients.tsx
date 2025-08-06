@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,9 +14,20 @@ import {
   Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users,
   RefreshCw, Wifi, WifiOff
 } from "lucide-react"
-// ✅ Import corrigé - ajouter usePatients
 import { usePatients, useCreatePatient, useUpdatePatient } from "@/lib/hooks/useApi"
 import { toast } from "sonner"
+
+interface Patient {
+  patient_id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  gender: 'M' | 'F'
+  blood_type: string
+  patient_history: string
+  age?: number
+}
+
 
 interface PatientFormData {
   patient_id: string
@@ -27,19 +39,67 @@ interface PatientFormData {
   patient_history: string
 }
 
+interface PaginatedPatientsResponse {
+  results: Patient[]
+  count: number
+  next: string | null
+  previous: string | null
+}
+
+const getFallbackPatientsData = (): PaginatedPatientsResponse => {
+  return {
+    results: [
+      {
+        patient_id: "P001",
+        first_name: "Jean",
+        last_name: "Dupont",
+        date_of_birth: "1980-05-15",
+        gender: "M" as const,
+        blood_type: "O+",
+        patient_history: "Historique médical standard",
+        age: 44
+      },
+      {
+        patient_id: "P002",
+        first_name: "Marie",
+        last_name: "Martin",
+        date_of_birth: "1985-08-20",
+        gender: "F" as const,
+        blood_type: "A+",
+        patient_history: "Allergie aux pénicillines",
+        age: 39
+      },
+      {
+        patient_id: "P003",
+        first_name: "Paul",
+        last_name: "Kouam",
+        date_of_birth: "1992-03-10",
+        gender: "M" as const,
+        blood_type: "B+",
+        patient_history: "Transfusion précédente en 2022",
+        age: 32
+      }
+    ],
+    count: 3,
+    next: null,
+    previous: null
+  }
+}
+
 export function Patients() {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedPatient, setSelectedPatient] = useState<any>(null)
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null) // ✅ Type spécifié
   const [currentPage, setCurrentPage] = useState(1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editingPatient, setEditingPatient] = useState<any>(null)
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null) // ✅ Type spécifié
   const [filters, setFilters] = useState({
     blood_type: "",
     page: 1,
     page_size: 20
   })
+
 
   // État du formulaire
   const [formData, setFormData] = useState<PatientFormData>({
@@ -53,6 +113,7 @@ export function Patients() {
   })
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+
 
   // Construire les paramètres de requête
   const queryParams = {
@@ -92,7 +153,7 @@ export function Patients() {
       resetForm()
       refetch()
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error("❌ Error creating patient:", error)
     }
   })
@@ -104,7 +165,7 @@ export function Patients() {
       resetForm()
       refetch()
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error("❌ Error updating patient:", error)
     }
   })

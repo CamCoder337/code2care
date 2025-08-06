@@ -2,6 +2,8 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query'
 import { apiService, handleApiError, DashboardOverview, Alert, BloodUnit, Donor, Patient, BloodRequest, Site, ForecastResult, SystemConfig, ImportResult, ValidationResult } from '../api'
 import { toast } from 'sonner'
+import React from 'react'
+
 
 // ======================
 // QUERY KEYS
@@ -261,7 +263,25 @@ export const usePatients = (
         if (!error.response || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') {
           console.warn('🔄 Using fallback patients data due to network error')
 
-          const fallbackData = getFallbackPatientsData()
+          const getFallbackPatientsData = () => {
+            return {
+              results: [
+                {
+                  patient_id: "P001",
+                  first_name: "Jean",
+                  last_name: "Dupont",
+                  date_of_birth: "1980-05-15",
+                  gender: "M" as const,
+                  blood_type: "O+",
+                  patient_history: "Historique médical standard",
+                  age: 44
+                }
+              ],
+              count: 1,
+              next: null,
+              previous: null
+            }
+          }
 
           // Appliquer les filtres localement si possible
           let filteredResults = fallbackData.results
@@ -948,7 +968,6 @@ export const useApi = () => {
     usePatients,
     useCreatePatient,
     useUpdatePatient,
-    useDeletePatient,
 
     // Sites
     useSites,
