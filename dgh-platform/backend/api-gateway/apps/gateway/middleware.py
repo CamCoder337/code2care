@@ -20,6 +20,10 @@ class ServiceRoutingMiddleware(MiddlewareMixin):
                 request.path.startswith('/api/v1/auth/') or \
                 request.path.startswith('/swagger/'):
             return None
+            
+        # Skip pour les routes que nous gérons avec nos vues proxy enrichies
+        if request.path.startswith('/api/v1/appointments'):
+            return None
 
         # Déterminer le service cible
         service_info = ServiceRouter.get_service_for_path(request.path)

@@ -334,25 +334,96 @@ def appointments_view(request):
     GET: Liste tous les rendez-vous
     POST: Crée un nouveau rendez-vous
     """
-    # DEBUG: Log au début de la fonction
-    logger.info(f"=== APPOINTMENTS_VIEW CALLED ===")
-    logger.info(f"Method: {request.method}")
-    logger.info(f"User: {request.user}")
-    logger.info(f"Is authenticated: {request.user.is_authenticated}")
-    logger.info(f"User type: {getattr(request.user, 'user_type', 'NO_USER_TYPE')}")
+    if request.method == 'POST':
+        return create_appointment_logic(request)
     
-    # Vérification manuelle de l'authentification pour debug
-    if not request.user.is_authenticated:
-        logger.error("❌ USER NOT AUTHENTICATED")
+    # === LOGIQUE GET (liste des appointments) ===
+    logger.error("=== APPOINTMENTS_VIEW GET CALLED - VERSION AVEC ENRICHISSEMENT ===")
+    user_type = None
+    user_id = None
+    
+    try:
+        # Utiliser directement le user_type depuis le modèle User
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                logger.error(f"Patient non trouvé pour user {request.user.id}")
+                return Response(
+                    {'error': 'Profil patient non trouvé'}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                logger.error(f"Professional non trouvé pour user {request.user.id}")
+                return Response(
+                    {'error': 'Profil professionnel non trouvé'}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            logger.error(f"Type d'utilisateur non géré: {request.user.user_type}")
+            return Response(
+                {'error': 'Type d\'utilisateur non autorisé'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+    
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
         return Response(
-            {'error': 'Authentication required - DEBUG'}, 
-            status=status.HTTP_401_UNAUTHORIZED
+            {'error': 'Erreur lors de l\'authentification'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
-    if request.method == 'GET':
-        return list_appointments(request)
-    elif request.method == 'POST':
-        return create_appointment_logic(request)
+    headers = {
+        'X-User-ID': user_id,
+        'X-User-Type': user_type,
+        'Authorization': request.headers.get('Authorization', '')
+    }
+    
+    try:
+        service_url = settings.MICROSERVICES.get('FEEDBACK_SERVICE')
+        
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(
+                f"{service_url}/api/v1/appointments/",
+                headers=headers,
+                params=request.query_params.dict()
+            )
+        
+        # Enrichir la réponse avec les noms des patients
+        appointments_data = response.json()
+        logger.info(f"Response status: {response.status_code}, Type de données: {type(appointments_data)}")
+        
+        if response.status_code == 200:
+            # Vérifier si c'est une réponse paginée ou une liste simple
+            if isinstance(appointments_data, dict) and 'results' in appointments_data:
+                logger.info(f"Réponse paginée détectée avec {len(appointments_data['results'])} appointments")
+                # Réponse paginée
+                appointments_data['results'] = _enrich_appointments_with_patient_names(appointments_data['results'])
+            elif isinstance(appointments_data, list):
+                logger.info(f"Liste simple détectée avec {len(appointments_data)} appointments")
+                # Liste simple (pas de pagination)
+                appointments_data = _enrich_appointments_with_patient_names(appointments_data)
+            else:
+                logger.warning(f"Structure de données non reconnue: {type(appointments_data)}, keys: {appointments_data.keys() if isinstance(appointments_data, dict) else 'N/A'}")
+        else:
+            logger.error(f"Status non-200 reçu: {response.status_code}")
+        
+        return Response(appointments_data, status=response.status_code)
+            
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des appointments: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération des rendez-vous'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @get_appointment_decorator
 @update_appointment_decorator
@@ -373,91 +444,53 @@ def appointment_detail_view(request, appointment_id):
     elif request.method == 'DELETE':
         return delete_appointment(request, appointment_id)
 
-@list_appointments_decorator
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def list_appointments(request):
-    """
-    Liste tous les rendez-vous selon le type d'utilisateur
-    Route: GET /api/v1/appointments/
-    """
-    user_type = None
-    user_id = None
-    
+
+def _enrich_appointments_with_patient_names(appointments_data):
+    """Enrichit la liste des appointments avec les noms des patients"""
     try:
-        # Utiliser directement le user_type depuis le modèle User
-        if request.user.user_type == 'patient':
-            try:
-                patient = Patient.objects.get(user=request.user)
-                user_type = 'patient'
-                user_id = str(patient.patient_id)
-            except Patient.DoesNotExist:
-                return Response(
-                    {'error': 'Profil patient introuvable'}, 
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        elif request.user.user_type == 'professional':
-            try:
-                professional = Professional.objects.get(user=request.user)
-                user_type = 'professional'  
-                user_id = str(professional.professional_id)
-            except Professional.DoesNotExist:
-                return Response(
-                    {'error': 'Profil professionnel introuvable'}, 
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        elif request.user.user_type == 'admin':
-            user_type = 'admin'
-            user_id = str(request.user.id)
-        else:
-            return Response(
-                {
-                    'error': 'Type d\'utilisateur non supporté',
-                    'debug_info': {
-                        'user_type_from_model': request.user.user_type,
-                        'user_id': str(request.user.id)
-                    }
-                }, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-    except Exception as e:
-        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
-        return Response(
-            {
-                'error': 'Erreur lors de la vérification du profil utilisateur',
-                'debug_info': {
-                    'user_type_from_model': getattr(request.user, 'user_type', None),
-                    'user_id': str(request.user.id),
-                    'error_details': str(e)
-                }
-            }, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-    
-    headers = {
-        'X-User-ID': user_id,
-        'X-User-Type': user_type,
-        'Authorization': request.headers.get('Authorization', '')
-    }
-    
-    try:
-        service_url = settings.MICROSERVICES.get('FEEDBACK_SERVICE')
+        logger.info(f"Début enrichissement pour {len(appointments_data)} appointments")
         
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(
-                f"{service_url}/api/v1/appointments/",
-                headers=headers,
-                params=request.query_params.dict()
-            )
+        # Récupérer tous les patient_ids uniques
+        patient_ids = list(set([apt.get('patient_id') for apt in appointments_data if apt.get('patient_id')]))
+        logger.info(f"Patient IDs à enrichir: {patient_ids[:3]}..." if len(patient_ids) > 3 else f"Patient IDs: {patient_ids}")
         
-        return Response(response.json(), status=response.status_code)
-            
+        if not patient_ids:
+            logger.warning("Aucun patient_id trouvé dans les appointments")
+            return appointments_data
+        
+        # Récupérer les informations des patients en une seule requête
+        patients = Patient.objects.filter(patient_id__in=patient_ids).select_related('user')
+        logger.info(f"Trouvé {patients.count()} patients dans la DB")
+        
+        patient_names = {
+            str(patient.patient_id): f"{patient.first_name} {patient.last_name}".strip() 
+            for patient in patients
+        }
+        logger.info(f"Mapping des noms créé: {len(patient_names)} entrées")
+        
+        # Enrichir chaque appointment
+        enriched_count = 0
+        for appointment in appointments_data:
+            patient_id = appointment.get('patient_id')
+            if patient_id:
+                patient_name = patient_names.get(
+                    str(patient_id), 
+                    f"Patient {str(patient_id)[:8]}..."
+                )
+                appointment['patient_name'] = patient_name
+                enriched_count += 1
+                
+        # Test forcé pour s'assurer que le code s'exécute
+        if appointments_data and len(appointments_data) > 0:
+            appointments_data[0]['patient_name'] = "TEST - FONCTION EXECUTEE"
+        
+        logger.info(f"Enrichissement terminé: {enriched_count} appointments enrichis")
+        return appointments_data
+        
     except Exception as e:
-        logger.error(f"Erreur lors de la récupération des appointments: {str(e)}")
-        return Response(
-            {'error': 'Erreur lors de la récupération des rendez-vous'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        logger.error(f"Erreur lors de l'enrichissement des noms patients: {str(e)}", exc_info=True)
+        # Retourner les données originales en cas d'erreur
+        return appointments_data
 
 
 def create_appointment_logic(request):

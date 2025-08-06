@@ -1,6 +1,7 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Q
@@ -15,6 +16,13 @@ from .serializers import (
     PrescriptionSerializer, PrescriptionCreateSerializer
 )
 from .services import process_feedback
+
+
+class CustomPagination(PageNumberPagination):
+    """Pagination personnalisée pour les appointments"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -179,6 +187,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['type', 'patient_id', 'professional_id']
     ordering_fields = ['scheduled']
     ordering = ['scheduled']
+    pagination_class = CustomPagination
     
     def get_serializer_class(self):
         if self.action == 'create':

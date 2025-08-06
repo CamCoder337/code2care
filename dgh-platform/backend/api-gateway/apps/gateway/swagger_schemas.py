@@ -859,6 +859,20 @@ list_appointments_decorator = swagger_auto_schema(
     """,
     manual_parameters=[
         openapi.Parameter(
+            'page',
+            openapi.IN_QUERY,
+            description="Numéro de page pour la pagination",
+            type=openapi.TYPE_INTEGER,
+            default=1
+        ),
+        openapi.Parameter(
+            'page_size',
+            openapi.IN_QUERY,
+            description="Nombre d'éléments par page (max 100)",
+            type=openapi.TYPE_INTEGER,
+            default=20
+        ),
+        openapi.Parameter(
             'date_from',
             openapi.IN_QUERY,
             description="Filtrer par date de début (format: YYYY-MM-DD)",
@@ -882,22 +896,44 @@ list_appointments_decorator = swagger_auto_schema(
     ],
     responses={
         200: openapi.Response(
-            description='Liste des rendez-vous',
+            description='Liste paginée des rendez-vous',
             schema=openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'appointment_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
-                        'scheduled': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
-                        'type': openapi.Schema(type=openapi.TYPE_STRING, enum=['consultation', 'suivi', 'examen']),
-                        'type_display': openapi.Schema(type=openapi.TYPE_STRING),
-                        'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
-                        'professional_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
-                        'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
-                        'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
-                    }
-                )
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(
+                        type=openapi.TYPE_INTEGER,
+                        description="Nombre total de rendez-vous"
+                    ),
+                    'next': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        format=openapi.FORMAT_URI,
+                        description="URL de la page suivante",
+                        nullable=True
+                    ),
+                    'previous': openapi.Schema(
+                        type=openapi.TYPE_STRING,
+                        format=openapi.FORMAT_URI,
+                        description="URL de la page précédente",
+                        nullable=True
+                    ),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'appointment_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                                'scheduled': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                                'type': openapi.Schema(type=openapi.TYPE_STRING, enum=['consultation', 'suivi', 'examen']),
+                                'type_display': openapi.Schema(type=openapi.TYPE_STRING),
+                                'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                                'patient_name': openapi.Schema(type=openapi.TYPE_STRING, description="Nom complet du patient"),
+                                'professional_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                                'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                            }
+                        )
+                    )
+                }
             )
         ),
         403: openapi.Response(description='Accès non autorisé')
