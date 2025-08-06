@@ -4,7 +4,9 @@
  */
 
 // URL de base de l'API - UNE SEULE SOURCE DE VÉRITÉ
-export const API_BASE_URL = 'http://localhost:8000/api/v1'
+export const API_BASE_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://high5-gateway.onrender.com/api/v1' 
+    : 'http://localhost:8000/api/v1'
 
 // Configuration des endpoints
 export const API_ENDPOINTS = {
