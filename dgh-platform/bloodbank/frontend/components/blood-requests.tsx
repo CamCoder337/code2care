@@ -144,7 +144,7 @@ const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 const priorityOptions = ['Urgent', 'Routine']
 
 export default function BloodRequestsManagement() {
-  const [requests, setRequests] = useState(mockRequests)
+  const [requests, setRequests] = useState(useBloodRequests())
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterPriority, setFilterPriority] = useState("all")
