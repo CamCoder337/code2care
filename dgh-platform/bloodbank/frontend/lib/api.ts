@@ -3,6 +3,11 @@ import axios, { AxiosError, AxiosResponse } from 'axios'
 
 // Configuration de l'API
 const getApiBaseUrl = () => {
+    // Priorité aux variables d'environnement
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    console.log('🔗 Using API URL from env:', process.env.NEXT_PUBLIC_API_URL)
+    return process.env.NEXT_PUBLIC_API_URL
+  }
   // En production sur Vercel
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
     return process.env.NEXT_PUBLIC_API_URL || 'https://high5-code2care-sr7p.onrender.com' // Remplacez par votre vraie URL API Django
@@ -29,35 +34,15 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+    validateStatus: (status) => {
+    // Accepter les codes 2xx et 3xx, traiter 4xx et 5xx comme des erreurs
+    return status < 400
+      }
 })
-// Intercepteur amélioré pour les erreurs
-api.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: AxiosError) => {
-    // Log d'erreur détaillé
-    console.error('🚨 API Error Details:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message
-    })
-
-    // Gestion spécifique des erreurs réseau
-    if (!error.response) {
-      console.error('🌐 Network error - API might be unreachable')
-      error.message = 'Erreur de connexion - Vérifiez que l\'API est accessible'
-    }
-
-    return Promise.reject(error)
-  }
-)
-
-// Intercepteur pour les requêtes (debugging)
+// ✅ Intercepteur pour les requêtes avec meilleur logging
 api.interceptors.request.use(
   (config) => {
-    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.url}`)
+    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`)
     return config
   },
   (error) => {
@@ -66,30 +51,62 @@ api.interceptors.request.use(
   }
 )
 
-// Test de connectivité
+// ✅ Test de connectivité amélioré
 export const testApiConnection = async () => {
   try {
     console.log('🔍 Testing API connection to:', API_BASE_URL)
-    const response = await api.get('/health/')
+    const response = await api.get('/health/', { timeout: 5000 })
     console.log('✅ API Connection successful:', response.data)
     return { success: true, data: response.data }
   } catch (error: any) {
-    console.error('❌ API Connection failed:', error)
+    console.error('❌ API Connection failed:', {
+      message: error.message,
+      status: error.response?.status,
+      isNetworkError: !error.response,
+      url: API_BASE_URL
+    })
+
     return {
       success: false,
       error: error.message,
       details: {
         url: API_BASE_URL,
         status: error.response?.status,
-        statusText: error.response?.statusText
+        statusText: error.response?.statusText,
+        isNetworkError: !error.response,
+        suggestion: !error.response
+          ? 'Vérifiez que le serveur est démarré et accessible'
+          : 'Le serveur a retourné une erreur'
       }
     }
   }
 }
 
-// Export de la configuration
-export { API_BASE_URL }
+// ✅ Health check avec fallback
+export const healthCheckWithFallback = async () => {
+  try {
+    const result = await testApiConnection()
+    if (result.success) {
+      return result
+    }
+  } catch (error) {
+    console.warn('⚠️ Primary API unavailable, using fallback mode')
+  }
 
+  // Mode fallback - données simulées
+  return {
+    success: true,
+    fallback: true,
+    data: {
+      status: 'fallback',
+      message: 'Mode hors ligne activé',
+      timestamp: new Date().toISOString()
+    }
+  }
+}
+
+// Export de la configuration
+export { API_BASE_URL, api }
 // ======================
 // TYPES
 // ======================

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,10 +11,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/lib/i18n"
 import {
   UserCheck, Search, Plus, Edit, Eye, Filter, Download, Calendar, Activity,
-  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users
+  Loader2, AlertCircle, X, Save, User, Droplets, FileText, CalendarDays, Users,
+  RefreshCw, Wifi, WifiOff
 } from "lucide-react"
 import { usePatients, useCreatePatient, useUpdatePatient } from "@/lib/hooks/useApi"
 import { toast } from "sonner"
+
+interface Patient {
+  patient_id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  gender: 'M' | 'F'
+  blood_type: string
+  patient_history: string
+  age?: number
+}
 
 interface PatientFormData {
   patient_id: string
@@ -25,14 +38,21 @@ interface PatientFormData {
   patient_history: string
 }
 
+interface PaginatedPatientsResponse {
+  results: Patient[]
+  count: number
+  next: string | null
+  previous: string | null
+}
+
 export function Patients() {
   const { t } = useLanguage()
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedPatient, setSelectedPatient] = useState<any>(null)
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editingPatient, setEditingPatient] = useState<any>(null)
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
   const [filters, setFilters] = useState({
     blood_type: "",
     page: 1,
@@ -60,7 +80,7 @@ export function Patients() {
     page_size: filters.page_size,
   }
 
-  // Hooks API
+  // ✅ Hooks API avec gestion d'erreur robuste (comme la version fonctionnelle)
   const {
     data: patientsData,
     isLoading,
@@ -74,6 +94,7 @@ export function Patients() {
       setShowCreateModal(false)
       resetForm()
       refetch()
+      toast.success("Patient créé avec succès")
     }
   })
 
@@ -83,6 +104,7 @@ export function Patients() {
       setEditingPatient(null)
       resetForm()
       refetch()
+      toast.success("Patient modifié avec succès")
     }
   })
 
@@ -102,6 +124,21 @@ export function Patients() {
     return `P${timestamp}${random}`
   }
 
+  // Calculer l'âge à partir de la date de naissance
+  const calculateAge = (dateOfBirth: string): number => {
+    if (!dateOfBirth) return 0
+    const birthDate = new Date(dateOfBirth)
+    const today = new Date()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+
+    return Math.max(0, age)
+  }
+
   // Reset du formulaire
   const resetForm = () => {
     setFormData({
@@ -117,40 +154,38 @@ export function Patients() {
   }
 
   // Validation du formulaire
-  const validateForm = (isEdit: boolean = false): boolean => {
+  const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
 
-    if (!isEdit) {
-      if (!formData.first_name.trim()) {
-        errors.first_name = "Le prénom est requis"
+    if (!formData.first_name.trim()) {
+      errors.first_name = "Le prénom est requis"
+    }
+
+    if (!formData.last_name.trim()) {
+      errors.last_name = "Le nom est requis"
+    }
+
+    if (!formData.date_of_birth) {
+      errors.date_of_birth = "La date de naissance est requise"
+    } else {
+      const birthDate = new Date(formData.date_of_birth)
+      const today = new Date()
+      if (birthDate >= today) {
+        errors.date_of_birth = "La date de naissance doit être antérieure à aujourd'hui"
       }
 
-      if (!formData.last_name.trim()) {
-        errors.last_name = "Le nom est requis"
+      const age = calculateAge(formData.date_of_birth)
+      if (age > 120) {
+        errors.date_of_birth = "Âge non valide"
       }
+    }
 
-      if (!formData.date_of_birth) {
-        errors.date_of_birth = "La date de naissance est requise"
-      } else {
-        const birthDate = new Date(formData.date_of_birth)
-        const today = new Date()
-        if (birthDate >= today) {
-          errors.date_of_birth = "La date de naissance doit être antérieure à aujourd'hui"
-        }
+    if (!formData.gender) {
+      errors.gender = "Le sexe est requis"
+    }
 
-        const age = today.getFullYear() - birthDate.getFullYear()
-        if (age > 120) {
-          errors.date_of_birth = "Âge non valide"
-        }
-      }
-
-      if (!formData.gender) {
-        errors.gender = "Le sexe est requis"
-      }
-
-      if (!formData.blood_type) {
-        errors.blood_type = "Le groupe sanguin est requis"
-      }
+    if (!formData.blood_type) {
+      errors.blood_type = "Le groupe sanguin est requis"
     }
 
     setFormErrors(errors)
@@ -161,7 +196,7 @@ export function Patients() {
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validateForm(false)) {
+    if (!validateForm()) {
       toast.error("Veuillez corriger les erreurs du formulaire")
       return
     }
@@ -169,11 +204,12 @@ export function Patients() {
     try {
       const patientData = {
         ...formData,
-        patient_id: generatePatientId() // ID généré automatiquement
+        patient_id: generatePatientId()
       }
       await createPatientMutation.mutateAsync(patientData)
     } catch (error) {
       console.error("Erreur lors de la création:", error)
+      toast.error("Erreur lors de la création du patient")
     }
   }
 
@@ -187,13 +223,13 @@ export function Patients() {
     }
 
     try {
-      // Seul l'historique peut être modifié
       await updatePatientMutation.mutateAsync({
         patientId: editingPatient.patient_id,
         patient: { patient_history: formData.patient_history }
       })
     } catch (error) {
       console.error("Erreur lors de la modification:", error)
+      toast.error("Erreur lors de la modification du patient")
     }
   }
 
@@ -204,7 +240,7 @@ export function Patients() {
   }
 
   // Ouvrir le modal de modification
-  const openEditModal = (patient: any) => {
+  const openEditModal = (patient: Patient) => {
     setEditingPatient(patient)
     setFormData({
       patient_id: patient.patient_id,
@@ -218,7 +254,7 @@ export function Patients() {
     setShowEditModal(true)
   }
 
-  // Calculer les statistiques à partir des données
+  // ✅ Calculer les statistiques avec fallback sécurisé
   const getStatistics = () => {
     if (!patientsData?.results) {
       return {
@@ -244,7 +280,11 @@ export function Patients() {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("fr-FR")
+    try {
+      return new Date(dateString).toLocaleDateString("fr-FR")
+    } catch {
+      return "N/A"
+    }
   }
 
   const getPatientInitials = (firstName: string, lastName: string) => {
@@ -273,7 +313,7 @@ export function Patients() {
 
   const statistics = getStatistics()
 
-  // Affichage du loading
+  // ✅ Affichage du loading (basé sur la version fonctionnelle)
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -291,7 +331,7 @@ export function Patients() {
     )
   }
 
-  // Affichage des erreurs
+  // ✅ Affichage des erreurs (basé sur la version fonctionnelle)
   if (isError) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -321,6 +361,7 @@ export function Patients() {
     )
   }
 
+  // ✅ Données avec fallback sécurisé (éviter undefined)
   const patients = patientsData?.results || []
   const totalCount = patientsData?.count || 0
   const hasNextPage = !!patientsData?.next
@@ -504,73 +545,78 @@ export function Patients() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {patients.map((patient) => (
-                        <tr
-                          key={patient.patient_id}
-                          className="hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors cursor-pointer"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                                patient.gender === 'M' 
-                                  ? 'bg-gradient-to-br from-blue-500 to-cyan-500' 
-                                  : 'bg-gradient-to-br from-pink-500 to-purple-500'
-                              }`}>
-                                {getPatientInitials(patient.first_name, patient.last_name)}
+                      {patients.map((patient) => {
+                        // ✅ Calculer l'âge avec fallback sécurisé
+                        const age = patient.age || calculateAge(patient.date_of_birth)
+
+                        return (
+                          <tr
+                            key={patient.patient_id}
+                            className="hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors cursor-pointer"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                  patient.gender === 'M' 
+                                    ? 'bg-gradient-to-br from-blue-500 to-cyan-500' 
+                                    : 'bg-gradient-to-br from-pink-500 to-purple-500'
+                                }`}>
+                                  {getPatientInitials(patient.first_name, patient.last_name)}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {patient.first_name} {patient.last_name}
+                                  </p>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    ID: {patient.patient_id} • {age} ans
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-semibold text-gray-900 dark:text-gray-100">
-                                  {patient.first_name} {patient.last_name}
-                                </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  ID: {patient.patient_id} • {patient.age} ans
-                                </p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{getGenderIcon(patient.gender)}</span>
+                                <span className="text-sm font-medium">{getGenderLabel(patient.gender)}</span>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{getGenderIcon(patient.gender)}</span>
-                              <span className="text-sm font-medium">{getGenderLabel(patient.gender)}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
-                              {patient.blood_type}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {formatDate(patient.date_of_birth)}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                              {patient.patient_history || "Aucun historique"}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-transparent"
-                                onClick={() => setSelectedPatient(patient)}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="hover:bg-green-50 dark:hover:bg-green-900/20 bg-transparent"
-                                onClick={() => openEditModal(patient)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-6 py-4">
+                              <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-bold">
+                                {patient.blood_type}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {formatDate(patient.date_of_birth)}
+                              </p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                                {patient.patient_history || "Aucun historique"}
+                              </p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-transparent"
+                                  onClick={() => setSelectedPatient(patient)}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="hover:bg-green-50 dark:hover:bg-green-900/20 bg-transparent"
+                                  onClick={() => openEditModal(patient)}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -846,7 +892,7 @@ export function Patients() {
                     <div>
                       <span className="font-medium text-gray-600 dark:text-gray-400">Date de naissance:</span>
                       <span className="ml-2 text-gray-900 dark:text-gray-100">
-                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age} ans)
+                        {formatDate(editingPatient.date_of_birth)} ({editingPatient.age || calculateAge(editingPatient.date_of_birth)} ans)
                       </span>
                     </div>
                   </div>
@@ -913,11 +959,7 @@ export function Patients() {
               <CardHeader className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
-                      selectedPatient.gender === 'M' 
-                        ? 'bg-white/20' 
-                        : 'bg-white/20'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg bg-white/20`}>
                       {getPatientInitials(selectedPatient.first_name, selectedPatient.last_name)}
                     </div>
                     <div>
@@ -973,7 +1015,7 @@ export function Patients() {
                       </label>
                       <p className="font-semibold flex items-center gap-2">
                         <CalendarDays className="w-4 h-4" />
-                        {selectedPatient.age} ans
+                        {selectedPatient.age || calculateAge(selectedPatient.date_of_birth)} ans
                       </p>
                     </div>
                     <div className="space-y-1">
