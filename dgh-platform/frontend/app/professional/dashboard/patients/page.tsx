@@ -6,7 +6,7 @@ import {Button} from "@/components/ui/button"
 import {Input} from "@/components/ui/input"
 import {Badge} from "@/components/ui/badge"
 import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar"
-import {Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious} from "@/components/ui/pagination"
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select"
 import {
     AlertTriangle,
     Filter,
@@ -19,6 +19,10 @@ import {
     Plus,
     Search,
     User,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
 } from "lucide-react"
 import {Dialog, DialogTrigger} from "@/components/ui/dialog"
 import {AddPatientForm} from "@/components/forms/add-patient-form"
@@ -66,9 +70,15 @@ export default function Patients() {
         setIsAddDialogOpen(false)
     }
 
-    const handlePageChange = (page: number) => {
-        setCurrentPage(page)
+    // Gestionnaires de pagination (comme dans appointments)
+    const handlePageChange = (newPage: number) => {
+        setCurrentPage(newPage)
     }
+
+    const handleFirstPage = () => setCurrentPage(1)
+    const handleLastPage = () => setCurrentPage(pagination.num_pages)
+    const handlePreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1))
+    const handleNextPage = () => setCurrentPage(Math.min(pagination.num_pages, currentPage + 1))
 
     const renderContent = () => {
         if (isLoading) {
@@ -191,62 +201,125 @@ export default function Patients() {
                 ))}
                 </div>
                 
-                {/* Pagination */}
-                {pagination.num_pages > 1 && (
-                    <div className="flex flex-col items-center gap-4 pt-4">
-                        <div className="text-sm text-muted-foreground">
-                            Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, pagination.count)} of {pagination.count} patients
+                {/* Pagination Controls - Exactement comme dans appointments */}
+                <div className="mt-6 p-4 bg-muted/20 rounded-lg">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        {/* Informations sur les résultats */}
+                        <div className="text-sm text-muted-foreground order-2 sm:order-1">
+                            Showing {pagination.count === 0 ? 0 : ((currentPage - 1) * pageSize) + 1} to{" "}
+                            {Math.min(currentPage * pageSize, pagination.count)} of {pagination.count} patients
                         </div>
-                        <Pagination>
-                            <PaginationContent>
-                                <PaginationItem>
-                                    <PaginationPrevious 
-                                        onClick={() => pagination.has_previous && handlePageChange(currentPage - 1)}
-                                        className={!pagination.has_previous ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                                    />
-                                </PaginationItem>
-                                
-                                {Array.from({ length: Math.min(5, pagination.num_pages) }, (_, i) => {
-                                    let pageNumber;
-                                    if (pagination.num_pages <= 5) {
-                                        pageNumber = i + 1;
-                                    } else if (currentPage <= 3) {
-                                        pageNumber = i + 1;
-                                    } else if (currentPage >= pagination.num_pages - 2) {
-                                        pageNumber = pagination.num_pages - 4 + i;
-                                    } else {
-                                        pageNumber = currentPage - 2 + i;
-                                    }
-                                    
-                                    return (
-                                        <PaginationItem key={pageNumber}>
-                                            <PaginationLink
-                                                onClick={() => handlePageChange(pageNumber)}
-                                                isActive={currentPage === pageNumber}
-                                                className="cursor-pointer"
+                        
+                        {/* Contrôles de pagination */}
+                        <div className="flex items-center gap-2 order-1 sm:order-2">
+                            {/* Contrôles de navigation */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleFirstPage}
+                                disabled={currentPage === 1 || pagination.count === 0}
+                                className="hidden sm:flex"
+                                title="Première page"
+                            >
+                                <ChevronsLeft className="w-4 h-4" />
+                            </Button>
+                            
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePreviousPage}
+                                disabled={currentPage === 1 || pagination.count === 0}
+                                title="Page précédente"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                                <span className="hidden sm:inline ml-1">Previous</span>
+                            </Button>
+                            
+                            {/* Informations de page courante */}
+                            <div className="flex items-center gap-1">
+                                {pagination.num_pages > 1 ? (
+                                    /* Numéros de pages multiples */
+                                    Array.from({ length: Math.min(5, pagination.num_pages) }, (_, i) => {
+                                        let pageNum;
+                                        if (pagination.num_pages <= 5) {
+                                            pageNum = i + 1;
+                                        } else {
+                                            const start = Math.max(1, currentPage - 2);
+                                            const end = Math.min(pagination.num_pages, start + 4);
+                                            const adjustedStart = Math.max(1, end - 4);
+                                            pageNum = adjustedStart + i;
+                                        }
+                                        
+                                        if (pageNum > pagination.num_pages) return null;
+                                        
+                                        return (
+                                            <Button
+                                                key={pageNum}
+                                                variant={currentPage === pageNum ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => handlePageChange(pageNum)}
+                                                className="w-8 h-8 p-0"
+                                                disabled={pagination.count === 0}
                                             >
-                                                {pageNumber}
-                                            </PaginationLink>
-                                        </PaginationItem>
-                                    );
-                                })}
-                                
-                                {pagination.num_pages > 5 && currentPage < pagination.num_pages - 2 && (
-                                    <PaginationItem>
-                                        <PaginationEllipsis />
-                                    </PaginationItem>
+                                                {pageNum}
+                                            </Button>
+                                        );
+                                    })
+                                ) : (
+                                    /* Affichage pour une seule page */
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded text-sm">
+                                        <span className="font-medium">Page {currentPage}</span>
+                                        <span className="text-muted-foreground">of {Math.max(1, pagination.num_pages)}</span>
+                                    </div>
                                 )}
-                                
-                                <PaginationItem>
-                                    <PaginationNext 
-                                        onClick={() => pagination.has_next && handlePageChange(currentPage + 1)}
-                                        className={!pagination.has_next ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                                    />
-                                </PaginationItem>
-                            </PaginationContent>
-                        </Pagination>
+                            </div>
+                            
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleNextPage}
+                                disabled={currentPage === pagination.num_pages || pagination.count === 0 || pagination.num_pages <= 1}
+                                title="Page suivante"
+                            >
+                                <span className="hidden sm:inline mr-1">Next</span>
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                            
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleLastPage}
+                                disabled={currentPage === pagination.num_pages || pagination.count === 0 || pagination.num_pages <= 1}
+                                className="hidden sm:flex"
+                                title="Dernière page"
+                            >
+                                <ChevronsRight className="w-4 h-4" />
+                            </Button>
+                            
+                            {/* Sélecteur de taille de page */}
+                            <div className="hidden md:flex items-center gap-2 ml-4">
+                                <span className="text-xs text-muted-foreground">Items per page:</span>
+                                <Select 
+                                    value={pageSize.toString()} 
+                                    onValueChange={(value) => {
+                                        setPageSize(parseInt(value))
+                                        setCurrentPage(1) // Reset à la page 1 quand on change la taille
+                                    }}
+                                >
+                                    <SelectTrigger className="w-16 h-8 text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="10">10</SelectItem>
+                                        <SelectItem value="20">20</SelectItem>
+                                        <SelectItem value="50">50</SelectItem>
+                                        <SelectItem value="100">100</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
         )
     }

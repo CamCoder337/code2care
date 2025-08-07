@@ -213,22 +213,6 @@ export function Sidebar({onLogout, currentUser, collapsed, onCollapsedChange}: S
                             {(!collapsed || isMobileMenuOpen) && (theme === "dark" ? "Light" : "Dark")}
                         </Button>
 
-                        {(!collapsed || isMobileMenuOpen) && (
-                            <Link href="/professional/settings" passHref>
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1 gap-2 bg-transparent text-xs lg:text-sm h-8 lg:h-10"
-                                    aria-label="Settings"
-                                >
-                  <span>
-                    <Settings className="w-3 h-3 lg:w-4 lg:h-4"/>
-                    Settings
-                  </span>
-                                </Button>
-                            </Link>
-                        )}
                     </div>
 
                     <Button

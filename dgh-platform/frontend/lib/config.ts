@@ -38,8 +38,8 @@ export const API_ENDPOINTS = {
     },
     // Medications
     MEDICATIONS: {
-        LIST: '/medications/',
-        DETAIL: (medicationId: string) => `/medications/${medicationId}/`,
+        LIST: '/medications',
+        DETAIL: (medicationId: string) => `/medications/${medicationId}`,
     },
     // Departments
     DEPARTMENTS: {
@@ -102,6 +102,26 @@ export interface Patient {
     }
 }
 
+// Interface pour une prescription selon le schéma API réel
+export interface Prescription {
+    prescription_id: string
+    medications: {
+        prescription_medication_id: string
+        medication_name: string
+        dosage: string
+        frequency: number
+        start_date: string
+        end_date: string
+        instructions: string
+        prescription: string
+        medication: string
+    }[]
+    general_notes: string
+    appointment_id: string
+    created_at: string
+    updated_at: string
+}
+
 // Interface pour la réponse paginée des patients
 export interface PatientsPaginatedResponse {
     count: number
@@ -113,4 +133,12 @@ export interface PatientsPaginatedResponse {
     next_page: number | null
     previous_page: number | null
     results: Patient[]
+}
+
+// Interface pour la réponse paginée des prescriptions
+export interface PrescriptionsPaginatedResponse {
+    count: number
+    next: string | null
+    previous: string | null
+    results: Prescription[]
 }

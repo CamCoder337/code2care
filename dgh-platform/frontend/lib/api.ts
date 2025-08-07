@@ -3,10 +3,10 @@
  * Gère toutes les requêtes vers l'API Gateway
  */
 
-import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse } from './config'
+import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse, type Prescription, type PrescriptionsPaginatedResponse } from './config'
 
 // Export des types pour usage externe
-export type { ApiResponse, PaginatedResponse, Appointment, Patient, PatientsPaginatedResponse }
+export type { ApiResponse, PaginatedResponse, Appointment, Patient, PatientsPaginatedResponse, Prescription, PrescriptionsPaginatedResponse }
 
 // Classe principale pour les requêtes API
 export class ApiService {
@@ -227,6 +227,25 @@ export class ApiService {
         return this.get(endpoint, token)
     }
 
+    async getPrescriptionsWithPagination(token: string, params?: URLSearchParams): Promise<PrescriptionsPaginatedResponse> {
+        // Ajouter la pagination par défaut si pas spécifiée
+        const searchParams = new URLSearchParams(params)
+        if (!searchParams.has('page')) {
+            searchParams.set('page', '1')
+        }
+        if (!searchParams.has('page_size')) {
+            searchParams.set('page_size', '20')
+        }
+        
+        const endpoint = `${API_ENDPOINTS.PRESCRIPTIONS.LIST}?${searchParams.toString()}`
+        
+        console.log('🔗 API Service - getPrescriptionsWithPagination called')
+        console.log('📍 Endpoint:', endpoint)
+        console.log('🌐 Full URL:', `${this.baseUrl}${endpoint}`)
+        
+        return this.get<PrescriptionsPaginatedResponse>(endpoint, token)
+    }
+
     async getPrescription(prescriptionId: string, token: string) {
         return this.get(API_ENDPOINTS.PRESCRIPTIONS.DETAIL(prescriptionId), token)
     }
@@ -245,6 +264,10 @@ export class ApiService {
 
     // Medications
     async getMedications(token: string) {
+        console.log('🔗 API Service - getMedications called')
+        console.log('📍 Endpoint:', API_ENDPOINTS.MEDICATIONS.LIST)
+        console.log('🌐 Full URL:', `${this.baseUrl}${API_ENDPOINTS.MEDICATIONS.LIST}`)
+        console.log('🔑 Token:', token ? 'Present' : 'Missing')
         return this.get(API_ENDPOINTS.MEDICATIONS.LIST, token)
     }
 

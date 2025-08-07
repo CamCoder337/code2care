@@ -17,6 +17,7 @@ import {
     CalendarIcon,
     CheckCircle,
     Clock,
+    Copy,
     Loader2,
     Plus,
     Search,
@@ -85,6 +86,16 @@ export default function Appointments() {
             setIsAddDialogOpen(false)
         } catch (err) {
             console.error("Failed to create appointment:", err)
+        }
+    }
+
+    const copyAppointmentId = async (appointmentId: string) => {
+        try {
+            await navigator.clipboard.writeText(appointmentId)
+            // Optionnel: afficher une notification toast ici
+            console.log('📋 Appointment ID copied:', appointmentId)
+        } catch (err) {
+            console.error('Failed to copy appointment ID:', err)
         }
     }
 
@@ -265,7 +276,20 @@ export default function Appointments() {
                                                 {/* Notes section removed */}
                                             </div>
                                         </div>
-                                        {/* Actions disabled */}
+
+                                        {/* Actions */}
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <Button 
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => copyAppointmentId(appointment.appointment_id)}
+                                                className="gap-2 bg-transparent hover:bg-primary-50"
+                                                title="Copy appointment ID"
+                                            >
+                                                <Copy className="w-4 h-4"/>
+                                                <span className="hidden sm:inline">Copy ID</span>
+                                            </Button>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
