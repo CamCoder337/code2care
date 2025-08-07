@@ -253,9 +253,27 @@ class PrescriptionCreateSerializer(serializers.ModelSerializer):
         prescription = Prescription.objects.create(**validated_data)
         
         for med_data in medications_data:
-            PrescriptionMedication.objects.create(
-                prescription=prescription,
-                **med_data
-            )
+            # Extraire l'UUID du médicament et récupérer l'instance
+            medication_id = med_data.pop('medication', None)
+            if medication_id:
+                try:
+                    medication = Medication.objects.get(medication_id=medication_id)
+                    
+                    # Nettoyer les données - ne garder que les champs valides du modèle PrescriptionMedication
+                    clean_med_data = {}
+                    valid_fields = ['dosage', 'frequency', 'start_date', 'end_date', 'instructions']
+                    
+                    for field in valid_fields:
+                        if field in med_data:
+                            clean_med_data[field] = med_data[field]
+                    
+                    prescription_med = PrescriptionMedication.objects.create(
+                        prescription=prescription,
+                        medication=medication,
+                        **clean_med_data
+                    )
+                    print(f"✅ PrescriptionMedication créé: {prescription_med.prescription_medication_id} pour {medication.name}")
+                except Medication.DoesNotExist:
+                    raise serializers.ValidationError(f"Medication with ID {medication_id} not found")
         
         return prescription

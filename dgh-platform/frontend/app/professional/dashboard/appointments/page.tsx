@@ -163,11 +163,16 @@ export default function Appointments() {
     }
 
     // Filtrage par recherche côté client (sur les données de la page actuelle)
-    const filteredAppointments = appointments.filter((appointment) =>
-        appointment.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        appointment.appointment_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        appointment.type_display.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
+    const filteredAppointments = appointments.filter((appointment) => {
+        if (!searchTerm.trim()) return true
+        
+        const search = searchTerm.toLowerCase()
+        return (
+            appointment.patient_name?.toLowerCase().includes(search) ||
+            appointment.appointment_id?.toLowerCase().includes(search) ||
+            appointment.type_display?.toLowerCase().includes(search)
+        )
+    })
 
     // Gestionnaires de pagination
     const handlePageChange = (newPage: number) => {
@@ -213,8 +218,9 @@ export default function Appointments() {
             <div className="space-y-6">
                 <div className="space-y-3 sm:space-y-4">
                     {filteredAppointments.map((appointment, index) => {
-                        const scheduledDateTime = new Date(appointment.scheduled)
-                        const patientName = appointment.patient_name || `Patient ${appointment.patient_id.substring(0, 8)}...`
+                        const scheduledDateTime = appointment.scheduled ? new Date(appointment.scheduled) : new Date()
+                        const isValidDate = !isNaN(scheduledDateTime.getTime())
+                        const patientName = appointment.patient_name || `Patient ${appointment.patient_id?.substring(0, 8) || 'Unknown'}...`
                         const patientInitials = appointment.patient_name 
                             ? appointment.patient_name
                                 .split(' ')
@@ -232,10 +238,20 @@ export default function Appointments() {
                                 <CardContent className="p-3 sm:p-4 lg:p-6">
                                     <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 lg:gap-6 flex-1 min-w-0">
-                                            {/* Time & Date */}
-                                            <div className="text-center p-2 sm:p-3 lg:p-4 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg text-white min-w-16 sm:min-w-20 lg:min-w-24 flex-shrink-0">
-                                                <div className="text-sm sm:text-lg lg:text-2xl font-bold">{format(scheduledDateTime, "HH:mm")}</div>
-                                                <div className="text-xs opacity-90">{appointment.duration || 30}min</div>
+                                            {/* Date & Time */}
+                                            <div className="text-center p-3 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg text-white min-w-20 flex-shrink-0">
+                                                <div className="text-xs opacity-90 uppercase tracking-wide mb-1">
+                                                    {isValidDate ? format(scheduledDateTime, "EEE") : "N/A"}
+                                                </div>
+                                                <div className="text-lg font-bold">
+                                                    {isValidDate ? format(scheduledDateTime, "dd/MM") : "??/??"}
+                                                </div>
+                                                <div className="text-sm font-semibold">
+                                                    {isValidDate ? format(scheduledDateTime, "HH:mm") : "--:--"}
+                                                </div>
+                                                <div className="text-xs opacity-75 mt-1">
+                                                    {appointment.duration || 30}min
+                                                </div>
                                             </div>
 
                                             {/* Patient Info */}

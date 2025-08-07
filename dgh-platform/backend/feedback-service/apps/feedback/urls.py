@@ -13,4 +13,6 @@ router.register(r'prescriptions', views.PrescriptionViewSet)
 
 urlpatterns = [
     path('api/v1/', include(router.urls)),
+    # Dashboard endpoints
+    path('api/v1/dashboard/metrics/', views.dashboard_metrics, name='dashboard-metrics'),
 ]

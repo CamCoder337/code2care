@@ -3,6 +3,7 @@ Signaux Django pour déclencher automatiquement le traitement des feedbacks
 """
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.db import transaction
 from .models import Feedback, Prescription
 from .tasks import process_feedback_async, generate_reminders_for_prescription
 import logging
@@ -59,16 +60,19 @@ def trigger_reminder_generation(sender, instance, created, **kwargs):
     if created:
         logger.info(f"Nouvelle prescription créée: {instance.prescription_id}, génération des rappels médicamenteux")
         
-        # Déclenche la génération des rappels en arrière-plan avec gestion d'erreur
-        try:
-            # Délai de 10 secondes pour s'assurer que tous les médicaments sont ajoutés
-            task = generate_reminders_for_prescription.apply_async(
-                args=[str(instance.prescription_id)],
-                countdown=10
-            )
-            logger.info(f"Tâche de génération de rappels lancée: {task.id} pour prescription {instance.prescription_id}")
-        except Exception as e:
-            logger.error(f"Erreur Celery pour génération rappels prescription {instance.prescription_id}: {e}")
-            logger.info("La prescription a été créée mais la génération des rappels a échoué")
+        # Déclenche la génération des rappels APRÈS le commit de la transaction
+        def launch_reminder_task():
+            try:
+                task = generate_reminders_for_prescription.apply_async(
+                    args=[str(instance.prescription_id)],
+                    countdown=5  # Réduit à 5 secondes maintenant que la transaction est commitée
+                )
+                logger.info(f"Tâche de génération de rappels lancée: {task.id} pour prescription {instance.prescription_id}")
+            except Exception as e:
+                logger.error(f"Erreur Celery pour génération rappels prescription {instance.prescription_id}: {e}")
+                logger.info("La prescription a été créée mais la génération des rappels a échoué")
+        
+        # Utiliser transaction.on_commit pour s'assurer que les médicaments sont sauvegardés
+        transaction.on_commit(launch_reminder_task)
     else:
         logger.debug(f"Prescription {instance.prescription_id} mise à jour, pas de re-génération des rappels")
