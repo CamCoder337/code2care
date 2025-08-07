@@ -22,7 +22,7 @@ def create_admin_user(apps, schema_editor):
 
 def remove_admin_user(apps, schema_editor):
     """Supprime l'utilisateur admin (rollback)"""
-    User.objects.filter(username='admin').delete()
+    User.objects.filter(username='adminfeedback').delete()
 
 
 class Migration(migrations.Migration):
