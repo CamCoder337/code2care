@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.backends.postgresql.psycopg_any import DateTimeRange
 from django.utils import timezone
 import uuid
 
@@ -12,7 +13,7 @@ class Department(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'departments'
+        db_table = 'fds_departments'
         verbose_name = 'Department'
         verbose_name_plural = 'Departments'
     
@@ -28,7 +29,7 @@ class FeedbackTheme(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'feedback_themes'
+        db_table = 'fds_feedback_themes'
         verbose_name = 'Feedback Theme'
         verbose_name_plural = 'Feedback Themes'
     
@@ -87,7 +88,7 @@ class Feedback(models.Model):
     processed_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
-        db_table = 'feedbacks'
+        db_table = 'fds_feedbacks'
         verbose_name = 'Feedback'
         verbose_name_plural = 'Feedbacks'
         ordering = ['-created_at']
@@ -101,51 +102,66 @@ class Feedback(models.Model):
 
 
 class Appointment(models.Model):
+    """Rendez-vous patients - Version simplifiée"""
+    TYPE_CHOICES = [
+        ('consultation', 'Consultation'),
+        ('suivi', 'Suivi'),
+        ('examen', 'Examen'),
+    ]
+    
     appointment_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    scheduled_date = models.DateField()
-    time = models.TimeField()
-    type = models.CharField(max_length=50)
-    status = models.CharField(max_length=20, default='scheduled')
+    scheduled = models.DateTimeField(default=timezone.now, help_text="Date et heure du rendez-vous")
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='consultation')
     
-    # Relations avec API Gateway
-    patient_id = models.UUIDField()  # Reference vers Patient
-    professional_id = models.UUIDField()  # Reference vers Professional
-    
-    # Relation locale
-    department = models.ForeignKey(Department, on_delete=models.CASCADE)
+    # Relations avec API Gateway (UUID references)  
+    patient_id = models.UUIDField(help_text="Reference vers Patient dans API Gateway")
+    professional_id = models.UUIDField(help_text="Reference vers Professional dans API Gateway")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'appointments'
+        db_table = 'fds_appointments'
         verbose_name = 'Appointment'
         verbose_name_plural = 'Appointments'
-        ordering = ['scheduled_date', 'time']
+        ordering = ['scheduled']
         indexes = [
             models.Index(fields=['patient_id']),
             models.Index(fields=['professional_id']),
-            models.Index(fields=['scheduled_date']),
+            models.Index(fields=['scheduled']),
+            models.Index(fields=['type']),
         ]
     
     def __str__(self):
-        return f"Appointment {self.appointment_id} - {self.scheduled_date}"
+        return f"RDV {self.type} - {self.scheduled.strftime('%d/%m/%Y %H:%M')}"
 
 
 class Reminder(models.Model):
     CHANNEL_CHOICES = [
         ('sms', 'SMS'),
         ('voice', 'Voice Call'),
-        ('whatsapp', 'WhatsApp'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'En attente'),
+        ('sent', 'Envoyé'),
+        ('delivered', 'Livré'),
+        ('failed', 'Échec'),
+        ('cancelled', 'Annulé'),
     ]
     
     reminder_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES)
     scheduled_time = models.DateTimeField()
     send_time = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     message_content = models.TextField()
     language = models.CharField(max_length=10, default='fr')
+    
+    # Champs Twilio
+    twilio_sid = models.CharField(max_length=50, null=True, blank=True, help_text="SID Twilio du message/appel")
+    delivery_status = models.CharField(max_length=20, null=True, blank=True, help_text="Statut de livraison Twilio")
+    error_message = models.TextField(null=True, blank=True, help_text="Message d'erreur en cas d'échec")
     
     # Relations
     patient_id = models.UUIDField()  # Reference vers Patient
@@ -155,7 +171,7 @@ class Reminder(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'reminders'
+        db_table = 'fds_reminders'
         verbose_name = 'Reminder'
         verbose_name_plural = 'Reminders'
         ordering = ['scheduled_time']
@@ -172,16 +188,14 @@ class Reminder(models.Model):
 class Medication(models.Model):
     medication_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
-    dosage = models.CharField(max_length=50)
-    frequency = models.FloatField()  # Fréquence par jour
     
     class Meta:
-        db_table = 'medications'
+        db_table = 'fds_medications'
         verbose_name = 'Medication'
         verbose_name_plural = 'Medications'
     
     def __str__(self):
-        return f"{self.name} - {self.dosage}"
+        return self.name
 
 
 class Prescription(models.Model):
@@ -195,7 +209,7 @@ class Prescription(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'prescriptions'
+        db_table = 'fds_prescriptions'
         verbose_name = 'Prescription'
         verbose_name_plural = 'Prescriptions'
         ordering = ['-created_at']
@@ -209,19 +223,20 @@ class Prescription(models.Model):
 
 class PrescriptionMedication(models.Model):
     prescription_medication_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    frequency = models.FloatField()
+    dosage = models.CharField(max_length=50, default="500 mg")  # Ex: "500mg", "2 comprimés"
+    frequency = models.FloatField()  # Nombre de prises par jour
     start_date = models.DateField()
     end_date = models.DateField()
-    instructions = models.TextField(blank=True)
+    instructions = models.TextField(blank=True)  # Instructions spécifiques du médecin
     
     # Relations locales
     prescription = models.ForeignKey(Prescription, on_delete=models.CASCADE, related_name='medications')
     medication = models.ForeignKey(Medication, on_delete=models.CASCADE)
     
     class Meta:
-        db_table = 'prescription_medications'
+        db_table = 'fds_prescription_medications'
         verbose_name = 'Prescription Medication'
         verbose_name_plural = 'Prescription Medications'
     
     def __str__(self):
-        return f"{self.prescription.prescription_id} - {self.medication.name}"
+        return f"{self.prescription.prescription_id} - {self.medication.name} ({self.dosage})"

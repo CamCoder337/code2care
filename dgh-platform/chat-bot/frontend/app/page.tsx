@@ -8,6 +8,7 @@ import { ConversationProvider } from "@/lib/conversation-context"
 import { FilesProvider } from "@/lib/files-context"
 import { LanguageProvider } from "@/lib/language-context"
 
+
 import { ErrorBoundary } from "@/components/error-boundary"
 import { LoadingSpinner } from "@/components/loading-spinner"
 

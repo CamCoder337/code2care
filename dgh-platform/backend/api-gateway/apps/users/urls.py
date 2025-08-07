@@ -5,7 +5,8 @@ from .views import (
     RegisterPatientView,
     RegisterProfessionalView,
     login_view,
-    logout_view
+    logout_view,
+    list_patients
 )
 
 urlpatterns = [
@@ -14,4 +15,5 @@ urlpatterns = [
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('patients/', list_patients, name='list-patients'),
 ]

@@ -1,0 +1,151 @@
+<!-- templates/forecast/error.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Erreur - Système de Prévisions</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            color: white;
+        }
+
+        .error-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .error-title {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            color: #e74c3c;
+        }
+
+        .error-message {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .error-details {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0 10px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .toggle-details {
+            background: transparent;
+            color: #667eea;
+            border: 1px solid #667eea;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
+
+        .toggle-details:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">⚠️</div>
+        <h1 class="error-title">Erreur Système</h1>
+
+        <p class="error-message">
+            Une erreur s'est produite lors du chargement du système de prévisions.
+            {% if error_message %}
+            <br><strong>{{ error_message }}</strong>
+            {% endif %}
+        </p>
+
+        <div>
+            <a href="/forecast/dashboard/" class="btn">🔄 Réessayer</a>
+            <a href="/test-forecast/" class="btn">🧪 Test Simple</a>
+            <a href="/" class="btn">🏠 Accueil</a>
+        </div>
+
+        {% if traceback %}
+        <button class="toggle-details" onclick="toggleDetails()">
+            📋 Afficher les détails techniques
+        </button>
+
+        <div id="error-details" class="error-details" style="display: none;">
+            <h4>Détails de l'erreur:</h4>
+            <pre>{{ traceback }}</pre>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 30px; font-size: 0.9rem; color: #666;">
+            <p><strong>Suggestions:</strong></p>
+            <ul style="text-align: left; max-width: 400px; margin: 10px auto;">
+                <li>Vérifiez que toutes les dépendances sont installées</li>
+                <li>Assurez-vous que la base de données est accessible</li>
+                <li>Vérifiez les logs du serveur pour plus d'informations</li>
+                <li>Contactez l'administrateur système si le problème persiste</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function toggleDetails() {
+            const details = document.getElementById('error-details');
+            const button = document.querySelector('.toggle-details');
+
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                button.textContent = '📋 Masquer les détails techniques';
+            } else {
+                details.style.display = 'none';
+                button.textContent = '📋 Afficher les détails techniques';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 
 def create_admin_user(apps, schema_editor):
     """Crée un superutilisateur par défaut"""
-    username = 'admin'
+    username = 'adminfeedback'
     email = 'admin@feedback.local'
     password = 'admin123'
     
@@ -22,7 +22,7 @@ def create_admin_user(apps, schema_editor):
 
 def remove_admin_user(apps, schema_editor):
     """Supprime l'utilisateur admin (rollback)"""
-    User.objects.filter(username='admin').delete()
+    User.objects.filter(username='adminfeedback').delete()
 
 
 class Migration(migrations.Migration):

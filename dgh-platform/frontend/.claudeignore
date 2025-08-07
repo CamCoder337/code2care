@@ -1,0 +1,10 @@
+# Ajoutez ces patterns pour réduire la taille
+node_modules/
+*.log
+*.tmp
+dist/
+build/
+.git/
+coverage/
+*.md
+documentation/

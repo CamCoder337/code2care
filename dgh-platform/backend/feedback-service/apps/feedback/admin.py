@@ -43,10 +43,22 @@ class FeedbackAdmin(admin.ModelAdmin):
 
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
-    list_display = ('appointment_id', 'patient_id', 'department', 'scheduled_date', 'time', 'status')
-    list_filter = ('status', 'scheduled_date', 'created_at')
-    search_fields = ('patient_id', 'department__name', 'type')
+    list_display = ('appointment_id', 'patient_id', 'professional_id', 'scheduled', 'type', 'created_at')
+    list_filter = ('type', 'scheduled', 'created_at')
+    search_fields = ('patient_id', 'professional_id', 'type')
     readonly_fields = ('appointment_id', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Informations principales', {
+            'fields': ('appointment_id', 'scheduled', 'type')
+        }),
+        ('Relations', {
+            'fields': ('patient_id', 'professional_id')
+        }),
+        ('Métadonnées', {
+            'fields': ('created_at', 'updated_at')
+        })
+    )
 
 
 @admin.register(Reminder)
@@ -59,9 +71,8 @@ class ReminderAdmin(admin.ModelAdmin):
 
 @admin.register(Medication)
 class MedicationAdmin(admin.ModelAdmin):
-    list_display = ('medication_id', 'name', 'dosage', 'frequency')
-    list_filter = ('frequency',)
-    search_fields = ('name', 'dosage')
+    list_display = ('medication_id', 'name')
+    search_fields = ('name',)
     readonly_fields = ('medication_id',)
 
 
@@ -75,7 +86,7 @@ class PrescriptionAdmin(admin.ModelAdmin):
 
 @admin.register(PrescriptionMedication)
 class PrescriptionMedicationAdmin(admin.ModelAdmin):
-    list_display = ('prescription_medication_id', 'prescription', 'medication', 'start_date', 'end_date')
-    list_filter = ('start_date', 'end_date')
-    search_fields = ('prescription__appointment__patient_id', 'medication__name')
+    list_display = ('prescription_medication_id', 'prescription', 'medication', 'dosage', 'frequency', 'start_date', 'end_date')
+    list_filter = ('frequency', 'start_date', 'end_date')
+    search_fields = ('prescription__appointment_id', 'medication__name', 'dosage')
     readonly_fields = ('prescription_medication_id',)

@@ -55,40 +55,134 @@ class FeedbackCreateSerializer(serializers.ModelSerializer):
             uuid.UUID(str(value))
             return value
         except (ValueError, TypeError) as e:
-            raise serializers.ValidationError("Patient ID doit être un UUID valide") from e
+            raise serializers.ValidationError({
+                "patient_id": [
+                    "Patient ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
     
     def validate_department_id(self, value):
         import uuid
         try:
             uuid.UUID(str(value))
             return value
-        except (ValueError, TypeError):
-            raise serializers.ValidationError("Department ID doit être un UUID valide")
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError({
+                "department_id": [
+                    "Department ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
-    department_name = serializers.CharField(source='department.name', read_only=True)
+    """Serializer pour les rendez-vous - Version simplifiée"""
+    type_display = serializers.CharField(source='get_type_display', read_only=True)
     
     class Meta:
         model = Appointment
-        fields = '__all__'
+        fields = ['appointment_id', 'scheduled', 'type', 'type_display', 'patient_id', 'professional_id', 'created_at', 'updated_at']
         read_only_fields = ('appointment_id', 'created_at', 'updated_at')
     
-    def validate(self, data):
-        # Validation logique métier
-        from datetime import date, time, datetime
-        
-        scheduled_date = data.get('scheduled_date')
-        scheduled_time = data.get('time')
-        
-        if scheduled_date and scheduled_time:
-            scheduled_datetime = datetime.combine(scheduled_date, scheduled_time)
-            if scheduled_datetime <= datetime.now():
-                raise serializers.ValidationError(
-                    "L'appointment ne peut pas être programmé dans le passé"
-                )
-        
-        return data
+    def validate_scheduled(self, value):
+        """Validation que le rendez-vous n'est pas dans le passé"""
+        from django.utils import timezone
+        if value <= timezone.now():
+            raise serializers.ValidationError({
+                "scheduled": [
+                    "Le rendez-vous ne peut pas être programmé dans le passé.",
+                    f"Date demandée: {value}",
+                    f"Date actuelle: {timezone.now()}"
+                ]
+            })
+        return value
+    
+    def validate_patient_id(self, value):
+        """Validation UUID patient"""
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError({
+                "patient_id": [
+                    "Patient ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
+    
+    def validate_professional_id(self, value):
+        """Validation UUID professional"""
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError({
+                "professional_id": [
+                    "Professional ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
+
+
+class AppointmentCreateSerializer(serializers.ModelSerializer):
+    """Serializer spécifique pour la création de rendez-vous"""
+    
+    class Meta:
+        model = Appointment
+        fields = ['scheduled', 'type', 'patient_id', 'professional_id']
+    
+    def validate_scheduled(self, value):
+        from django.utils import timezone
+        if value <= timezone.now():
+            raise serializers.ValidationError({
+                "scheduled": [
+                    "Le rendez-vous ne peut pas être programmé dans le passé.",
+                    f"Date demandée: {value}",
+                    f"Date actuelle: {timezone.now()}"
+                ]
+            })
+        return value
+    
+    def validate_patient_id(self, value):
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError({
+                "patient_id": [
+                    "Patient ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
+    
+    def validate_professional_id(self, value):
+        import uuid
+        try:
+            uuid.UUID(str(value))
+            return value
+        except (ValueError, TypeError) as e:
+            raise serializers.ValidationError({
+                "professional_id": [
+                    "Professional ID doit être un UUID valide.",
+                    f"Valeur reçue: {value}",
+                    f"Type reçu: {type(value).__name__}",
+                    f"Erreur: {str(e)}"
+                ]
+            }) from e
 
 
 class ReminderSerializer(serializers.ModelSerializer):
@@ -98,8 +192,8 @@ class ReminderSerializer(serializers.ModelSerializer):
         read_only_fields = ('reminder_id', 'send_time', 'created_at', 'updated_at')
     
     def validate_scheduled_time(self, value):
-        from datetime import datetime
-        if value <= datetime.now():
+        from django.utils import timezone
+        if value <= timezone.now():
             raise serializers.ValidationError(
                 "Le rappel ne peut pas être programmé dans le passé"
             )

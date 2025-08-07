@@ -2,6 +2,9 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
+import { getApiUrl } from "./config"
+import { generateUniqueId } from "./utils/id-generator"
+import { useHydrationSafe } from "@/hooks/use-hydration-safe"
 
 export interface Message {
   id: string
@@ -28,7 +31,7 @@ interface ConversationContextType {
   conversations: Conversation[]
   currentConversation: Conversation | null
   isLoading: boolean
-  createNewConversation: () => void
+  createNewConversation: () => Conversation
   selectConversation: (id: string) => void
   deleteConversation: (id: string) => void
   renameConversation: (id: string, newTitle: string) => void
@@ -47,9 +50,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const isClient = useHydrationSafe()
 
   // Load conversations from localStorage on mount
   useEffect(() => {
+    if (!isClient) return
+    
     const loadConversations = () => {
       try {
         const saved = localStorage.getItem("high5-conversations")
@@ -58,10 +64,10 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
             ...conv,
             createdAt: new Date(conv.createdAt),
             updatedAt: new Date(conv.updatedAt),
-            messages: conv.messages.map((msg: any) => ({
+            messages: conv.messages?.map((msg: any) => ({
               ...msg,
               timestamp: new Date(msg.timestamp),
-            })),
+            })) || [],
           }))
           setConversations(parsedConversations)
 
@@ -81,10 +87,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     }
 
     loadConversations()
-  }, [])
+  }, [isClient])
 
   // Save conversations to localStorage whenever they change
   useEffect(() => {
+    if (!isClient) return
+    
     try {
       if (conversations.length > 0) {
         localStorage.setItem("high5-conversations", JSON.stringify(conversations))
@@ -92,11 +100,11 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error)
     }
-  }, [conversations])
+  }, [conversations, isClient])
 
   const createNewConversation = () => {
     const newConversation: Conversation = {
-      id: Date.now().toString(),
+      id: generateUniqueId(),
       title: "New Conversation",
       messages: [],
       createdAt: new Date(),
@@ -147,7 +155,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     if (!currentConversation) return
 
     const newMessage: Message = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: generateUniqueId(),
       content,
       role,
       timestamp: new Date(),
@@ -181,11 +189,11 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     if (!currentConversation) return
 
     // Convertir les messages backend en format frontend
-    const syncedMessages: Message[] = backendMessages.map((msg, index) => ({
+    const syncedMessages: Message[] = (backendMessages || []).map((msg, index) => ({
       id: msg.id ? `backend-${msg.id}` : `backend-${backendConvId}-${index}`,
-      content: msg.content,
+      content: msg.content || '',
       role: msg.role === "user" ? "user" : "assistant" as "user" | "assistant",
-      timestamp: new Date(msg.timestamp),
+      timestamp: new Date(msg.timestamp || Date.now()),
       backendId: msg.id ? msg.id.toString() : `${backendConvId}-${index}`,
       synced: true,
     }))
@@ -210,7 +218,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const loadConversationFromBackend = async (backendConvId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/conversations/${backendConvId}/`, {
+      const response = await fetch(getApiUrl('CONVERSATIONS', `${backendConvId}/`), {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       })
@@ -229,11 +237,11 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
           const newConversation: Conversation = {
             id: `frontend-${Date.now()}`,
             title: data.title || "Conversation récupérée",
-            messages: data.messages.map((msg: any, index: number) => ({
+            messages: (data.messages || []).map((msg: any, index: number) => ({
               id: msg.id ? `backend-${msg.id}` : `backend-${backendConvId}-${index}`,
-              content: msg.content,
+              content: msg.content || '',
               role: msg.role === "user" ? "user" : "assistant" as "user" | "assistant",
-              timestamp: new Date(msg.timestamp),
+              timestamp: new Date(msg.timestamp || Date.now()),
               backendId: msg.id ? msg.id.toString() : `${backendConvId}-${index}`,
               synced: true,
             })),
@@ -260,7 +268,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const loadAllConversationsFromBackend = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("http://localhost:8000/conversations/", {
+      const response = await fetch(getApiUrl('CONVERSATIONS'), {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       })

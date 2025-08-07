@@ -1,6 +1,7 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Q
@@ -11,10 +12,17 @@ from .models import (
 )
 from .serializers import (
     DepartmentSerializer, FeedbackThemeSerializer, FeedbackSerializer, FeedbackCreateSerializer,
-    AppointmentSerializer, ReminderSerializer, MedicationSerializer,
+    AppointmentSerializer, AppointmentCreateSerializer, ReminderSerializer, MedicationSerializer,
     PrescriptionSerializer, PrescriptionCreateSerializer
 )
 from .services import process_feedback
+
+
+class CustomPagination(PageNumberPagination):
+    """Pagination personnalisée pour les appointments"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -173,16 +181,23 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
+    """ViewSet pour la gestion des rendez-vous - Version simplifiée"""
     queryset = Appointment.objects.all()
-    serializer_class = AppointmentSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['status', 'type', 'department']
-    ordering_fields = ['scheduled_date', 'time']
-    ordering = ['scheduled_date', 'time']
+    filterset_fields = ['type', 'patient_id', 'professional_id']
+    ordering_fields = ['scheduled']
+    ordering = ['scheduled']
+    pagination_class = CustomPagination
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return AppointmentCreateSerializer
+        return AppointmentSerializer
     
     def get_queryset(self):
         queryset = super().get_queryset()
         
+        # Filtrage par utilisateur selon le type
         user_id = self.request.headers.get('X-User-ID')
         user_type = self.request.headers.get('X-User-Type')
         
@@ -191,23 +206,109 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         elif user_type == 'professional' and user_id:
             queryset = queryset.filter(professional_id=user_id)
         
+        # Filtres de date optionnels
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        
+        if date_from:
+            queryset = queryset.filter(scheduled__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(scheduled__date__lte=date_to)
+        
         return queryset
+    
+    def create(self, request, *args, **kwargs):
+        """Création de rendez-vous - réservé aux professionnels uniquement"""
+        # Vérifier que seuls les professionnels peuvent créer des rendez-vous
+        user_type = request.headers.get('X-User-Type')
+        user_id = request.headers.get('X-User-ID')
+        
+        # Logging pour debugging si nécessaire
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Appointment creation attempt - User Type: {user_type}, User ID: {user_id}")
+        
+        if user_type not in ['professional', 'admin']:
+            return Response({
+                'error': 'Seuls les professionnels et admins peuvent créer des rendez-vous',
+                'debug_info': {
+                    'received_user_type': user_type,
+                    'expected_user_types': ['professional', 'admin'],
+                    'available_headers': list(request.headers.keys())
+                }
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Support auto-assignation professional_id depuis headers
+            validated_data = serializer.validated_data.copy()
+            
+            if user_id and 'professional_id' not in validated_data:
+                validated_data['professional_id'] = user_id
+            
+            appointment = Appointment.objects.create(**validated_data)
+            
+            response_data = AppointmentSerializer(appointment).data
+            headers = self.get_success_headers(response_data)
+            return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+            
+        except Exception as e:
+            logger.error(f"Error creating appointment: {str(e)}")
+            logger.error(f"Request data: {request.data}")
+            logger.error(f"Validated data: {serializer.validated_data if 'serializer' in locals() else 'N/A'}")
+            return Response({
+                'error': 'Erreur lors de la création du rendez-vous',
+                'details': str(e),
+                'debug_info': {
+                    'user_type': user_type,
+                    'user_id': user_id,
+                    'request_data': request.data
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
         """Récupère les rendez-vous à venir"""
-        from datetime import date
-        
-        user_id = request.headers.get('X-User-ID')
-        user_type = request.headers.get('X-User-Type')
-        
         queryset = self.get_queryset().filter(
-            scheduled_date__gte=date.today(),
-            status__in=['scheduled', 'confirmed']
+            scheduled__gte=timezone.now()
         )
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def today(self, request):
+        """Rendez-vous du jour"""
+        from datetime import date
+        
+        queryset = self.get_queryset().filter(
+            scheduled__date=date.today()
+        )
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_type(self, request):
+        """Groupe les rendez-vous par type"""
+        from django.db.models import Count
+        
+        types_data = []
+        for type_choice, type_display in Appointment.TYPE_CHOICES:
+            appointments = self.get_queryset().filter(type=type_choice)
+            count = appointments.count()
+            
+            if count > 0:
+                types_data.append({
+                    'type': type_choice,
+                    'type_display': type_display,
+                    'count': count,
+                    'appointments': self.get_serializer(appointments, many=True).data
+                })
+        
+        return Response(types_data)
 
 
 class ReminderViewSet(viewsets.ModelViewSet):
@@ -249,6 +350,7 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['appointment_id']
     ordering = ['-created_at']
+    pagination_class = CustomPagination
     
     def get_serializer_class(self):
         if self.action == 'create':

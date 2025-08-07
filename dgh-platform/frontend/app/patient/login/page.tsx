@@ -1,23 +1,15 @@
 "use client"
 
-import { PatientLoginForm } from "@/components/patient-login-form"
-import { usePatientAuth } from "@/components/patient-auth-context"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import {useEffect} from "react"
+import {useRouter} from "next/navigation"
 
 export default function PatientLoginPage() {
-  const { isAuthenticated } = usePatientAuth()
-  const router = useRouter()
+    const router = useRouter()
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/")
-    }
-  }, [isAuthenticated, router])
+    useEffect(() => {
+        // Redirection vers le login unifié
+        router.replace("/login")
+    }, [router])
 
-  if (isAuthenticated) {
     return null
-  }
-
-  return <PatientLoginForm />
 }
