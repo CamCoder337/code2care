@@ -171,10 +171,20 @@ export interface Patient {
   age: number
 }
 
+export interface Department {
+  department_id: string
+  name: string
+  head_of_department: string
+  is_emergency_department: boolean
+}
+
 export interface Site {
   site_id: string
   nom: string
   ville: string
+  manager: string
+  phone: string
+  departments: Department[]  // ← Ajout des départements
 }
 
 export interface BloodUnit {
