@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { apiService, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse, type Prescription, type PrescriptionsPaginatedResponse } from '@/lib/api'
+import { apiService, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse, type Prescription, type PrescriptionsPaginatedResponse, type DashboardMetrics } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 interface UseApiState<T> {
@@ -435,6 +435,62 @@ export function useMedications() {
 // Departments
 export function useDepartments() {
     return useApiGet<any[]>('/departments/')
+}
+
+// Dashboard metrics
+export function useDashboardMetrics() {
+    const { user, hasHydrated, accessToken } = useAuthStore()
+    const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    const fetchMetrics = useCallback(async () => {
+        console.log('🔍 useDashboardMetrics - fetchMetrics called')
+        console.log('👤 User:', user)
+        console.log('🔑 AccessToken:', accessToken ? 'Present' : 'Missing')
+        console.log('🔄 HasHydrated:', hasHydrated)
+
+        // Attendre que la rehydratation soit terminée
+        if (!hasHydrated) {
+            console.log('⏳ Waiting for rehydration to complete...')
+            setIsLoading(true)
+            return
+        }
+
+        if (!accessToken) {
+            console.log('❌ No access token found after rehydration')
+            setError('Authentication token not found')
+            setIsLoading(false)
+            return
+        }
+
+        console.log('🚀 Starting API call...')
+        setIsLoading(true)
+        setError(null)
+
+        try {
+            const response = await apiService.getDashboardMetrics(accessToken)
+            console.log('✅ Dashboard metrics response:', response)
+            
+            setMetrics(response)
+        } catch (err) {
+            console.error('💥 API Error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to fetch dashboard metrics')
+        } finally {
+            setIsLoading(false)
+        }
+    }, [accessToken, hasHydrated])
+
+    useEffect(() => {
+        fetchMetrics()
+    }, [fetchMetrics])
+
+    return {
+        metrics,
+        isLoading,
+        error,
+        refetch: fetchMetrics,
+    }
 }
 
 // Patients avec pagination (pour la page patients)

@@ -119,79 +119,71 @@ export default function Patients() {
                         className="card-hover glass-effect border-0 shadow-lg animate-scale-in w-full"
                         style={{animationDelay: `${index * 0.1}s`}}
                     >
-                        <CardContent className="p-3 sm:p-4 lg:p-6">
-                            <div
-                                className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
-                                <div
-                                    className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                                    <Avatar
-                                        className="w-12 h-12 sm:w-16 sm:h-16 ring-2 ring-primary-500 ring-offset-2 ring-offset-background flex-shrink-0">
+                        <CardContent className="p-4 sm:p-6">
+                            <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
+                                {/* Patient Info */}
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    <Avatar className="w-16 h-16 ring-2 ring-primary-500 ring-offset-2 ring-offset-background flex-shrink-0">
                                         <AvatarImage src={`/placeholder.svg?height=64&width=64`}/>
-                                        <AvatarFallback
-                                            className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-sm sm:text-lg font-bold">
+                                        <AvatarFallback className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-lg font-bold">
                                             {`${patient.first_name[0] || ""}${patient.last_name[0] || ""}`}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div className="space-y-2 min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                            <h3 className="text-base sm:text-lg lg:text-xl font-semibold truncate">
+                                    
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-xl font-semibold truncate">
                                                 {`${patient.first_name} ${patient.last_name}`}
                                             </h3>
-                                            <Badge variant="outline" className="text-xs flex-shrink-0 px-1 sm:px-2">
-                                                {patient.patient_id.substring(0, 12)}...
+                                            <Badge variant="outline" className="text-xs flex-shrink-0">
+                                                ID: {patient.patient_id.substring(0, 8)}...
                                             </Badge>
                                         </div>
-                                        <div
-                                            className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 lg:gap-4 text-xs sm:text-sm text-muted-foreground">
+                                        
+                                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                                             <div className="flex items-center gap-1">
-                                                <User className="icon-responsive-sm flex-shrink-0"/>
-                                                <span className="truncate">{patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : 'N/A'} years</span>
+                                                <User className="w-4 h-4 flex-shrink-0"/>
+                                                <span>{patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : 'N/A'} ans</span>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                <Phone className="icon-responsive-sm flex-shrink-0"/>
-                                                <span className="truncate">{patient.user.phone_number}</span>
+                                                <Phone className="w-4 h-4 flex-shrink-0"/>
+                                                <span>{patient.user.phone_number}</span>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                <Mail className="icon-responsive-sm flex-shrink-0"/>
+                                                <Mail className="w-4 h-4 flex-shrink-0"/>
                                                 <span className="truncate">{patient.user.email || 'No email'}</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                                    <div className="text-left sm:text-right space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <Globe className="icon-responsive-sm text-muted-foreground flex-shrink-0"/>
-                                            <Badge
-                                                variant="secondary"
-                                                className="text-xs px-1 sm:px-2 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                                            >
+                                {/* Metadata & Actions */}
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+                                    {/* Patient Metadata */}
+                                    <div className="text-center sm:text-right space-y-2">
+                                        <div className="flex items-center justify-center sm:justify-end gap-2">
+                                            <Globe className="w-4 h-4 text-muted-foreground"/>
+                                            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                                                 {patient.preferred_language.toUpperCase()}
                                             </Badge>
                                         </div>
-                                        <p className="text-xs sm:text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             Joined: {new Date(patient.user.created_at).toLocaleDateString()}
                                         </p>
                                     </div>
 
-                                    <div className="button-group-responsive">
-                                        <Button
-                                            variant="outline"
-                                            className="btn-responsive-sm gap-1 bg-transparent flex-1 sm:flex-none"
-                                        >
-                                            <MessageSquare className="icon-responsive-sm"/>
-                                            <span className="hidden sm:inline truncate">SMS</span>
+                                    {/* Actions */}
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" className="gap-1 flex-1 sm:flex-none">
+                                            <MessageSquare className="w-4 h-4"/>
+                                            <span className="hidden sm:inline">SMS</span>
                                         </Button>
-                                        <Button
-                                            variant="outline"
-                                            className="btn-responsive-sm gap-1 bg-transparent flex-1 sm:flex-none"
-                                        >
-                                            <Phone className="icon-responsive-sm"/>
-                                            <span className="hidden sm:inline truncate">Call</span>
+                                        <Button variant="outline" size="sm" className="gap-1 flex-1 sm:flex-none">
+                                            <Phone className="w-4 h-4"/>
+                                            <span className="hidden sm:inline">Call</span>
                                         </Button>
-                                        <Button variant="outline" className="btn-responsive-icon-sm bg-transparent">
-                                            <MoreHorizontal className="icon-responsive-sm"/>
+                                        <Button variant="outline" size="sm">
+                                            <MoreHorizontal className="w-4 h-4"/>
                                         </Button>
                                     </div>
                                 </div>
@@ -254,7 +246,7 @@ export default function Patients() {
                                         
                                         return (
                                             <Button
-                                                key={pageNum}
+                                                key={`patient-page-${pageNum}`}
                                                 variant={currentPage === pageNum ? "default" : "outline"}
                                                 size="sm"
                                                 onClick={() => handlePageChange(pageNum)}
@@ -264,7 +256,7 @@ export default function Patients() {
                                                 {pageNum}
                                             </Button>
                                         );
-                                    })
+                                    }).filter(Boolean)
                                 ) : (
                                     /* Affichage pour une seule page */
                                     <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded text-sm">

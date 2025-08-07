@@ -52,6 +52,10 @@ export const API_ENDPOINTS = {
         STATUS: (feedbackId: string) => `/patient/feedback/${feedbackId}/status/`,
         TEST: '/patient/feedback/test/',
     },
+    // Dashboard
+    DASHBOARD: {
+        METRICS: '/dashboard/metrics',
+    },
 } as const
 
 // Types pour les réponses API
@@ -141,4 +145,33 @@ export interface PrescriptionsPaginatedResponse {
     next: string | null
     previous: string | null
     results: Prescription[]
+}
+
+// Interface pour les métriques du dashboard
+export interface DashboardMetrics {
+    feedbacks: {
+        total: number
+        positive: number
+        negative: number
+        neutral: number
+        satisfaction_rate: number
+        insatisfaction_rate: number
+    }
+    patients: {
+        total: number
+    }
+    appointments: {
+        total: number
+        today: number
+        this_week: number
+    }
+    prescriptions: {
+        total: number
+        this_week: number
+    }
+    metadata: {
+        professional_id: string | null
+        generated_at: string
+        period: string
+    }
 }

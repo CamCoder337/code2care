@@ -103,6 +103,9 @@ export default function Prescriptions() {
         try {
             await createPrescription(newPrescription)
             setIsAddDialogOpen(false)
+            // Refresh automatique des données après création
+            console.log('✅ Prescription créée avec succès, rafraîchissement...')
+            await refetch()
         } catch (err) {
             console.error("Failed to create prescription:", err)
         }
@@ -111,6 +114,8 @@ export default function Prescriptions() {
     const handleEditPrescription = async (prescriptionId: string, updatedData: any) => {
         try {
             await updatePrescription(prescriptionId, updatedData)
+            console.log('✅ Prescription mise à jour avec succès, rafraîchissement...')
+            await refetch()
         } catch (err) {
             console.error("Failed to update prescription:", err)
         }
@@ -121,6 +126,8 @@ export default function Prescriptions() {
         
         try {
             await deletePrescription(prescriptionId)
+            console.log('✅ Prescription supprimée avec succès, rafraîchissement...')
+            await refetch()
         } catch (err) {
             console.error("Failed to delete prescription:", err)
         }
@@ -195,7 +202,8 @@ export default function Prescriptions() {
             <div className="space-y-4">
                 <div className="space-y-3 sm:space-y-4">
                     {prescriptions.map((prescription, index) => {
-                    const prescribedDate = new Date(prescription.created_at)
+                    const prescribedDate = prescription.created_at ? new Date(prescription.created_at) : new Date()
+                    const isValidDate = !isNaN(prescribedDate.getTime())
                     const patientName = `Appointment: ${prescription.appointment_id.substring(0, 8)}...`
                     const patientInitials = "P"
 
@@ -205,102 +213,102 @@ export default function Prescriptions() {
                             className="card-hover glass-effect border-0 shadow-lg animate-slide-up w-full"
                             style={{animationDelay: `${index * 0.1}s`}}
                         >
-                            <CardContent className="p-3 sm:p-4 lg:p-6">
-                                <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
-                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 lg:gap-6 flex-1 min-w-0">
-                                        {/* Date & Status */}
-                                        <div className="text-center p-2 sm:p-3 lg:p-4 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg text-white min-w-16 sm:min-w-20 lg:min-w-24 flex-shrink-0">
-                                            <div className="text-sm sm:text-lg lg:text-xl font-bold">
-                                                {format(prescribedDate, "dd/MM")}
+                            <CardContent className="p-4 sm:p-6">
+                                <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
+                                    {/* Date Block */}
+                                    <div className="flex-shrink-0">
+                                        <div className="text-center p-3 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg text-white min-w-20">
+                                            <div className="text-lg font-bold">
+                                                {isValidDate ? format(prescribedDate, "dd/MM") : "N/A"}
                                             </div>
                                             <div className="text-xs opacity-90">
-                                                {format(prescribedDate, "yyyy")}
-                                            </div>
-                                        </div>
-
-                                        {/* Patient Info */}
-                                        <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 flex-1 min-w-0">
-                                            <Avatar className="w-12 h-12 sm:w-16 sm:h-16 ring-2 ring-primary-500 ring-offset-2 ring-offset-background flex-shrink-0">
-                                                <AvatarImage src={`/placeholder.svg?height=64&width=64`}/>
-                                                <AvatarFallback className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-sm sm:text-lg font-bold">
-                                                    {patientInitials}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="space-y-1 min-w-0 flex-1">
-                                                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                                    <h3 className="text-base sm:text-lg lg:text-xl font-semibold truncate">
-                                                        {patientName}
-                                                    </h3>
-                                                    <Badge variant="outline" className="text-xs flex-shrink-0 px-1 sm:px-2">
-                                                        {prescription.appointment_id.substring(0, 8)}...
-                                                    </Badge>
-                                                </div>
-                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 lg:gap-4 text-xs sm:text-sm text-muted-foreground">
-                                                    <div className="flex items-center gap-1">
-                                                        <Pill className="icon-responsive-sm flex-shrink-0"/>
-                                                        <span className="truncate">
-                                                            {prescription.medications.length} médicament(s)
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <Calendar className="icon-responsive-sm flex-shrink-0"/>
-                                                        <span className="truncate">
-                                                            {format(prescribedDate, "dd/MM/yyyy")}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Prescription Details */}
-                                        <div className="space-y-2 min-w-0">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1 sm:px-2">
-                                                    Active
-                                                </Badge>
-                                            </div>
-                                            
-                                            {/* Medications list */}
-                                            <div className="space-y-1">
-                                                {prescription.medications.slice(0, 2).map((med, idx) => (
-                                                    <p key={idx} className="text-xs sm:text-sm text-muted-foreground truncate">
-                                                        <span className="font-medium">{med.medication_name}</span> - {med.dosage} ({med.frequency}x/day)
-                                                    </p>
-                                                ))}
-                                                {prescription.medications.length > 2 && (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        +{prescription.medications.length - 2} autres...
-                                                    </p>
-                                                )}
+                                                {isValidDate ? format(prescribedDate, "yyyy") : "N/A"}
                                             </div>
                                         </div>
                                     </div>
 
+                                    {/* Main Content */}
+                                    <div className="flex-1 min-w-0 space-y-4">
+                                        {/* Patient Info Row */}
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="w-12 h-12 ring-2 ring-primary-500 ring-offset-2 ring-offset-background flex-shrink-0">
+                                                <AvatarImage src={`/placeholder.svg?height=48&width=48`}/>
+                                                <AvatarFallback className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-bold">
+                                                    {patientInitials}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                                    <h3 className="text-lg font-semibold truncate">
+                                                        {patientName}
+                                                    </h3>
+                                                    <Badge variant="outline" className="text-xs flex-shrink-0">
+                                                        {prescription.appointment_id.substring(0, 8)}...
+                                                    </Badge>
+                                                    <Badge className="bg-green-500 hover:bg-green-600 text-xs flex-shrink-0">
+                                                        Active
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                                                    <div className="flex items-center gap-1">
+                                                        <Pill className="w-4 h-4 flex-shrink-0"/>
+                                                        <span>{prescription.medications?.length || 0} medications</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <Calendar className="w-4 h-4 flex-shrink-0"/>
+                                                        <span>{isValidDate ? format(prescribedDate, "dd/MM/yyyy") : "N/A"}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Medications Preview */}
+                                        <div className="space-y-1 px-3 py-2 bg-muted/20 rounded-lg">
+                                            {prescription.medications?.slice(0, 2).map((med, idx) => (
+                                                <p key={idx} className="text-sm text-muted-foreground">
+                                                    <span className="font-medium text-foreground">{med?.medication_name || 'Unknown medication'}</span>
+                                                    <span className="mx-2">•</span>
+                                                    <span>{med?.dosage || 'N/A'}</span>
+                                                    <span className="mx-2">•</span>
+                                                    <span>{med?.frequency || 0}x/day</span>
+                                                </p>
+                                            )) || []}
+                                            {(prescription.medications?.length || 0) > 2 && (
+                                                <p className="text-xs text-muted-foreground italic">
+                                                    +{(prescription.medications?.length || 0) - 2} more medications...
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     {/* Actions */}
-                                    <div className="button-group-responsive">
+                                    <div className="flex lg:flex-col gap-2 lg:gap-1 flex-shrink-0">
                                         <Button 
                                             variant="outline"
-                                            className="btn-responsive-sm gap-1 bg-transparent flex-1 sm:flex-none"
+                                            size="sm"
+                                            className="gap-1 flex-1 lg:flex-none lg:w-24"
                                             onClick={() => handleViewPrescription(prescription)}
                                         >
-                                            <Eye className="icon-responsive-sm"/>
-                                            <span className="hidden sm:inline truncate">View</span>
+                                            <Eye className="w-4 h-4"/>
+                                            <span className="hidden sm:inline">View</span>
                                         </Button>
                                         <Button 
                                             variant="outline"
-                                            className="btn-responsive-sm gap-1 bg-transparent flex-1 sm:flex-none"
+                                            size="sm"
+                                            className="gap-1 flex-1 lg:flex-none lg:w-24"
                                             onClick={() => handleEditPrescription(prescription.prescription_id, {})}
                                         >
-                                            <Edit className="icon-responsive-sm"/>
-                                            <span className="hidden sm:inline truncate">Edit</span>
+                                            <Edit className="w-4 h-4"/>
+                                            <span className="hidden sm:inline">Edit</span>
                                         </Button>
                                         <Button
                                             variant="outline"
-                                            className="btn-responsive-sm gap-1 bg-transparent text-red-500 hover:text-red-600 flex-1 sm:flex-none"
+                                            size="sm"
+                                            className="gap-1 flex-1 lg:flex-none lg:w-24 text-red-500 hover:text-red-600"
                                             onClick={() => handleDeletePrescription(prescription.prescription_id)}
                                         >
-                                            <Trash2 className="icon-responsive-sm"/>
-                                            <span className="hidden sm:inline truncate">Delete</span>
+                                            <Trash2 className="w-4 h-4"/>
+                                            <span className="hidden sm:inline">Delete</span>
                                         </Button>
                                     </div>
                                 </div>
@@ -363,7 +371,7 @@ export default function Prescriptions() {
                                         
                                         return (
                                             <Button
-                                                key={pageNum}
+                                                key={`page-${pageNum}`}
                                                 variant={currentPage === pageNum ? "default" : "outline"}
                                                 size="sm"
                                                 onClick={() => handlePageChange(pageNum)}
@@ -373,7 +381,7 @@ export default function Prescriptions() {
                                                 {pageNum}
                                             </Button>
                                         );
-                                    })
+                                    }).filter(Boolean)
                                 ) : (
                                     /* Affichage pour une seule page */
                                     <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded text-sm">
@@ -540,10 +548,11 @@ export default function Prescriptions() {
 
                             {/* Medications */}
                             <div className="space-y-4">
-                                <Label className="text-lg font-semibold">Medications ({selectedPrescription.medications.length})</Label>
+                                <Label className="text-lg font-semibold">Medications ({selectedPrescription.medications?.length || 0})</Label>
                                 <div className="grid gap-4">
-                                    {selectedPrescription.medications.map((med, index) => (
-                                        <Card key={med.prescription_medication_id} className="p-4">
+                                    {selectedPrescription.medications?.length > 0 ? 
+                                        selectedPrescription.medications.map((med, index) => (
+                                        <Card key={med?.prescription_medication_id || index} className="p-4">
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 <div>
                                                     <Label className="text-sm font-medium text-muted-foreground">Medication</Label>
@@ -577,7 +586,11 @@ export default function Prescriptions() {
                                                 )}
                                             </div>
                                         </Card>
-                                    ))}
+                                    )) : (
+                                        <div className="text-center p-4 text-muted-foreground">
+                                            No medications found for this prescription
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

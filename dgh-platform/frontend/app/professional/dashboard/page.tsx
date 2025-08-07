@@ -5,6 +5,7 @@ import {Button} from "@/components/ui/button"
 import {Badge} from "@/components/ui/badge"
 import {Progress} from "@/components/ui/progress"
 import {type ProfessionalUser, useAuthStore} from "@/stores/auth-store"
+import {useDashboardMetrics} from "@/hooks/use-api"
 import {
     Activity,
     AlertCircle,
@@ -12,6 +13,8 @@ import {
     CheckCircle,
     Clock,
     FileText,
+    Loader2,
+    MessageSquare,
     Plus,
     Star,
     TrendingUp,
@@ -21,40 +24,57 @@ import {
 export default function DashboardPage() {
     const {user} = useAuthStore()
     const professional = user as ProfessionalUser
-    const stats = [
+    
+    // Récupération des métriques réelles
+    const {metrics, isLoading, error} = useDashboardMetrics()
+    
+    console.log('📊 Dashboard metrics:', metrics)
+    console.log('⏳ Dashboard loading:', isLoading)
+    console.log('❌ Dashboard error:', error)
+    
+    // Stats avec données réelles
+    const stats = metrics ? [
         {
             title: "Total Patients",
-            value: "1,247",
-            change: "+12%",
+            value: metrics.patients.total.toString(),
+            change: "All time",
             icon: Users,
             color: "from-blue-500 to-blue-600",
             bgColor: "bg-blue-50 dark:bg-blue-950",
         },
         {
-            title: "Today's Appointments",
-            value: "18",
-            change: "3 pending",
+            title: "Today's Appointments", 
+            value: metrics.appointments.today.toString(),
+            change: `${metrics.appointments.this_week} this week`,
             icon: Calendar,
             color: "from-green-500 to-green-600",
             bgColor: "bg-green-50 dark:bg-green-950",
         },
         {
-            title: "Prescriptions Issued",
-            value: "89",
-            change: "This week",
+            title: "Total Prescriptions",
+            value: metrics.prescriptions.total.toString(),
+            change: `${metrics.prescriptions.this_week} this week`,
             icon: FileText,
             color: "from-purple-500 to-purple-600",
             bgColor: "bg-purple-50 dark:bg-purple-950",
         },
         {
             title: "Patient Satisfaction",
-            value: "4.8/5",
-            change: "+0.2",
+            value: `${metrics.feedbacks.satisfaction_rate}%`,
+            change: `${metrics.feedbacks.total} feedbacks`,
             icon: Star,
             color: "from-orange-500 to-orange-600",
             bgColor: "bg-orange-50 dark:bg-orange-950",
         },
-    ]
+        {
+            title: "Total Feedbacks",
+            value: metrics.feedbacks.total.toString(),
+            change: `${metrics.feedbacks.positive} positive`,
+            icon: MessageSquare,
+            color: "from-teal-500 to-teal-600",
+            bgColor: "bg-teal-50 dark:bg-teal-950",
+        },
+    ] : []
 
     const appointments = [
         {
@@ -139,8 +159,22 @@ export default function DashboardPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="responsive-grid">
-                {stats.map((stat, index) => (
+            {isLoading ? (
+                <div className="flex justify-center items-center p-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary-500"/>
+                    <span className="ml-2 text-muted-foreground">Loading dashboard metrics...</span>
+                </div>
+            ) : error ? (
+                <Card className="p-6 border-red-200 bg-red-50 dark:bg-red-950/20">
+                    <div className="flex items-center gap-2 text-red-600">
+                        <AlertCircle className="h-5 w-5"/>
+                        <p className="font-medium">Failed to load dashboard metrics</p>
+                    </div>
+                    <p className="text-sm text-red-500 mt-2">{error}</p>
+                </Card>
+            ) : (
+                <div className="responsive-grid">
+                    {stats.map((stat, index) => (
                     <Card
                         key={stat.title}
                         className={`card-hover animate-scale-in ${stat.bgColor} border-0 shadow-lg w-full`}
@@ -166,8 +200,9 @@ export default function DashboardPage() {
                             </div>
                         </CardContent>
                     </Card>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                 {/* Today's Appointments */}
@@ -284,28 +319,59 @@ export default function DashboardPage() {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4 sm:space-y-6">
-                    <div className="space-y-3 sm:space-y-4">
-                        <div className="flex justify-between items-center gap-2">
-                            <span
-                                className="text-xs sm:text-sm font-medium truncate flex-1">Appointments Completed</span>
-                            <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">85%</span>
+                    {metrics ? (
+                        <>
+                            <div className="space-y-3 sm:space-y-4">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-medium truncate flex-1">Patient Satisfaction</span>
+                                    <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">{metrics.feedbacks.satisfaction_rate}%</span>
+                                </div>
+                                <Progress value={metrics.feedbacks.satisfaction_rate} className="h-1.5 sm:h-2"/>
+                            </div>
+                            <div className="space-y-3 sm:space-y-4">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-medium truncate flex-1">Total Appointments</span>
+                                    <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">{metrics.appointments.total}</span>
+                                </div>
+                                <Progress value={Math.min(100, (metrics.appointments.total / 100) * 100)} className="h-1.5 sm:h-2"/>
+                            </div>
+                            <div className="space-y-3 sm:space-y-4">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-medium truncate flex-1">Total Prescriptions</span>
+                                    <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">{metrics.prescriptions.total}</span>
+                                </div>
+                                <Progress value={Math.min(100, (metrics.prescriptions.total / 50) * 100)} className="h-1.5 sm:h-2"/>
+                            </div>
+                            <div className="space-y-3 sm:space-y-4">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span className="text-xs sm:text-sm font-medium truncate flex-1">Feedback Distribution</span>
+                                    <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">
+                                        {metrics.feedbacks.positive}P / {metrics.feedbacks.negative}N / {metrics.feedbacks.neutral}Neu
+                                    </span>
+                                </div>
+                                <div className="flex gap-1 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                                    <div 
+                                        className="bg-green-500" 
+                                        style={{width: `${metrics.feedbacks.total > 0 ? (metrics.feedbacks.positive / metrics.feedbacks.total) * 100 : 0}%`}}
+                                    />
+                                    <div 
+                                        className="bg-red-500" 
+                                        style={{width: `${metrics.feedbacks.total > 0 ? (metrics.feedbacks.negative / metrics.feedbacks.total) * 100 : 0}%`}}
+                                    />
+                                    <div 
+                                        className="bg-gray-400" 
+                                        style={{width: `${metrics.feedbacks.total > 0 ? (metrics.feedbacks.neutral / metrics.feedbacks.total) * 100 : 0}%`}}
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="text-center text-muted-foreground">
+                                No metrics available
+                            </div>
                         </div>
-                        <Progress value={85} className="h-1.5 sm:h-2"/>
-                    </div>
-                    <div className="space-y-3 sm:space-y-4">
-                        <div className="flex justify-between items-center gap-2">
-                            <span className="text-xs sm:text-sm font-medium truncate flex-1">Prescriptions Issued</span>
-                            <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">92%</span>
-                        </div>
-                        <Progress value={92} className="h-1.5 sm:h-2"/>
-                    </div>
-                    <div className="space-y-3 sm:space-y-4">
-                        <div className="flex justify-between items-center gap-2">
-                            <span className="text-xs sm:text-sm font-medium truncate flex-1">Patient Satisfaction</span>
-                            <span className="text-xs sm:text-sm text-muted-foreground flex-shrink-0">96%</span>
-                        </div>
-                        <Progress value={96} className="h-1.5 sm:h-2"/>
-                    </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

@@ -26,12 +26,13 @@ export function AddPrescriptionForm({
                                     }: AddPrescriptionFormProps) {
     // Hook pour récupérer les médicaments depuis l'API
     const {data: medications, isLoading: medicationsLoading, error: medicationsError} = useMedications()
+    
     const [formData, setFormData] = useState({
         appointmentId: "",
         general_notes: "",
         medications: [
             {
-                medication_id: null, // Utiliser null pour l'ID aussi
+                medication_id: "", // Utiliser string vide au lieu de null
                 medication_name: "",
                 dosage: "",
                 frequency: 1,
@@ -42,6 +43,9 @@ export function AddPrescriptionForm({
         ],
     })
 
+    // Debug logs
+    console.log('🏥 Medications from API:', medications)
+    console.log('🏥 Form data:', formData)
 
     const frequencies = [
         "Once daily",
@@ -62,7 +66,7 @@ export function AddPrescriptionForm({
         setFormData({
             ...formData,
             medications: [...formData.medications, {
-                medication_id: null, // Utiliser null pour l'ID aussi
+                medication_id: "", // Utiliser string vide au lieu de null
                 medication_name: "",
                 dosage: "",
                 frequency: 1,
@@ -78,27 +82,42 @@ export function AddPrescriptionForm({
         setFormData({...formData, medications: newMedications})
     }
 
-    const updateMedication = (index: number, field: string, value: string) => {
+    const updateMedication = (index: number, field: string, value: string | number) => {
+        console.log('🔄 Updating medication:', { index, field, value })
         const newMedications = [...formData.medications]
         newMedications[index] = {...newMedications[index], [field]: value}
+        console.log('🔄 Updated medication:', newMedications[index])
         setFormData({...formData, medications: newMedications})
     }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         
+        // Validation
+        if (!formData.appointmentId.trim()) {
+            alert("Veuillez entrer un ID d'appointment valide")
+            return
+        }
+        
+        const validMedications = formData.medications.filter(med => 
+            med.medication_id && med.frequency && med.start_date
+        )
+        
+        if (validMedications.length === 0) {
+            alert("Veuillez sélectionner au moins un médicament avec tous les champs requis")
+            return
+        }
+        
         // Adapter au format attendu par l'API
         const newPrescription = {
             appointment_id: formData.appointmentId,
             general_notes: formData.general_notes || "Prescription créée depuis le formulaire",
-            medications: formData.medications.map((med) => ({
-                medication: med.medication_id,
-                medication_name: med.medication_name,
-                dosage: med.dosage,
-                frequency: med.frequency,
+            medications: validMedications.map((med) => ({
+                medication_id: med.medication_id,
+                frequency: parseInt(med.frequency.toString()) || 1,
                 start_date: med.start_date,
-                end_date: med.end_date,
-                instructions: med.instructions,
+                end_date: med.end_date || null,
+                instructions: med.instructions || "",
             })),
         }
         
@@ -233,27 +252,35 @@ export function AddPrescriptionForm({
                                     <div className="space-y-2">
                                         <Label>Medication Name *</Label>
                                         <Select 
-                                            value={medication.medication_id || ""}
+                                            value={medication.medication_id}
                                             onValueChange={(value) => {
+                                                console.log('💊 Medication selected:', value)
                                                 // Trouver le médicament sélectionné par son ID
                                                 const selectedMed = medications?.find(med => 
                                                     med.medication_id === value
                                                 )
+                                                console.log('💊 Found medication:', selectedMed)
                                                 if (selectedMed) {
-                                                    updateMedication(index, "medication_id", value)
-                                                    updateMedication(index, "medication_name", selectedMed.name)
+                                                    // Mettre à jour les deux champs en une seule fois pour éviter les conflits
+                                                    const newMedications = [...formData.medications]
+                                                    newMedications[index] = {
+                                                        ...newMedications[index], 
+                                                        medication_id: value,
+                                                        medication_name: selectedMed.name
+                                                    }
+                                                    setFormData({...formData, medications: newMedications})
+                                                    console.log('💊 Updated medication in one go:', newMedications[index])
                                                 }
-                                            }}
-                                            onOpenChange={() => {
-                                                // Gestion de l'ouverture/fermeture du Select
                                             }}
                                         >
                                             <SelectTrigger className="h-12">
-                                                <SelectValue placeholder={
-                                                    medicationsLoading ? "Loading medications..." : 
-                                                    medicationsError ? "Error loading medications" :
-                                                    "Select medication"
-                                                }/>
+                                                <SelectValue 
+                                                    placeholder={
+                                                        medicationsLoading ? "Loading medications..." : 
+                                                        medicationsError ? "Error loading medications" :
+                                                        "Select medication"
+                                                    }
+                                                />
                                                 {medicationsLoading && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
                                             </SelectTrigger>
                                             <SelectContent 
@@ -320,9 +347,23 @@ export function AddPrescriptionForm({
                                         <Input
                                             type="date"
                                             value={medication.end_date}
-                                            onChange={(e) => updateMedication(index, "end_date", e.target.value)}
+                                            onChange={(e) => {
+                                                const endDate = e.target.value
+                                                const startDate = medication.start_date
+                                                
+                                                // Vérifier que end_date > start_date
+                                                if (endDate && startDate && endDate <= startDate) {
+                                                    alert("La date de fin doit être après la date de début")
+                                                    return
+                                                }
+                                                
+                                                updateMedication(index, "end_date", endDate)
+                                            }}
                                             className="h-12"
-                                            min={medication.start_date}
+                                            min={medication.start_date ? 
+                                                new Date(new Date(medication.start_date).getTime() + 24 * 60 * 60 * 1000)
+                                                    .toISOString().split('T')[0] : undefined
+                                            }
                                         />
                                     </div>
                                 </div>

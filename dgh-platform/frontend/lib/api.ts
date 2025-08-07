@@ -3,10 +3,10 @@
  * Gère toutes les requêtes vers l'API Gateway
  */
 
-import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse, type Prescription, type PrescriptionsPaginatedResponse } from './config'
+import { API_BASE_URL, API_ENDPOINTS, type ApiResponse, type PaginatedResponse, type Appointment, type Patient, type PatientsPaginatedResponse, type Prescription, type PrescriptionsPaginatedResponse, type DashboardMetrics } from './config'
 
 // Export des types pour usage externe
-export type { ApiResponse, PaginatedResponse, Appointment, Patient, PatientsPaginatedResponse, Prescription, PrescriptionsPaginatedResponse }
+export type { ApiResponse, PaginatedResponse, Appointment, Patient, PatientsPaginatedResponse, Prescription, PrescriptionsPaginatedResponse, DashboardMetrics }
 
 // Classe principale pour les requêtes API
 export class ApiService {
@@ -291,6 +291,14 @@ export class ApiService {
 
     async getFeedbackStatus(feedbackId: string, token: string) {
         return this.get(API_ENDPOINTS.FEEDBACK.STATUS(feedbackId), token)
+    }
+
+    // Dashboard
+    async getDashboardMetrics(token: string): Promise<DashboardMetrics> {
+        console.log('🔗 API Service - getDashboardMetrics called')
+        console.log('📍 Endpoint:', API_ENDPOINTS.DASHBOARD.METRICS)
+        console.log('🌐 Full URL:', `${this.baseUrl}${API_ENDPOINTS.DASHBOARD.METRICS}`)
+        return this.get<DashboardMetrics>(API_ENDPOINTS.DASHBOARD.METRICS, token)
     }
 }
 
