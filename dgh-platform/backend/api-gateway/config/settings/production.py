@@ -6,7 +6,8 @@ import os
 DATABASES = {
     'default': config('DATABASE_URL', cast=db_url)
 }
-
+# CSRF trusted origins pour Railway
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='https://h5-gateway.up.railway.app', cast=lambda v: [s.strip() for s in v.split(',')])
 # Static files avec WhiteNoise
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

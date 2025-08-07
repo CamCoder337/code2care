@@ -109,6 +109,7 @@ ROOT_URLCONF = 'config.urls'
 
 CORS_ALLOWED_ORIGINS = config('CORS_ORIGINS', default='http://api-gateway:8000', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = True
 
 REDIS_URL = config('REDIS_URL', 'redis://localhost:6379/0')
 
