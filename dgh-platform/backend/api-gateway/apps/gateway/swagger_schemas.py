@@ -1287,46 +1287,87 @@ list_prescriptions_decorator = swagger_auto_schema(
     
     **Filtres disponibles :**
     - appointment_id : Filtrer par rendez-vous spécifique
+    
+    **Pagination :**
+    - Support de pagination avec métadonnées complètes
+    - Taille de page par défaut : 20, maximum : 100
     """,
     manual_parameters=[
+        openapi.Parameter(
+            'page',
+            openapi.IN_QUERY,
+            description="Numéro de page (défaut: 1)",
+            type=openapi.TYPE_INTEGER,
+            minimum=1
+        ),
+        openapi.Parameter(
+            'page_size',
+            openapi.IN_QUERY,
+            description="Nombre d'éléments par page (défaut: 20, max: 100)",
+            type=openapi.TYPE_INTEGER,
+            minimum=1,
+            maximum=100
+        ),
         openapi.Parameter(
             'appointment_id',
             openapi.IN_QUERY,
             description="Filtrer par ID de rendez-vous",
             type=openapi.TYPE_STRING,
             format=openapi.FORMAT_UUID
+        ),
+        openapi.Parameter(
+            'ordering',
+            openapi.IN_QUERY,
+            description="Champ de tri (défaut: -created_at)",
+            type=openapi.TYPE_STRING,
+            enum=['-created_at', 'created_at', '-updated_at', 'updated_at']
         )
     ],
     responses={
         200: openapi.Response(
-            description='Liste des prescriptions',
+            description='Liste paginée des prescriptions avec métadonnées',
             schema=openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'prescription_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
-                        'appointment_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
-                        'general_notes': openapi.Schema(type=openapi.TYPE_STRING),
-                        'medications': openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'prescription_medication_id': openapi.Schema(type=openapi.TYPE_STRING),
-                                    'medication_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                    'medication_dosage': openapi.Schema(type=openapi.TYPE_STRING),
-                                    'frequency': openapi.Schema(type=openapi.TYPE_NUMBER),
-                                    'start_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
-                                    'end_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
-                                    'instructions': openapi.Schema(type=openapi.TYPE_STRING)
-                                }
-                            )
-                        ),
-                        'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
-                        'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
-                    }
-                )
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='Nombre total de prescriptions'),
+                    'next': openapi.Schema(type=openapi.TYPE_STRING, description='URL de la page suivante'),
+                    'previous': openapi.Schema(type=openapi.TYPE_STRING, description='URL de la page précédente'),
+                    'num_pages': openapi.Schema(type=openapi.TYPE_INTEGER, description='Nombre total de pages'),
+                    'current_page': openapi.Schema(type=openapi.TYPE_INTEGER, description='Page actuelle'),
+                    'page_size': openapi.Schema(type=openapi.TYPE_INTEGER, description='Taille de la page'),
+                    'has_next': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='A une page suivante'),
+                    'has_previous': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='A une page précédente'),
+                    'next_page': openapi.Schema(type=openapi.TYPE_INTEGER, description='Numéro de la page suivante'),
+                    'previous_page': openapi.Schema(type=openapi.TYPE_INTEGER, description='Numéro de la page précédente'),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'prescription_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                                'appointment_id': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_UUID),
+                                'general_notes': openapi.Schema(type=openapi.TYPE_STRING),
+                                'medications': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'prescription_medication_id': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'medication_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'medication_dosage': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'frequency': openapi.Schema(type=openapi.TYPE_NUMBER),
+                                            'start_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                            'end_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                            'instructions': openapi.Schema(type=openapi.TYPE_STRING)
+                                        }
+                                    )
+                                ),
+                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                                'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME)
+                            }
+                        )
+                    )
+                }
             )
         ),
         403: openapi.Response(description='Accès non autorisé')

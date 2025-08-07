@@ -1386,11 +1386,12 @@ def prescription_detail_view(request, prescription_id):
 
 @list_medications_decorator
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def list_medications(request):
     """
     Liste tous les médicaments disponibles dans le système
     Route: GET /api/v1/medications/
+    Accessible avec ou sans authentification
     """
     headers = {
         'Authorization': request.headers.get('Authorization', '')
@@ -1423,7 +1424,7 @@ def list_medications(request):
 
 @get_medication_decorator
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def get_medication(request, medication_id):
     """
     Récupération d'un médicament spécifique

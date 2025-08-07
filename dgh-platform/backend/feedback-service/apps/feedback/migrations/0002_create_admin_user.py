@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 
 def create_admin_user(apps, schema_editor):
     """Crée un superutilisateur par défaut"""
-    username = 'admin'
+    username = 'adminfeedback'
     email = 'admin@feedback.local'
     password = 'admin123'
     

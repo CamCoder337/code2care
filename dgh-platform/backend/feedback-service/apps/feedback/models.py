@@ -13,7 +13,7 @@ class Department(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'departments'
+        db_table = 'fds_departments'
         verbose_name = 'Department'
         verbose_name_plural = 'Departments'
     
@@ -29,7 +29,7 @@ class FeedbackTheme(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'feedback_themes'
+        db_table = 'fds_feedback_themes'
         verbose_name = 'Feedback Theme'
         verbose_name_plural = 'Feedback Themes'
     
@@ -88,7 +88,7 @@ class Feedback(models.Model):
     processed_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
-        db_table = 'feedbacks'
+        db_table = 'fds_feedbacks'
         verbose_name = 'Feedback'
         verbose_name_plural = 'Feedbacks'
         ordering = ['-created_at']
@@ -121,7 +121,7 @@ class Appointment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'appointments'
+        db_table = 'fds_appointments'
         verbose_name = 'Appointment'
         verbose_name_plural = 'Appointments'
         ordering = ['scheduled']
@@ -171,7 +171,7 @@ class Reminder(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'reminders'
+        db_table = 'fds_reminders'
         verbose_name = 'Reminder'
         verbose_name_plural = 'Reminders'
         ordering = ['scheduled_time']
@@ -190,7 +190,7 @@ class Medication(models.Model):
     name = models.CharField(max_length=100)
     
     class Meta:
-        db_table = 'medications'
+        db_table = 'fds_medications'
         verbose_name = 'Medication'
         verbose_name_plural = 'Medications'
     
@@ -209,7 +209,7 @@ class Prescription(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'prescriptions'
+        db_table = 'fds_prescriptions'
         verbose_name = 'Prescription'
         verbose_name_plural = 'Prescriptions'
         ordering = ['-created_at']
@@ -223,7 +223,7 @@ class Prescription(models.Model):
 
 class PrescriptionMedication(models.Model):
     prescription_medication_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    dosage = models.CharField(max_length=50)  # Ex: "500mg", "2 comprimés"
+    dosage = models.CharField(max_length=50, default="500 mg")  # Ex: "500mg", "2 comprimés"
     frequency = models.FloatField()  # Nombre de prises par jour
     start_date = models.DateField()
     end_date = models.DateField()
@@ -234,7 +234,7 @@ class PrescriptionMedication(models.Model):
     medication = models.ForeignKey(Medication, on_delete=models.CASCADE)
     
     class Meta:
-        db_table = 'prescription_medications'
+        db_table = 'fds_prescription_medications'
         verbose_name = 'Prescription Medication'
         verbose_name_plural = 'Prescription Medications'
     
