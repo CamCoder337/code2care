@@ -5,7 +5,8 @@ from .feedback_proxy import (
     create_feedback, my_feedbacks, feedback_status, test_feedback,
     appointments_view, appointment_detail_view, upcoming_appointments, today_appointments,
     prescriptions_view, prescription_detail_view,
-    list_medications, get_medication, patient_profile, list_patients
+    list_medications, get_medication, patient_profile, list_patients,
+    dashboard_metrics
 )
 
 urlpatterns = [
@@ -43,4 +44,7 @@ urlpatterns = [
     
     # Routes patients (pour les professionnels/admins)
     path('api/v1/patients/', list_patients, name='list-patients'),  # GET pour lister tous les patients avec pagination/recherche
+    
+    # Route dashboard metrics
+    path('api/v1/dashboard/metrics/', dashboard_metrics, name='dashboard-metrics'),  # GET pour récupérer les métriques du dashboard
 ]

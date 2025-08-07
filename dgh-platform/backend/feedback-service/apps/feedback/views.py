@@ -1,10 +1,12 @@
 from rest_framework import viewsets, filters, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Count, Avg
+from datetime import datetime, timedelta
 
 from .models import (
     Department, FeedbackTheme, Feedback, Appointment, 
@@ -385,3 +387,123 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         prescriptions = self.get_queryset().filter(appointment_id=appointment_id)
         serializer = self.get_serializer(prescriptions, many=True)
         return Response(serializer.data)
+
+
+# ========== DASHBOARD METRICS ENDPOINTS ==========
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def dashboard_metrics(request):
+    """
+    Endpoint pour récupérer les métriques du dashboard professionnel
+    Route: GET /api/v1/dashboard/metrics/
+    
+    Headers optionnels:
+    - X-User-ID: ID du professionnel (pour filtrer ses données)
+    - X-User-Type: Type d'utilisateur
+    """
+    try:
+        user_id = request.headers.get('X-User-ID')
+        user_type = request.headers.get('X-User-Type')
+        
+        # Calcul des métriques générales (ou filtrées par professionnel)
+        
+        # 1. Métriques des feedbacks
+        feedback_queryset = Feedback.objects.all()
+        if user_type == 'professional' and user_id:
+            # Filtrer par les appointments du professionnel
+            professional_appointments = Appointment.objects.filter(professional_id=user_id)
+            feedback_queryset = feedback_queryset.filter(
+                Q(patient_id__in=professional_appointments.values('patient_id'))
+            )
+        
+        total_feedbacks = feedback_queryset.count()
+        
+        # Comptage par sentiment
+        sentiment_stats = feedback_queryset.values('sentiment').annotate(count=Count('sentiment'))
+        sentiment_counts = {stat['sentiment']: stat['count'] for stat in sentiment_stats}
+        
+        feedback_positive = sentiment_counts.get('positive', 0)
+        feedback_negative = sentiment_counts.get('negative', 0) 
+        feedback_neutral = sentiment_counts.get('neutral', 0)
+        
+        # Calcul des pourcentages de satisfaction
+        satisfaction_rate = round((feedback_positive / total_feedbacks * 100) if total_feedbacks > 0 else 0, 1)
+        insatisfaction_rate = round((feedback_negative / total_feedbacks * 100) if total_feedbacks > 0 else 0, 1)
+        
+        # 2. Métriques des patients
+        patient_queryset = Appointment.objects.values('patient_id').distinct()
+        if user_type == 'professional' and user_id:
+            patient_queryset = patient_queryset.filter(professional_id=user_id)
+        total_patients = patient_queryset.count()
+        
+        # 3. Métriques des appointments
+        appointment_queryset = Appointment.objects.all()
+        if user_type == 'professional' and user_id:
+            appointment_queryset = appointment_queryset.filter(professional_id=user_id)
+        
+        total_appointments = appointment_queryset.count()
+        
+        # Appointments d'aujourd'hui
+        today = timezone.now().date()
+        today_appointments = appointment_queryset.filter(scheduled__date=today).count()
+        
+        # Appointments de cette semaine
+        week_start = today - timedelta(days=today.weekday())
+        week_appointments = appointment_queryset.filter(
+            scheduled__date__gte=week_start,
+            scheduled__date__lte=today
+        ).count()
+        
+        # 4. Métriques des prescriptions
+        prescription_queryset = Prescription.objects.all()
+        if user_type == 'professional' and user_id:
+            # Filtrer par les appointments du professionnel
+            prescription_queryset = prescription_queryset.filter(
+                appointment_id__in=appointment_queryset.values('appointment_id')
+            )
+        
+        total_prescriptions = prescription_queryset.count()
+        
+        # Prescriptions de cette semaine
+        week_prescriptions = prescription_queryset.filter(
+            created_at__date__gte=week_start,
+            created_at__date__lte=today
+        ).count()
+        
+        # Préparation des données de réponse
+        metrics = {
+            'feedbacks': {
+                'total': total_feedbacks,
+                'positive': feedback_positive,
+                'negative': feedback_negative,
+                'neutral': feedback_neutral,
+                'satisfaction_rate': satisfaction_rate,
+                'insatisfaction_rate': insatisfaction_rate
+            },
+            'patients': {
+                'total': total_patients
+            },
+            'appointments': {
+                'total': total_appointments,
+                'today': today_appointments,
+                'this_week': week_appointments
+            },
+            'prescriptions': {
+                'total': total_prescriptions,
+                'this_week': week_prescriptions
+            },
+            'metadata': {
+                'professional_id': user_id if user_type == 'professional' else None,
+                'generated_at': timezone.now().isoformat(),
+                'period': 'all_time'
+            }
+        }
+        
+        return Response(metrics, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Erreur lors du calcul des métriques: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

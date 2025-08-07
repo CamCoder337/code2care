@@ -1735,3 +1735,85 @@ def list_patients(request):
             {'error': 'Erreur lors de la récupération des patients'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ========== DASHBOARD METRICS ENDPOINT ==========
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_metrics(request):
+    """
+    Proxy pour récupérer les métriques du dashboard professionnel
+    Route: GET /api/v1/dashboard/metrics/
+    """
+    user_type = None
+    user_id = None
+    
+    try:
+        # Détermination du type d'utilisateur
+        if request.user.user_type == 'patient':
+            try:
+                patient = Patient.objects.get(user=request.user)
+                user_type = 'patient'
+                user_id = str(patient.patient_id)
+            except Patient.DoesNotExist:
+                return Response(
+                    {'error': 'Profil patient introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'professional':
+            try:
+                professional = Professional.objects.get(user=request.user)
+                user_type = 'professional'
+                user_id = str(professional.professional_id)
+            except Professional.DoesNotExist:
+                return Response(
+                    {'error': 'Profil professionnel introuvable'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif request.user.user_type == 'admin':
+            user_type = 'admin'
+            user_id = str(request.user.id)
+        else:
+            return Response(
+                {'error': 'Type d\'utilisateur non supporté'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+    
+    except Exception as e:
+        logger.error(f"Erreur lors de la détermination du type d'utilisateur: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la vérification du profil utilisateur'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+    # Headers pour l'authentification avec le feedback-service
+    headers = {
+        'X-User-ID': user_id,
+        'X-User-Type': user_type,
+        'Authorization': request.headers.get('Authorization', '')
+    }
+    
+    try:
+        service_url = settings.MICROSERVICES.get('FEEDBACK_SERVICE')
+        if not service_url:
+            return Response(
+                {'error': 'Service feedback temporairement indisponible'}, 
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(
+                f"{service_url}/api/v1/dashboard/metrics/",
+                headers=headers,
+                params=request.query_params.dict()
+            )
+        
+        return Response(response.json(), status=response.status_code)
+            
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des métriques dashboard: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération des métriques dashboard'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

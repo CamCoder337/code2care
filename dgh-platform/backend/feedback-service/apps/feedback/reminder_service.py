@@ -132,6 +132,11 @@ def generate_medication_reminders(prescription_id: str) -> Dict:
         prescription = Prescription.objects.get(prescription_id=prescription_id)
         prescription_medications = prescription.medications.all()
         
+        print(f"🔍 DEBUG: Prescription {prescription_id} trouvée")
+        print(f"🔍 DEBUG: Nombre de médicaments: {prescription_medications.count()}")
+        for med in prescription_medications:
+            print(f"🔍 DEBUG: Médicament: {med.medication.name} - {med.dosage}")
+        
         if not prescription_medications:
             logger.warning(f"Aucun médicament trouvé pour la prescription {prescription_id}")
             return {'success': False, 'message': 'Aucun médicament dans la prescription'}
