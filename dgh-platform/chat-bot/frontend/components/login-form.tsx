@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/lib/auth-context"
+import { useTranslationsSync } from "@/hooks/use-translations-sync"
 import { Eye, EyeOff, Mail, Lock } from "lucide-react"
 import Image from "next/image"
 
@@ -19,6 +20,7 @@ export function LoginForm({ onClose }: LoginFormProps) {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const { login, isLoading } = useAuth()
+  const { t } = useTranslationsSync()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,7 +46,7 @@ export function LoginForm({ onClose }: LoginFormProps) {
             />
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-emerald-500 bg-clip-text text-transparent">
-            Welcome to HIGH5
+            {t("auth.welcome")} to HIGH5
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -53,7 +55,7 @@ export function LoginForm({ onClose }: LoginFormProps) {
               <Mail className="absolute left-3 top-3 h-4 w-4 text-teal-500" />
               <Input
                 type="email"
-                placeholder="Email"
+                placeholder={t("auth.email")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 border-teal-200 focus:border-teal-500 focus:ring-teal-500"
@@ -64,7 +66,7 @@ export function LoginForm({ onClose }: LoginFormProps) {
               <Lock className="absolute left-3 top-3 h-4 w-4 text-teal-500" />
               <Input
                 type={showPassword ? "text" : "password"}
-                placeholder="Password"
+                placeholder={t("auth.password")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 pr-10 border-teal-200 focus:border-teal-500 focus:ring-teal-500"
@@ -85,14 +87,14 @@ export function LoginForm({ onClose }: LoginFormProps) {
                 onClick={onClose}
                 className="flex-1 border-teal-200 text-teal-600 hover:bg-teal-50 bg-transparent"
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
                 disabled={isLoading}
                 className="flex-1 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white transition-all duration-200 transform hover:scale-105"
               >
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? t("common.loading") : t("auth.loginButton")}
               </Button>
             </div>
           </form>

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useConversations } from "@/lib/conversation-context"
 import { useFiles } from "@/lib/files-context"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
+import { useTranslationsSync } from "@/hooks/use-translations-sync"
 import { getApiUrl, fetchWithTimeout } from '@/lib/api-config'
 import {
   Send,
@@ -69,15 +70,17 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
   const inputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  const { t } = useTranslationsSync()
+
   // Memoized suggestions pour éviter les re-créations
   const suggestions = useMemo(() => [
-    "Quelles sont les idées de petit-déjeuner sain ?",
-    "Comment puis-je améliorer la qualité de mon sommeil ?",
-    "Quels exercices sont bons pour les maux de dos ?",
-    "Parlez-moi des techniques de gestion du stress",
-    "Comment maintenir une alimentation équilibrée ?",
-    "Quels sont les bienfaits de la méditation ?",
-  ], [])
+    t("chat.healthBreakfast"),
+    t("chat.sleepQuality"),
+    t("chat.backPain"),
+    t("chat.stressManagement"),
+    t("chat.balancedDiet"),
+    t("chat.meditationBenefits"),
+  ], [t])
 
   // Scroll optimisé avec requestAnimationFrame
   const scrollToBottom = useCallback(() => {
@@ -436,7 +439,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="Que voulez-vous savoir ?"
+                      placeholder={t("chat.typeMessage")}
                       className="w-full px-6 py-4 text-lg border-0 bg-transparent focus:ring-0 focus:outline-none rounded-2xl"
                       disabled={isLoading || contextLoading}
                     />
@@ -466,7 +469,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
                               />
                               <Button asChild variant="ghost" size="sm" className="w-full justify-start text-sm">
                                 <label htmlFor="file-upload-input" className="cursor-pointer">
-                                  Télécharger des fichiers
+                                  {t("files.uploadFile")}
                                 </label>
                               </Button>
                             </div>
@@ -592,7 +595,7 @@ export function ChatInterface({ sidebarOpen }: ChatInterfaceProps): React.JSX.El
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Posez votre question..."
+                placeholder={t("chat.typeMessage")}
                 className="w-full px-6 py-4 border-0 bg-transparent focus:ring-0 focus:outline-none rounded-2xl"
                 disabled={isLoading || contextLoading}
               />
