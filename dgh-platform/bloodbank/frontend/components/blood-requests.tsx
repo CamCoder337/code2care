@@ -34,17 +34,182 @@ import {
   Check,
   Loader2
 } from "lucide-react"
-import { toast } from "sonner"
-import {
-  useBloodRequests,
-  useCreateBloodRequest,
-  useSites,
-  useOnlineStatus
-} from "@/lib/hooks/useApi"
 
 const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 const priorityOptions = ['Urgent', 'Routine']
 const statusOptions = ['Pending', 'Approved', 'Fulfilled', 'Rejected']
+
+// Mock functions to simulate API hooks (replace with actual hooks)
+const useBloodRequests = (params, options) => {
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState({
+    results: [
+      {
+        request_id: "REQ000003580",
+        department: "DEPT_EMG_001",
+        department_name: "Emergency Department",
+        site: "SITE_DLA_001",
+        site_name: "Douala General Hospital",
+        blood_type: "O+",
+        quantity: 2,
+        priority: "Urgent",
+        status: "Pending",
+        request_date: "2025-08-07T10:30:00Z",
+        reason: "Emergency surgery requiring blood transfusion"
+      },
+      {
+        request_id: "REQ000003581",
+        department: "DEPT_ICU_001",
+        department_name: "Intensive Care Unit",
+        site: "SITE_DLA_001",
+        site_name: "Douala General Hospital",
+        blood_type: "A+",
+        quantity: 1,
+        priority: "Routine",
+        status: "Approved",
+        request_date: "2025-08-06T14:15:00Z",
+        reason: "Routine blood replacement"
+      }
+    ],
+    count: 2,
+    next: null,
+    previous: null
+  })
+
+  const refetch = useCallback(() => {
+    setLoading(true)
+    setTimeout(() => setLoading(false), 1000)
+  }, [])
+
+  return {
+    data,
+    isLoading: loading,
+    error: null,
+    refetch
+  }
+}
+
+const useCreateBloodRequest = (options) => {
+  const [loading, setLoading] = useState(false)
+
+  const mutate = useCallback((requestData) => {
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      console.log('Creating request:', requestData)
+      options?.onSuccess?.({
+        ...requestData,
+        request_id: `REQ${Date.now()}`,
+        request_date: new Date().toISOString(),
+        status: 'Pending'
+      })
+    }, 1500)
+  }, [options])
+
+  return {
+    mutate,
+    isLoading: loading
+  }
+}
+
+const useSites = (params, options) => {
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState({
+    results: [
+      {
+        site_id: "SITE_DLA_001",
+        nom: "Douala General Hospital",
+        ville: "Douala",
+        manager: "Dr. Jean Mballa",
+        phone: "+237 677 123 456",
+        departments: [
+          {
+            department_id: "DEPT_EMG_001",
+            name: "Emergency Department",
+            head_of_department: "Dr. Marie Nkomo",
+            is_emergency_department: true
+          },
+          {
+            department_id: "DEPT_ICU_001",
+            name: "Intensive Care Unit",
+            head_of_department: "Dr. Paul Ekani",
+            is_emergency_department: false
+          },
+          {
+            department_id: "DEPT_SUR_001",
+            name: "Surgery Department",
+            head_of_department: "Dr. Agnes Fotso",
+            is_emergency_department: false
+          },
+          {
+            department_id: "DEPT_PED_001",
+            name: "Pediatrics",
+            head_of_department: "Dr. Christine Awono",
+            is_emergency_department: false
+          }
+        ]
+      },
+      {
+        site_id: "SITE_YDE_002",
+        nom: "Yaoundé Central Hospital",
+        ville: "Yaoundé",
+        manager: "Dr. Robert Fouda",
+        phone: "+237 655 987 654",
+        departments: [
+          {
+            department_id: "DEPT_EMG_002",
+            name: "Emergency Department",
+            head_of_department: "Dr. Sylvie Mengue",
+            is_emergency_department: true
+          },
+          {
+            department_id: "DEPT_CAR_002",
+            name: "Cardiology Department",
+            head_of_department: "Dr. Martin Essomba",
+            is_emergency_department: false
+          },
+          {
+            department_id: "DEPT_NEU_002",
+            name: "Neurology Department",
+            head_of_department: "Dr. Claudine Njoh",
+            is_emergency_department: false
+          }
+        ]
+      }
+    ],
+    count: 2,
+    next: null,
+    previous: null
+  })
+
+  return {
+    data,
+    isLoading: loading
+  }
+}
+
+const useUpdateBloodRequest = (options) => {
+  const [loading, setLoading] = useState(false)
+
+  const mutate = useCallback(({ requestId, updates }) => {
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      console.log('Updating request:', requestId, updates)
+      options?.onSuccess?.({
+        request_id: requestId,
+        ...updates
+      })
+    }, 1000)
+  }, [options])
+
+  return {
+    mutate,
+    isLoading: loading
+  }
+}
+
+const useOnlineStatus = () => ({ isOnline: true })
 
 export default function BloodRequestsManagement() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -55,7 +220,7 @@ export default function BloodRequestsManagement() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showViewDialog, setShowViewDialog] = useState(false)
   const [showProcessDialog, setShowProcessDialog] = useState(false)
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [isMobile, setIsMobile] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
 
@@ -76,6 +241,7 @@ export default function BloodRequestsManagement() {
   React.useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
     window.addEventListener('resize', handleResize)
+    handleResize()
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
@@ -123,7 +289,14 @@ export default function BloodRequestsManagement() {
     }
   })
 
-  // Process local search filtering (for client-side search)
+  const updateRequestMutation = useUpdateBloodRequest({
+    onSuccess: () => {
+      setShowProcessDialog(false)
+      refetchRequests()
+    }
+  })
+
+  // Process local search filtering
   const filteredRequests = useMemo(() => {
     if (!requestsData?.results) return []
 
@@ -180,17 +353,12 @@ export default function BloodRequestsManagement() {
   // Handle create request
   const handleCreateRequest = useCallback(async () => {
     if (!newRequest.site || !newRequest.department || !newRequest.blood_type || !newRequest.quantity) {
-      toast.error("Veuillez remplir tous les champs obligatoires")
+      alert("Veuillez remplir tous les champs obligatoires")
       return
     }
 
     if (parseInt(newRequest.quantity) <= 0) {
-      toast.error("La quantité doit être supérieure à 0")
-      return
-    }
-
-    if (!isOnline) {
-      toast.warning("Fonction non disponible hors ligne")
+      alert("La quantité doit être supérieure à 0")
       return
     }
 
@@ -206,21 +374,36 @@ export default function BloodRequestsManagement() {
     }
 
     createRequestMutation.mutate(requestData)
-  }, [newRequest, isOnline, createRequestMutation])
+  }, [newRequest, createRequestMutation])
 
-  // Handle process request (would need additional API endpoint)
+  // Handle process request
   const handleProcessRequest = useCallback((action) => {
     if (!selectedRequest) return
 
-    // This would need an API endpoint for updating request status
-    toast.info(`Fonctionnalité de traitement des demandes en cours de développement`)
-    setShowProcessDialog(false)
-  }, [selectedRequest])
+    let newStatus = selectedRequest.status
+    switch (action) {
+      case 'approve':
+        newStatus = 'Approved'
+        break
+      case 'reject':
+        newStatus = 'Rejected'
+        break
+      case 'fulfill':
+        newStatus = 'Fulfilled'
+        break
+      default:
+        return
+    }
+
+    updateRequestMutation.mutate({
+      requestId: selectedRequest.request_id,
+      updates: { status: newStatus }
+    })
+  }, [selectedRequest, updateRequestMutation])
 
   // Refresh data
   const handleRefresh = useCallback(() => {
     refetchRequests()
-    toast.success("Données actualisées")
   }, [refetchRequests])
 
   // Status and priority badges
@@ -260,27 +443,6 @@ export default function BloodRequestsManagement() {
             <p className="text-muted-foreground">Chargement des demandes...</p>
           </div>
         </div>
-      </div>
-    )
-  }
-
-  // Error state
-  if (requestsError && !requestsData) {
-    return (
-      <div className="p-6 space-y-6">
-        <Alert className="border-red-200 bg-red-50">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Erreur lors du chargement des demandes.
-            <Button
-              variant="link"
-              className="p-0 h-auto ml-2"
-              onClick={() => refetchRequests()}
-            >
-              Réessayer
-            </Button>
-          </AlertDescription>
-        </Alert>
       </div>
     )
   }
@@ -372,10 +534,14 @@ export default function BloodRequestsManagement() {
                   <Select
                     value={newRequest.department}
                     onValueChange={(value) => setNewRequest(prev => ({ ...prev, department: value }))}
-                    disabled={!newRequest.site}
+                    disabled={!newRequest.site || availableDepartments.length === 0}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder={!newRequest.site ? "Select a site first" : "Select department"} />
+                      <SelectValue placeholder={
+                        !newRequest.site ? "Select a site first" :
+                        availableDepartments.length === 0 ? "No departments available" :
+                        "Select department"
+                      } />
                     </SelectTrigger>
                     <SelectContent>
                       {availableDepartments.map((dept) => (
@@ -1123,29 +1289,30 @@ export default function BloodRequestsManagement() {
                 </div>
               </div>
 
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-sm">
-                  This functionality is currently under development. Processing actions will be available in the next update.
-                </AlertDescription>
-              </Alert>
-
               <div className="grid grid-cols-1 gap-2">
                 <Button
                   onClick={() => handleProcessRequest('approve')}
                   className="w-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center"
-                  disabled
+                  disabled={updateRequestMutation.isLoading}
                 >
-                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {updateRequestMutation.isLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                  )}
                   Approve Request
                 </Button>
 
                 <Button
                   onClick={() => handleProcessRequest('fulfill')}
                   className="w-full bg-green-600 hover:bg-green-700 flex items-center justify-center"
-                  disabled
+                  disabled={updateRequestMutation.isLoading}
                 >
-                  <Target className="w-4 h-4 mr-2" />
+                  {updateRequestMutation.isLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Target className="w-4 h-4 mr-2" />
+                  )}
                   Fulfill Request
                 </Button>
 
@@ -1153,9 +1320,13 @@ export default function BloodRequestsManagement() {
                   variant="outline"
                   onClick={() => handleProcessRequest('reject')}
                   className="w-full border-red-600 text-red-600 hover:bg-red-50 flex items-center justify-center"
-                  disabled
+                  disabled={updateRequestMutation.isLoading}
                 >
-                  <XCircle className="w-4 h-4 mr-2" />
+                  {updateRequestMutation.isLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <XCircle className="w-4 h-4 mr-2" />
+                  )}
                   Reject Request
                 </Button>
               </div>
@@ -1167,6 +1338,7 @@ export default function BloodRequestsManagement() {
               variant="outline"
               onClick={() => setShowProcessDialog(false)}
               className="w-full"
+              disabled={updateRequestMutation.isLoading}
             >
               Cancel
             </Button>

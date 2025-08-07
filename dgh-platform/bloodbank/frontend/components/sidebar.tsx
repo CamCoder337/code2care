@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { LanguageSelector } from "@/components/language-selector"
+import { LanguageSelector, CompactLanguageSelector } from "./language-selector"
 import { useLanguage } from "@/lib/i18n"
 import { useTheme } from "next-themes"
 import Image from "next/image"
@@ -132,7 +132,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
           size="sm"
           onClick={() => setSidebarOpen(true)}
           className="fixed top-4 left-4 z-50 lg:hidden rounded-full w-10 h-10 p-0 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-white border-gray-300 dark:border-slate-600 shadow-lg"
-          aria-label="Open menu"
+          aria-label={t("open_menu")}
         >
           <Menu className="w-4 h-4" />
         </Button>
@@ -157,7 +157,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           flex flex-col
         `}
-        aria-label="Sidebar"
+        aria-label={t("sidebar")}
       >
         {/* Header */}
         <header className="p-4 border-b border-gray-200 dark:border-gray-700/50 flex-shrink-0 relative">
@@ -180,8 +180,8 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
           {!collapsed && (
             <div className="text-center">
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">HIGH5</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Blood Bank System</p>
-              <p className="text-xs text-gray-500 dark:text-gray-500">République du Cameroun</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t("blood_bank_system")}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500">{t("cameroon")}</p>
             </div>
           )}
 
@@ -192,7 +192,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
               size="sm"
               onClick={closeMobileMenu}
               className="absolute top-4 right-4 z-50 lg:hidden rounded-full w-10 h-10 p-0 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-white border-gray-300 dark:border-slate-600 shadow-lg"
-              aria-label="Close menu"
+              aria-label={t("close_menu")}
             >
               <X className="w-4 h-4" />
             </Button>
@@ -207,11 +207,11 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Blood Manager</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Administrator</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{t("blood_manager")}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{t("administrator")}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full" />
-                  <span className="text-xs text-green-600 dark:text-green-400">En ligne</span>
+                  <span className="text-xs text-green-600 dark:text-green-400">{t("online")}</span>
                 </div>
               </div>
             )}
@@ -219,11 +219,11 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
         </section>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 min-h-0" aria-label="Main navigation">
+        <nav className="flex-1 overflow-y-auto py-4 min-h-0" aria-label={t("main_navigation")}>
           <div className="px-4">
             {!collapsed && (
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">
-                NAVIGATION
+                {t("navigation")}
               </p>
             )}
             <ul className="space-y-2">
@@ -278,7 +278,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                 size="sm"
                 className="w-full h-10 p-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
                 onClick={toggleTheme}
-                title={theme === "dark" ? "Mode Clair" : "Mode Sombre"}
+                title={theme === "dark" ? t("light_mode") : t("dark_mode")}
               >
                 {theme === "dark" ? (
                   <Sun className="w-4 h-4 text-yellow-500" />
@@ -287,15 +287,8 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                 )}
               </Button>
 
-              {/* Language Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full h-10 p-0 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700/50 transition-all duration-300"
-                title="Langue / Language"
-              >
-                <Globe className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              </Button>
+              {/* Compact Language Selector */}
+              <CompactLanguageSelector />
 
               {/* Settings */}
               <Button
@@ -306,7 +299,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                   setActiveView("settings")
                   setSidebarOpen(false)
                 }}
-                title="Paramètres"
+                title={t("settings")}
               >
                 <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </Button>
@@ -316,7 +309,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                 variant="ghost"
                 size="sm"
                 className="w-full h-10 p-0 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
-                title="Déconnexion"
+                title={t("logout")}
               >
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -350,7 +343,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                     <Moon className="w-5 h-5 text-blue-500" />
                   )}
                   <span className="text-xs font-medium text-center leading-tight">
-                    {theme === "dark" ? "Clair" : "Sombre"}
+                    {theme === "dark" ? t("light") : t("dark")}
                   </span>
                 </Button>
 
@@ -366,7 +359,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                 >
                   <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                   <span className="text-xs font-medium text-center leading-tight">
-                    Paramètres
+                    {t("settings")}
                   </span>
                 </Button>
 
@@ -377,7 +370,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
                   className="col-span-2 flex items-center justify-center gap-2 h-12 p-2 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span className="text-sm font-medium">Déconnexion</span>
+                  <span className="text-sm font-medium">{t("logout")}</span>
                 </Button>
               </div>
             </div>
@@ -390,7 +383,7 @@ export function Sidebar({ activeView, setActiveView, sidebarOpen, setSidebarOpen
           size="sm"
           className="absolute -right-3 top-20 rounded-full w-6 h-6 p-0 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-700 dark:text-white hidden lg:flex shadow-lg"
           onClick={toggleCollapse}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? t("expand_sidebar") : t("collapse_sidebar")}
         >
           {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
         </Button>

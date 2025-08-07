@@ -7,7 +7,7 @@ type Language = "fr" | "en"
 interface LanguageContextType {
   language: Language
   setLanguage: (lang: Language) => void
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, any>) => string
 }
 
 const translations = {
@@ -25,17 +25,32 @@ const translations = {
     data_import: "Import Données",
     logout: "Déconnexion",
 
-    // Dashboard
+    // Dashboard - Headers
     welcome_message: "Bonjour, Gestionnaire",
-    today_overview: "Tableau de bord intelligent pour la gestion optimale des ressources sanguines",
-    total_units: "Total Unités",
+    system_overview: "Vue d'ensemble du système",
+    dashboard_title: "Tableau de bord intelligent pour la gestion optimale des ressources sanguines",
+
+    // KPIs
+    total_stock: "Stock Total",
+    available_stock: "Stock Disponible",
+    total_units: "Unités Totales",
     available_units: "Unités Disponibles",
     pending_requests: "Demandes en Attente",
     critical_alerts: "Alertes Critiques",
-    blood_inventory_overview: "Aperçu Inventaire Sanguin",
-    current_stock_levels: "Niveaux de stock actuels",
-    ai_forecasting: "Prévisions IA",
-    predicted_demand: "Demande prédite",
+    system_efficiency: "Efficacité Système",
+    daily_activity: "Activité Quotidienne",
+    blood_type_stock: "Stock par Groupe",
+    system_alerts: "Alertes Système",
+
+    // Metrics
+    utilization: "d'utilisation",
+    ready: "prêt",
+    urgent: "urgent",
+    expired: "expirées",
+    transfusions_today: "Transfusions aujourd'hui",
+    units_used: "Unités utilisées",
+    expiring_soon: "Expire bientôt",
+    efficiency: "Efficacité",
 
     // Blood Types
     "O+": "O+",
@@ -46,23 +61,43 @@ const translations = {
     "B-": "B-",
     "AB+": "AB+",
     "AB-": "AB-",
+    blood_type: "Groupe Sanguin",
 
     // Status
     critical: "Critique",
     warning: "Attention",
     good: "Bon",
-    blood_type: "Groupe Sanguin",
+    low: "Faible",
 
     // Actions
     view: "Voir",
+    view_all: "Voir tout",
     edit: "Modifier",
     delete: "Supprimer",
     add: "Ajouter",
     save: "Enregistrer",
     cancel: "Annuler",
     refresh: "Actualiser",
+    export_report: "Exporter Rapport",
+    acknowledge_all: "Tout marquer",
+    retry: "Réessayer",
+
+    // States
     loading: "Chargement...",
+    processing: "Traitement...",
+    exporting: "Export...",
     error: "Erreur",
+
+    // Messages
+    data_refreshed_successfully: "Données actualisées avec succès",
+    refresh_error: "Erreur lors de l'actualisation",
+    system_error: "Erreur Système",
+    data_loading_error: "Erreur lors du chargement des données",
+    loading_system_data: "Récupération des données du système",
+    no_alerts: "Aucune alerte",
+    all_systems_normal: "Tous les systèmes fonctionnent normalement",
+    last_updated: "Dernière mise à jour",
+    and_more: "et {{count}} de plus",
 
     // Common
     name: "Nom",
@@ -81,6 +116,29 @@ const translations = {
     french: "Français",
     english: "English",
     cameroon: "Cameroun",
+
+    // Inventory
+    blood_inventory_overview: "Aperçu Inventaire Sanguin",
+    current_stock_levels: "Niveaux de stock actuels",
+    ai_forecasting: "Prévisions IA",
+    predicted_demand: "Demande prédite",
+
+    // UI Elements
+    navigation: "Navigation",
+    sidebar: "Menu latéral",
+    main_navigation: "Navigation principale",
+    blood_bank_system: "Système de Banque de Sang",
+    blood_manager: "Gestionnaire Sang",
+    administrator: "Administrateur",
+    online: "En ligne",
+    open_menu: "Ouvrir le menu",
+    close_menu: "Fermer le menu",
+    expand_sidebar: "Étendre la barre latérale",
+    collapse_sidebar: "Réduire la barre latérale",
+    light_mode: "Mode Clair",
+    dark_mode: "Mode Sombre",
+    light: "Clair",
+    dark: "Sombre",
   },
   en: {
     // Navigation
@@ -96,17 +154,32 @@ const translations = {
     data_import: "Data Import",
     logout: "Logout",
 
-    // Dashboard
+    // Dashboard - Headers
     welcome_message: "Hello, Manager",
-    today_overview: "Intelligent dashboard for optimal blood resource management",
+    system_overview: "System Overview",
+    dashboard_title: "Intelligent dashboard for optimal blood resource management",
+
+    // KPIs
+    total_stock: "Total Stock",
+    available_stock: "Available Stock",
     total_units: "Total Units",
     available_units: "Available Units",
     pending_requests: "Pending Requests",
     critical_alerts: "Critical Alerts",
-    blood_inventory_overview: "Blood Inventory Overview",
-    current_stock_levels: "Current stock levels",
-    ai_forecasting: "AI Forecasting",
-    predicted_demand: "Predicted demand",
+    system_efficiency: "System Efficiency",
+    daily_activity: "Daily Activity",
+    blood_type_stock: "Stock by Type",
+    system_alerts: "System Alerts",
+
+    // Metrics
+    utilization: "utilization",
+    ready: "ready",
+    urgent: "urgent",
+    expired: "expired",
+    transfusions_today: "Transfusions today",
+    units_used: "Units used",
+    expiring_soon: "Expiring soon",
+    efficiency: "Efficiency",
 
     // Blood Types
     "O+": "O+",
@@ -117,23 +190,43 @@ const translations = {
     "B-": "B-",
     "AB+": "AB+",
     "AB-": "AB-",
+    blood_type: "Blood Type",
 
     // Status
     critical: "Critical",
     warning: "Warning",
     good: "Good",
-    blood_type: "Blood Type",
+    low: "Low",
 
     // Actions
     view: "View",
+    view_all: "View All",
     edit: "Edit",
     delete: "Delete",
     add: "Add",
     save: "Save",
     cancel: "Cancel",
     refresh: "Refresh",
+    export_report: "Export Report",
+    acknowledge_all: "Acknowledge All",
+    retry: "Retry",
+
+    // States
     loading: "Loading...",
+    processing: "Processing...",
+    exporting: "Exporting...",
     error: "Error",
+
+    // Messages
+    data_refreshed_successfully: "Data refreshed successfully",
+    refresh_error: "Error while refreshing",
+    system_error: "System Error",
+    data_loading_error: "Error loading data",
+    loading_system_data: "Loading system data",
+    no_alerts: "No alerts",
+    all_systems_normal: "All systems operating normally",
+    last_updated: "Last updated",
+    and_more: "and {{count}} more",
 
     // Common
     name: "Name",
@@ -152,6 +245,29 @@ const translations = {
     french: "Français",
     english: "English",
     cameroon: "Cameroon",
+
+    // Inventory
+    blood_inventory_overview: "Blood Inventory Overview",
+    current_stock_levels: "Current stock levels",
+    ai_forecasting: "AI Forecasting",
+    predicted_demand: "Predicted demand",
+
+    // UI Elements
+    navigation: "Navigation",
+    sidebar: "Sidebar",
+    main_navigation: "Main navigation",
+    blood_bank_system: "Blood Bank System",
+    blood_manager: "Blood Manager",
+    administrator: "Administrator",
+    online: "Online",
+    open_menu: "Open menu",
+    close_menu: "Close menu",
+    expand_sidebar: "Expand sidebar",
+    collapse_sidebar: "Collapse sidebar",
+    light_mode: "Light Mode",
+    dark_mode: "Dark Mode",
+    light: "Light",
+    dark: "Dark",
   },
 }
 
@@ -160,8 +276,17 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>("fr")
 
-  const t = (key: string): string => {
-    return translations[language][key as keyof (typeof translations)[typeof language]] || key
+  const t = (key: string, params?: Record<string, any>): string => {
+    let translation = translations[language][key as keyof (typeof translations)[typeof language]] || key
+
+    // Support pour les paramètres avec {{variable}}
+    if (params && typeof translation === 'string') {
+      Object.keys(params).forEach(param => {
+        translation = translation.replace(new RegExp(`{{${param}}}`, 'g'), String(params[param]))
+      })
+    }
+
+    return translation
   }
 
   return <LanguageContext.Provider value={{ language, setLanguage, t }}>{children}</LanguageContext.Provider>
