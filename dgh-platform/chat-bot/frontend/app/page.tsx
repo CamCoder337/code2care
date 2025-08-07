@@ -6,6 +6,8 @@ import { ThemeProvider } from "@/lib/theme-context"
 import { AuthProvider } from "@/lib/auth-context"
 import { ConversationProvider } from "@/lib/conversation-context"
 import { FilesProvider } from "@/lib/files-context"
+import { LanguageProvider } from "@/lib/language-context"
+
 
 import { ErrorBoundary } from "@/components/error-boundary"
 import { LoadingSpinner } from "@/components/loading-spinner"
@@ -71,15 +73,17 @@ function ChatApp(): React.JSX.Element {
 export default function Page(): React.JSX.Element {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <AuthProvider>
-          <ConversationProvider>
-            <FilesProvider>
-              <ChatApp />
-            </FilesProvider>
-          </ConversationProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ConversationProvider>
+              <FilesProvider>
+                <ChatApp />
+              </FilesProvider>
+            </ConversationProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   )
 }

@@ -7,6 +7,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useAuth } from "@/lib/auth-context"
 import { useTheme } from "@/lib/theme-context"
 import { useConversations } from "@/lib/conversation-context"
+import { LanguageSelectorCompact } from "@/components/language-selector"
+import { useTranslationsSync } from "@/hooks/use-translations-sync"
+import { SettingsModal } from "@/components/settings-modal"
 import { DeleteConfirmationModal } from "@/components/delete-confirmation-modal"
 import { RenameModal } from "@/components/rename-modal"
 import { SearchPopup } from "@/components/search-popup"
@@ -27,6 +30,7 @@ import {
   Trash2,
   Edit3,
   X,
+  Settings,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -39,6 +43,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
+  const { t } = useTranslationsSync()
   const toggleTheme = () => {
   setTheme(theme === 'light' ? 'dark' : 'light')
   }
@@ -67,6 +72,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
     conversationId: "",
     title: "",
   })
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     setFilteredConversations(searchConversations(searchQuery))
@@ -198,7 +204,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
                 </div>
                 <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
                   <LogOut className="h-4 w-4 mr-2" />
-                  Se déconnecter
+                  {t("auth.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -208,18 +214,28 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
               variant="ghost"
               size="icon"
               className="w-8 h-8 text-gray-600 hover:text-teal-600 hover:bg-teal-50 dark:text-gray-400 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-all duration-200"
-              title="Se connecter"
+              title={t("auth.login")}
             >
               <User className="h-4 w-4" />
             </Button>
           )}
 
+          <LanguageSelectorCompact />
+          <Button
+            onClick={() => setShowSettings(true)}
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 text-gray-600 hover:text-teal-600 hover:bg-teal-50 dark:text-gray-400 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-all duration-200"
+            title={t("settings.title")}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
           <Button
             onClick={onToggle}
             variant="ghost"
             size="icon"
             className="w-8 h-8 text-gray-600 hover:text-teal-600 hover:bg-teal-50 dark:text-gray-400 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-all duration-200"
-            title="Développer"
+            title={t("sidebar.toggleSidebar")}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -253,7 +269,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
               className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Nouvelle conversation
+              {t("conversations.newConversation")}
             </Button>
           </div>
 
@@ -264,7 +280,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher..."
+                placeholder={t("common.search")}
                 className="pl-10 pr-10"
               />
               {searchQuery && (
@@ -283,7 +299,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
             <div className="space-y-2">
               {filteredConversations.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  {searchQuery ? "Aucune conversation trouvée" : "Aucune conversation"}
+                  {searchQuery ? t("conversations.noConversations") : t("conversations.noConversations")}
                 </div>
               ) : (
                 filteredConversations.map((conv) => (
@@ -320,7 +336,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
                           }}
                         >
                           <Edit3 className="h-4 w-4 mr-2" />
-                          Renommer
+                          {t("common.edit")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => {
@@ -330,7 +346,7 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
                           className="text-red-600 focus:text-red-600"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Supprimer
+                          {t("common.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -363,6 +379,11 @@ export function Sidebar({ isOpen, onToggle, onShowLogin }: SidebarProps) {
         currentTitle={renameModal.title}
         onConfirm={handleRenameConfirm}
         onCancel={handleRenameCancel}
+      />
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </>
   )
