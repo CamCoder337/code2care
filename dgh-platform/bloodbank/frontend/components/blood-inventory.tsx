@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { useBloodUnits } from "@/lib/hooks/useApi";
+import { useBloodUnits, useInventoryAnalytics } from "@/lib/hooks/useApi"
 import {
   Select,
   SelectContent,
@@ -70,102 +70,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-// Données simulées pour la démo
-const mockBloodUnits = [
-  {
-    unit_id: "BU-2024-001237",
-    donor: {
-      donor_id: "D-2024-456",
-      first_name: "Marie",
-      last_name: "Dubois",
-      blood_type: "O+",
-      age: 28,
-      phone_number: "+237 677 123 456"
-    },
-    collection_date: "2024-01-15",
-    volume_ml: 450,
-    hemoglobin_g_dl: 14.2,
-    date_expiration: "2024-02-20",
-    status: "Available",
-    site_name: "Centre Hospitalier de Yaoundé",
-    days_until_expiry: 12,
-    blood_type: "O+",
-    is_expired: false,
-    record: "R-2024-789",
-    temperature_stored: 4.2,
-    quality_score: 95
-  },
-  {
-    unit_id: "BU-2024-001238",
-    donor: {
-      donor_id: "D-2024-457",
-      first_name: "Paul",
-      last_name: "Nkomo",
-      blood_type: "A+",
-      age: 34,
-      phone_number: "+237 699 987 654"
-    },
-    collection_date: "2024-01-10",
-    volume_ml: 420,
-    hemoglobin_g_dl: 13.8,
-    date_expiration: "2024-02-15",
-    status: "Reserved",
-    site_name: "Hôpital Général de Douala",
-    days_until_expiry: 7,
-    blood_type: "A+",
-    is_expired: false,
-    record: "R-2024-790",
-    temperature_stored: 3.8,
-    quality_score: 92
-  },
-  {
-    unit_id: "BU-2024-001239",
-    donor: {
-      donor_id: "D-2024-458",
-      first_name: "Awa",
-      last_name: "Sow",
-      blood_type: "B-",
-      age: 25,
-      phone_number: "+237 655 321 789"
-    },
-    collection_date: "2024-01-05",
-    volume_ml: 480,
-    hemoglobin_g_dl: 15.1,
-    date_expiration: "2024-02-10",
-    status: "Used",
-    site_name: "Clinique Pasteur",
-    days_until_expiry: 2,
-    blood_type: "B-",
-    is_expired: false,
-    record: "R-2024-791",
-    temperature_stored: 4.0,
-    quality_score: 98
-  },
-  {
-    unit_id: "BU-2024-001240",
-    donor: {
-      donor_id: "D-2024-459",
-      first_name: "Jean",
-      last_name: "Tagne",
-      blood_type: "AB+",
-      age: 42,
-      phone_number: "+237 676 555 111"
-    },
-    collection_date: "2023-12-20",
-    volume_ml: 400,
-    hemoglobin_g_dl: 12.9,
-    date_expiration: "2024-01-25",
-    status: "Expired",
-    site_name: "Centre de Collecte Bafoussam",
-    days_until_expiry: -7,
-    blood_type: "AB+",
-    is_expired: true,
-    record: "R-2024-792",
-    temperature_stored: 4.5,
-    quality_score: 88
-  }
-]
-
 export default function EnhancedBloodInventory() {
   // États locaux
   const [currentPage, setCurrentPage] = useState(1)
@@ -175,49 +79,84 @@ export default function EnhancedBloodInventory() {
   const [selectedStatus, setSelectedStatus] = useState("")
   const [expiringDays, setExpiringDays] = useState("")
   const [selectedUnit, setSelectedUnit] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
 
   const bloodTypes = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
   const statuses = ["Available", "Reserved", "Used", "Expired"]
 
+  // Paramètres de requête API
+  const queryParams = useMemo(() => ({
+    blood_type: selectedBloodType || undefined,
+    status: selectedStatus || undefined,
+    expiring_days: expiringDays ? parseInt(expiringDays) : undefined,
+    page: currentPage,
+    page_size: pageSize,
+    search: searchTerm || undefined
+  }), [selectedBloodType, selectedStatus, expiringDays, currentPage, pageSize, searchTerm])
+
+  // Hooks API
+  const {
+    data: bloodUnitsData,
+    isLoading: unitsLoading,
+    error: unitsError,
+    refetch: refetchUnits
+  } = useBloodUnits(queryParams, {
+    keepPreviousData: true,
+    staleTime: 30000,
+  })
+
+  const {
+    data: analyticsData,
+    isLoading: analyticsLoading,
+    refetch: refetchAnalytics
+  } = useInventoryAnalytics(30, {
+    staleTime: 60000,
+  })
+
   // Données calculées
-  const totalUnits = mockBloodUnits.length
-  const availableUnits = mockBloodUnits.filter(unit => unit.status === 'Available').length
-  const expiringUnits = mockBloodUnits.filter(unit => unit.days_until_expiry <= 7 && unit.days_until_expiry > 0).length
-  const expiredUnits = mockBloodUnits.filter(unit => unit.status === 'Expired').length
-  const utilizationRate = Math.round((mockBloodUnits.filter(unit => unit.status === 'Used').length / totalUnits) * 100)
+  const bloodUnits = bloodUnitsData?.results || []
+  const totalUnits = bloodUnitsData?.count || 0
+  const totalPages = Math.ceil(totalUnits / pageSize)
 
-  // Filtres et recherche
-  const filteredUnits = useMemo(() => {
-    return mockBloodUnits.filter(unit => {
-      const matchesSearch = searchTerm === "" ||
-        unit.unit_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        unit.donor.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        unit.donor.last_name.toLowerCase().includes(searchTerm.toLowerCase())
-
-      const matchesBloodType = selectedBloodType === "" || unit.blood_type === selectedBloodType
-      const matchesStatus = selectedStatus === "" || unit.status === selectedStatus
-
-      let matchesExpiry = true
-      if (expiringDays) {
-        const days = parseInt(expiringDays)
-        matchesExpiry = unit.days_until_expiry <= days && unit.days_until_expiry > 0
-      }
-
-      return matchesSearch && matchesBloodType && matchesStatus && matchesExpiry
-    })
-  }, [mockBloodUnits, searchTerm, selectedBloodType, selectedStatus, expiringDays])
+  // Métriques calculées à partir des données réelles
+  const availableUnits = analyticsData?.available_units || bloodUnits.filter(unit => unit.status === 'Available').length
+  const expiringUnits = analyticsData?.expiring_units || bloodUnits.filter(unit => unit.days_until_expiry <= 7 && unit.days_until_expiry > 0).length
+  const expiredUnits = analyticsData?.expired_units || bloodUnits.filter(unit => unit.status === 'Expired').length
+  const utilizationRate = analyticsData?.utilization_rate || Math.round((bloodUnits.filter(unit => unit.status === 'Used').length / Math.max(totalUnits, 1)) * 100)
 
   // Handlers
   const handleRefresh = async () => {
-    setIsLoading(true)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    toast.success("Données d'inventaire actualisées")
+    try {
+      await Promise.all([refetchUnits(), refetchAnalytics()])
+      toast.success("Données d'inventaire actualisées")
+    } catch (error) {
+      toast.error("Erreur lors de l'actualisation des données")
+    }
   }
 
   const handleExport = async () => {
     toast.success("Export en cours...")
+    // Logique d'export à implémenter
+  }
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value)
+    setCurrentPage(1) // Reset to first page when searching
+  }
+
+  const handleFilterChange = (filterType: string, value: string) => {
+    setCurrentPage(1) // Reset to first page when filtering
+
+    switch (filterType) {
+      case 'bloodType':
+        setSelectedBloodType(value === 'all' ? '' : value)
+        break
+      case 'status':
+        setSelectedStatus(value === 'all' ? '' : value)
+        break
+      case 'expiring':
+        setExpiringDays(value === 'all' ? '' : value)
+        break
+    }
   }
 
   const getStatusColor = (status) => {
@@ -254,6 +193,47 @@ export default function EnhancedBloodInventory() {
       'AB-': 'bg-purple-700 text-white'
     }
     return colors[bloodType] || 'bg-gray-500 text-white'
+  }
+
+  const formatStatusText = (status) => {
+    const statusMap = {
+      'Available': 'Disponible',
+      'Reserved': 'Réservé',
+      'Used': 'Utilisé',
+      'Expired': 'Expiré'
+    }
+    return statusMap[status] || status
+  }
+
+  // Loading state
+  if (unitsLoading && !bloodUnits.length) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+          <p className="text-lg font-medium text-gray-600">Chargement de l'inventaire...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (unitsError && !bloodUnits.length) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="text-center p-6">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Erreur de chargement</h3>
+            <p className="text-gray-600 mb-4">Impossible de charger les données d'inventaire</p>
+            <Button onClick={handleRefresh} variant="outline">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -304,10 +284,26 @@ export default function EnhancedBloodInventory() {
                   {/* Stats Row */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                      { label: 'Unités totales', value: totalUnits, icon: Package },
-                      { label: 'Disponibles', value: availableUnits, icon: CheckCircle },
-                      { label: 'Expire bientôt', value: expiringUnits, icon: Timer },
-                      { label: 'Taux utilisation', value: `${utilizationRate}%`, icon: TrendingUp }
+                      {
+                        label: 'Unités totales',
+                        value: unitsLoading ? '...' : totalUnits,
+                        icon: Package
+                      },
+                      {
+                        label: 'Disponibles',
+                        value: analyticsLoading ? '...' : availableUnits,
+                        icon: CheckCircle
+                      },
+                      {
+                        label: 'Expire bientôt',
+                        value: analyticsLoading ? '...' : expiringUnits,
+                        icon: Timer
+                      },
+                      {
+                        label: 'Taux utilisation',
+                        value: analyticsLoading ? '...' : `${utilizationRate}%`,
+                        icon: TrendingUp
+                      }
                     ].map((stat, index) => (
                       <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                         <div className="flex items-center gap-3">
@@ -326,10 +322,10 @@ export default function EnhancedBloodInventory() {
                 <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
                   <Button
                     onClick={handleRefresh}
-                    disabled={isLoading}
+                    disabled={unitsLoading || analyticsLoading}
                     className="bg-white/20 hover:bg-white/30 text-white border border-white/30 px-6 py-4 font-semibold rounded-xl backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-lg"
                   >
-                    <RefreshCw className={`w-5 h-5 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-5 h-5 mr-2 ${(unitsLoading || analyticsLoading) ? 'animate-spin' : ''}`} />
                     Actualiser
                   </Button>
 
@@ -354,11 +350,11 @@ export default function EnhancedBloodInventory() {
             {
               title: "Unités Disponibles",
               value: availableUnits,
-              subtitle: `${Math.round((availableUnits/totalUnits)*100)}% du stock`,
+              subtitle: `${totalUnits > 0 ? Math.round((availableUnits/totalUnits)*100) : 0}% du stock`,
               icon: Droplets,
               gradient: "from-emerald-500 to-green-600",
               bg: "from-emerald-50 to-green-50 dark:from-emerald-950/50 dark:to-green-950/50",
-              trend: "+12% cette semaine"
+              trend: analyticsData?.trends?.available || "Données en cours..."
             },
             {
               title: "Expire Bientôt",
@@ -367,7 +363,7 @@ export default function EnhancedBloodInventory() {
               icon: Clock,
               gradient: "from-amber-500 to-orange-600",
               bg: "from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/50",
-              trend: "Action requise"
+              trend: expiringUnits > 0 ? "Action requise" : "Aucune urgence"
             },
             {
               title: "Unités Expirées",
@@ -376,7 +372,7 @@ export default function EnhancedBloodInventory() {
               icon: AlertTriangle,
               gradient: "from-red-500 to-pink-600",
               bg: "from-red-50 to-pink-50 dark:from-red-950/50 dark:to-pink-950/50",
-              trend: "-5% vs mois dernier"
+              trend: analyticsData?.trends?.expired || "Suivi en cours..."
             },
             {
               title: "Performance",
@@ -385,7 +381,7 @@ export default function EnhancedBloodInventory() {
               icon: Award,
               gradient: "from-blue-500 to-indigo-600",
               bg: "from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50",
-              trend: "Excellent"
+              trend: utilizationRate >= 80 ? "Excellent" : utilizationRate >= 60 ? "Bon" : "À améliorer"
             }
           ].map((card, index) => (
             <Card key={index} className={`bg-gradient-to-br ${card.bg} border-0 shadow-lg hover:shadow-xl transition-all duration-500 group`}>
@@ -396,7 +392,11 @@ export default function EnhancedBloodInventory() {
                       {card.title}
                     </p>
                     <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {card.value}
+                      {analyticsLoading ? (
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                      ) : (
+                        card.value
+                      )}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {card.subtitle}
@@ -428,7 +428,7 @@ export default function EnhancedBloodInventory() {
                 </div>
               </div>
               <Badge variant="secondary" className="px-3 py-1">
-                {filteredUnits.length} résultats
+                {unitsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : `${totalUnits} résultats`}
               </Badge>
             </div>
           </CardHeader>
@@ -440,13 +440,13 @@ export default function EnhancedBloodInventory() {
                 <Input
                   placeholder="Rechercher unité, donneur..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearch(e.target.value)}
                   className="pl-10 bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
 
               {/* Blood Type Filter */}
-              <Select value={selectedBloodType} onValueChange={setSelectedBloodType}>
+              <Select value={selectedBloodType} onValueChange={(value) => handleFilterChange('bloodType', value)}>
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600">
                   <SelectValue placeholder="Groupe sanguin" />
                 </SelectTrigger>
@@ -464,7 +464,7 @@ export default function EnhancedBloodInventory() {
               </Select>
 
               {/* Status Filter */}
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <Select value={selectedStatus} onValueChange={(value) => handleFilterChange('status', value)}>
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600">
                   <SelectValue placeholder="Statut" />
                 </SelectTrigger>
@@ -472,17 +472,14 @@ export default function EnhancedBloodInventory() {
                   <SelectItem value="all">Tous les statuts</SelectItem>
                   {statuses.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {status === 'Available' ? 'Disponible' :
-                       status === 'Reserved' ? 'Réservé' :
-                       status === 'Used' ? 'Utilisé' :
-                       status === 'Expired' ? 'Expiré' : status}
+                      {formatStatusText(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
               {/* Expiring Filter */}
-              <Select value={expiringDays} onValueChange={setExpiringDays}>
+              <Select value={expiringDays} onValueChange={(value) => handleFilterChange('expiring', value)}>
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600">
                   <SelectValue placeholder="Expiration" />
                 </SelectTrigger>
@@ -522,7 +519,16 @@ export default function EnhancedBloodInventory() {
                 </div>
                 <div>
                   <CardTitle className="text-xl font-bold">Unités de Sang</CardTitle>
-                  <CardDescription>{filteredUnits.length} unités • Dernière mise à jour il y a 2 minutes</CardDescription>
+                  <CardDescription>
+                    {unitsLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Chargement...
+                      </div>
+                    ) : (
+                      `${totalUnits} unités • Page ${currentPage} sur ${totalPages}`
+                    )}
+                  </CardDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -547,388 +553,413 @@ export default function EnhancedBloodInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUnits.map((unit) => {
-                    const expiryInfo = getExpiryStatus(unit.days_until_expiry)
+                  {unitsLoading && !bloodUnits.length ? (
+                    // Loading skeleton
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index} className="border-gray-200 dark:border-slate-700">
+                        {Array.from({ length: 6 }).map((_, cellIndex) => (
+                          <TableCell key={cellIndex} className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+                              <div className="space-y-2 flex-1">
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : bloodUnits.length > 0 ? (
+                    bloodUnits.map((unit) => {
+                      const expiryInfo = getExpiryStatus(unit.days_until_expiry)
 
-                    return (
-                      <TableRow
-                        key={unit.unit_id}
-                        className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors group"
-                      >
-                        {/* Unité & Groupe */}
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${getBloodTypeColor(unit.blood_type)}`}>
-                              {unit.blood_type}
+                      return (
+                        <TableRow
+                          key={unit.unit_id}
+                          className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors group"
+                        >
+                          {/* Unité & Groupe */}
+                          <TableCell className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${getBloodTypeColor(unit.blood_type)}`}>
+                                {unit.blood_type}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">{unit.unit_id}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Réf: {unit.record || 'N/A'}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-gray-100">{unit.unit_id}</p>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">Réf: {unit.record}</p>
-                            </div>
-                          </div>
-                        </TableCell>
+                          </TableCell>
 
-                        {/* Donneur */}
-                        <TableCell className="py-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-gray-400" />
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {unit.donor.first_name} {unit.donor.last_name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                              <span>{unit.donor.age} ans</span>
-                              <span>•</span>
-                              <span>ID: {unit.donor.donor_id}</span>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        {/* Qualité & Volume */}
-                        <TableCell className="py-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <TestTube className="w-4 h-4 text-blue-500" />
-                              <span className="font-semibold text-gray-900 dark:text-gray-100">{unit.volume_ml} ml</span>
-                              <div className={`w-2 h-2 rounded-full ${unit.quality_score >= 95 ? 'bg-green-500' : unit.quality_score >= 90 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
-                            </div>
+                          {/* Donneur */}
+                          <TableCell className="py-4">
                             <div className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm">
-                                <Heart className="w-3 h-3 text-red-400" />
-                                <span className="text-gray-600 dark:text-gray-400">Hb: {unit.hemoglobin_g_dl} g/dL</span>
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-gray-400" />
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {unit.donor ? `${unit.donor.first_name} ${unit.donor.last_name}` : 'Donneur anonyme'}
+                                </span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm">
-                                <Star className="w-3 h-3 text-yellow-400" />
-                                <span className="text-gray-600 dark:text-gray-400">Qualité: {unit.quality_score}%</span>
+                              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                <span>{unit.donor?.age || 'N/A'} ans</span>
+                                <span>•</span>
+                                <span>ID: {unit.donor?.donor_id || 'N/A'}</span>
                               </div>
                             </div>
-                          </div>
-                        </TableCell>
+                          </TableCell>
 
-                        {/* Dates Critiques */}
-                        <TableCell className="py-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm">
-                              <Calendar className="w-4 h-4 text-gray-400" />
-                              <span className="text-gray-600 dark:text-gray-400">
-                                Collecté: {new Date(unit.collection_date).toLocaleDateString('fr-FR')}
-                              </span>
+                          {/* Qualité & Volume */}
+                          <TableCell className="py-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <TestTube className="w-4 h-4 text-blue-500" />
+                                <span className="font-semibold text-gray-900 dark:text-gray-100">{unit.volume_ml || 'N/A'} ml</span>
+                                <div className={`w-2 h-2 rounded-full ${(unit.quality_score || 0) >= 95 ? 'bg-green-500' : (unit.quality_score || 0) >= 90 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Heart className="w-3 h-3 text-red-400" />
+                                  <span className="text-gray-600 dark:text-gray-400">Hb: {unit.hemoglobin_g_dl || 'N/A'} g/dL</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Star className="w-3 h-3 text-yellow-400" />
+                                  <span className="text-gray-600 dark:text-gray-400">Qualité: {unit.quality_score || 'N/A'}%</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className={`flex items-center gap-2 px-2 py-1 rounded-lg text-sm font-medium border ${expiryInfo.color}`}>
-                              <Clock className="w-4 h-4" />
-                              <span>
-                                {unit.days_until_expiry < 0
-                                  ? `Expiré il y a ${Math.abs(unit.days_until_expiry)} j`
-                                  : unit.days_until_expiry === 0
-                                  ? 'Expire aujourd\'hui'
-                                  : `Expire dans ${unit.days_until_expiry} j`
-                                }
-                              </span>
+                          </TableCell>
+
+                          {/* Dates Critiques */}
+                          <TableCell className="py-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Calendar className="w-4 h-4 text-gray-400" />
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  Collecté: {unit.collection_date ? new Date(unit.collection_date).toLocaleDateString('fr-FR') : 'N/A'}
+                                </span>
+                              </div>
+                              <div className={`flex items-center gap-2 px-2 py-1 rounded-lg text-sm font-medium border ${expiryInfo.color}`}>
+                                <Clock className="w-4 h-4" />
+                                <span>
+                                  {unit.days_until_expiry !== undefined ? (
+                                    unit.days_until_expiry < 0
+                                      ? `Expiré il y a ${Math.abs(unit.days_until_expiry)} j`
+                                      : unit.days_until_expiry === 0
+                                      ? 'Expire aujourd\'hui'
+                                      : `Expire dans ${unit.days_until_expiry} j`
+                                  ) : 'Date inconnue'}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
+                          </TableCell>
 
-                        {/* Statut & Site */}
-                        <TableCell className="py-4">
-                          <div className="space-y-2">
-                            <Badge className={`${getStatusColor(unit.status)} border font-medium`}>
-                              {unit.status === 'Available' && <CheckCircle className="w-3 h-3 mr-1" />}
-                              {unit.status === 'Reserved' && <Clock className="w-3 h-3 mr-1" />}
-                              {unit.status === 'Used' && <Activity className="w-3 h-3 mr-1" />}
-                              {unit.status === 'Expired' && <AlertCircle className="w-3 h-3 mr-1" />}
-                              {unit.status === 'Available' ? 'Disponible' :
-                               unit.status === 'Reserved' ? 'Réservé' :
-                               unit.status === 'Used' ? 'Utilisé' :
-                               unit.status === 'Expired' ? 'Expiré' : unit.status}
-                            </Badge>
-                            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                              <MapPin className="w-3 h-3" />
-                              <span className="truncate max-w-[120px]">{unit.site_name}</span>
+                          {/* Statut & Site */}
+                          <TableCell className="py-4">
+                            <div className="space-y-2">
+                              <Badge className={`${getStatusColor(unit.status)} border font-medium`}>
+                                {unit.status === 'Available' && <CheckCircle className="w-3 h-3 mr-1" />}
+                                {unit.status === 'Reserved' && <Clock className="w-3 h-3 mr-1" />}
+                                {unit.status === 'Used' && <Activity className="w-3 h-3 mr-1" />}
+                                {unit.status === 'Expired' && <AlertCircle className="w-3 h-3 mr-1" />}
+                                {formatStatusText(unit.status)}
+                              </Badge>
+                              <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                <MapPin className="w-3 h-3" />
+                                <span className="truncate max-w-[120px]">{unit.site_name || 'Site inconnu'}</span>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
+                          </TableCell>
 
-                        {/* Actions */}
-                        <TableCell className="py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50 hover:border-blue-200 dark:hover:bg-blue-900/20"
-                                  onClick={() => setSelectedUnit(unit)}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-2xl">
-                                <DialogHeader>
-                                  <DialogTitle className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${getBloodTypeColor(unit.blood_type)}`}>
-                                      {unit.blood_type}
-                                    </div>
-                                    Détails de l'unité {unit.unit_id}
-                                  </DialogTitle>
-                                  <DialogDescription>
-                                    Informations complètes et historique de l'unité de sang
-                                  </DialogDescription>
-                                </DialogHeader>
+                          {/* Actions */}
+                          <TableCell className="py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50 hover:border-blue-200 dark:hover:bg-blue-900/20"
+                                    onClick={() => setSelectedUnit(unit)}
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-2xl">
+                                  <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-3">
+                                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${getBloodTypeColor(unit.blood_type)}`}>
+                                        {unit.blood_type}
+                                      </div>
+                                      Détails de l'unité {unit.unit_id}
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                      Informations complètes et historique de l'unité de sang
+                                    </DialogDescription>
+                                  </DialogHeader>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                  {/* Informations Générales */}
-                                  <Card>
-                                    <CardHeader className="pb-3">
-                                      <CardTitle className="text-lg flex items-center gap-2">
-                                        <TestTube className="w-5 h-5 text-blue-600" />
-                                        Informations Générales
-                                      </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">ID Unité:</span>
-                                        <span className="font-semibold">{unit.unit_id}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Groupe sanguin:</span>
-                                        <Badge className={`${getBloodTypeColor(unit.blood_type)} font-semibold`}>
-                                          {unit.blood_type}
-                                        </Badge>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Volume:</span>
-                                        <span className="font-semibold">{unit.volume_ml} ml</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Hémoglobine:</span>
-                                        <span className="font-semibold">{unit.hemoglobin_g_dl} g/dL</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Score qualité:</span>
-                                        <div className="flex items-center gap-2">
-                                          <Progress value={unit.quality_score} className="w-16 h-2" />
-                                          <span className="font-semibold">{unit.quality_score}%</span>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                    {/* Informations Générales */}
+                                    <Card>
+                                      <CardHeader className="pb-3">
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                          <TestTube className="w-5 h-5 text-blue-600" />
+                                          Informations Générales
+                                        </CardTitle>
+                                      </CardHeader>
+                                      <CardContent className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">ID Unité:</span>
+                                          <span className="font-semibold">{unit.unit_id}</span>
                                         </div>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Température:</span>
-                                        <div className="flex items-center gap-1">
-                                          <Thermometer className="w-4 h-4 text-blue-500" />
-                                          <span className="font-semibold">{unit.temperature_stored}°C</span>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Groupe sanguin:</span>
+                                          <Badge className={`${getBloodTypeColor(unit.blood_type)} font-semibold`}>
+                                            {unit.blood_type}
+                                          </Badge>
                                         </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-
-                                  {/* Informations Donneur */}
-                                  <Card>
-                                    <CardHeader className="pb-3">
-                                      <CardTitle className="text-lg flex items-center gap-2">
-                                        <User className="w-5 h-5 text-green-600" />
-                                        Donneur
-                                      </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Nom complet:</span>
-                                        <span className="font-semibold">{unit.donor.first_name} {unit.donor.last_name}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">ID Donneur:</span>
-                                        <span className="font-mono text-sm">{unit.donor.donor_id}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Âge:</span>
-                                        <span className="font-semibold">{unit.donor.age} ans</span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Téléphone:</span>
-                                        <div className="flex items-center gap-2">
-                                          <Phone className="w-4 h-4 text-gray-400" />
-                                          <span className="font-semibold">{unit.donor.phone_number}</span>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Volume:</span>
+                                          <span className="font-semibold">{unit.volume_ml || 'N/A'} ml</span>
                                         </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-
-                                  {/* Dates et Localisation */}
-                                  <Card>
-                                    <CardHeader className="pb-3">
-                                      <CardTitle className="text-lg flex items-center gap-2">
-                                        <Calendar className="w-5 h-5 text-purple-600" />
-                                        Dates & Localisation
-                                      </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Date de collecte:</span>
-                                        <span className="font-semibold">
-                                          {new Date(unit.collection_date).toLocaleDateString('fr-FR')}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Date d'expiration:</span>
-                                        <span className="font-semibold">
-                                          {new Date(unit.date_expiration).toLocaleDateString('fr-FR')}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Jours restants:</span>
-                                        <Badge className={`${expiryInfo.color} border font-medium`}>
-                                          {unit.days_until_expiry < 0
-                                            ? `Expiré (-${Math.abs(unit.days_until_expiry)}j)`
-                                            : `${unit.days_until_expiry} jours`
-                                          }
-                                        </Badge>
-                                      </div>
-                                      <div className="flex justify-between items-start">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Site:</span>
-                                        <div className="text-right">
-                                          <div className="flex items-center gap-1">
-                                            <MapPin className="w-4 h-4 text-gray-400" />
-                                            <span className="font-semibold">{unit.site_name}</span>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Hémoglobine:</span>
+                                          <span className="font-semibold">{unit.hemoglobin_g_dl || 'N/A'} g/dL</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Score qualité:</span>
+                                          <div className="flex items-center gap-2">
+                                            <Progress value={unit.quality_score || 0} className="w-16 h-2" />
+                                            <span className="font-semibold">{unit.quality_score || 'N/A'}%</span>
                                           </div>
                                         </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Température:</span>
+                                          <div className="flex items-center gap-1">
+                                            <Thermometer className="w-4 h-4 text-blue-500" />
+                                            <span className="font-semibold">{unit.temperature_stored || 'N/A'}°C</span>
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
 
-                                  {/* Statut et Actions */}
-                                  <Card>
-                                    <CardHeader className="pb-3">
-                                      <CardTitle className="text-lg flex items-center gap-2">
-                                        <Activity className="w-5 h-5 text-orange-600" />
-                                        Statut & Actions
-                                      </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600 dark:text-gray-400">Statut actuel:</span>
-                                        <Badge className={`${getStatusColor(unit.status)} border font-medium`}>
-                                          {unit.status === 'Available' && <CheckCircle className="w-3 h-3 mr-1" />}
-                                          {unit.status === 'Reserved' && <Clock className="w-3 h-3 mr-1" />}
-                                          {unit.status === 'Used' && <Activity className="w-3 h-3 mr-1" />}
-                                          {unit.status === 'Expired' && <AlertCircle className="w-3 h-3 mr-1" />}
-                                          {unit.status === 'Available' ? 'Disponible' :
-                                           unit.status === 'Reserved' ? 'Réservé' :
-                                           unit.status === 'Used' ? 'Utilisé' :
-                                           unit.status === 'Expired' ? 'Expiré' : unit.status}
-                                        </Badge>
-                                      </div>
+                                    {/* Informations Donneur */}
+                                    <Card>
+                                      <CardHeader className="pb-3">
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                          <User className="w-5 h-5 text-green-600" />
+                                          Donneur
+                                        </CardTitle>
+                                      </CardHeader>
+                                      <CardContent className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Nom complet:</span>
+                                          <span className="font-semibold">
+                                            {unit.donor ? `${unit.donor.first_name} ${unit.donor.last_name}` : 'Donneur anonyme'}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">ID Donneur:</span>
+                                          <span className="font-mono text-sm">{unit.donor?.donor_id || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Âge:</span>
+                                          <span className="font-semibold">{unit.donor?.age || 'N/A'} ans</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Téléphone:</span>
+                                          <div className="flex items-center gap-2">
+                                            <Phone className="w-4 h-4 text-gray-400" />
+                                            <span className="font-semibold">{unit.donor?.phone_number || 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
 
-                                      <div className="space-y-2 pt-2">
-                                        <Button className="w-full" variant="outline">
-                                          <ExternalLink className="w-4 h-4 mr-2" />
-                                          Voir historique complet
-                                        </Button>
-                                        {unit.status === 'Available' && (
-                                          <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                                            <ShieldCheck className="w-4 h-4 mr-2" />
-                                            Réserver cette unité
+                                    {/* Dates et Localisation */}
+                                    <Card>
+                                      <CardHeader className="pb-3">
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                          <Calendar className="w-5 h-5 text-purple-600" />
+                                          Dates & Localisation
+                                        </CardTitle>
+                                      </CardHeader>
+                                      <CardContent className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Date de collecte:</span>
+                                          <span className="font-semibold">
+                                            {unit.collection_date ? new Date(unit.collection_date).toLocaleDateString('fr-FR') : 'N/A'}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Date d'expiration:</span>
+                                          <span className="font-semibold">
+                                            {unit.date_expiration ? new Date(unit.date_expiration).toLocaleDateString('fr-FR') : 'N/A'}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Jours restants:</span>
+                                          <Badge className={`${expiryInfo.color} border font-medium`}>
+                                            {unit.days_until_expiry !== undefined ? (
+                                              unit.days_until_expiry < 0
+                                                ? `Expiré (-${Math.abs(unit.days_until_expiry)}j)`
+                                                : `${unit.days_until_expiry} jours`
+                                            ) : 'Inconnu'}
+                                          </Badge>
+                                        </div>
+                                        <div className="flex justify-between items-start">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Site:</span>
+                                          <div className="text-right">
+                                            <div className="flex items-center gap-1">
+                                              <MapPin className="w-4 h-4 text-gray-400" />
+                                              <span className="font-semibold">{unit.site_name || 'Site inconnu'}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+
+                                    {/* Statut et Actions */}
+                                    <Card>
+                                      <CardHeader className="pb-3">
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                          <Activity className="w-5 h-5 text-orange-600" />
+                                          Statut & Actions
+                                        </CardTitle>
+                                      </CardHeader>
+                                      <CardContent className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-sm text-gray-600 dark:text-gray-400">Statut actuel:</span>
+                                          <Badge className={`${getStatusColor(unit.status)} border font-medium`}>
+                                            {unit.status === 'Available' && <CheckCircle className="w-3 h-3 mr-1" />}
+                                            {unit.status === 'Reserved' && <Clock className="w-3 h-3 mr-1" />}
+                                            {unit.status === 'Used' && <Activity className="w-3 h-3 mr-1" />}
+                                            {unit.status === 'Expired' && <AlertCircle className="w-3 h-3 mr-1" />}
+                                            {formatStatusText(unit.status)}
+                                          </Badge>
+                                        </div>
+
+                                        <div className="space-y-2 pt-2">
+                                          <Button className="w-full" variant="outline">
+                                            <ExternalLink className="w-4 h-4 mr-2" />
+                                            Voir historique complet
                                           </Button>
-                                        )}
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
+                                          {unit.status === 'Available' && (
+                                            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+                                              <ShieldCheck className="w-4 h-4 mr-2" />
+                                              Réserver cette unité
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
 
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-16">
+                        <div className="w-24 h-24 mx-auto bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
+                          <Droplets className="w-12 h-12 text-gray-400 dark:text-gray-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                          Aucune unité trouvée
+                        </h3>
+                        <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+                          {unitsError
+                            ? "Erreur lors du chargement des données. Vérifiez votre connexion."
+                            : "Aucune unité ne correspond à vos critères de recherche. Essayez de modifier vos filtres ou d'élargir votre recherche."
+                          }
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (unitsError) {
+                              handleRefresh()
+                            } else {
+                              setSearchTerm("")
+                              setSelectedBloodType("")
+                              setSelectedStatus("")
+                              setExpiringDays("")
+                            }
+                          }}
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          {unitsError ? "Réessayer" : "Réinitialiser les filtres"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
 
-              {filteredUnits.length === 0 && (
-                <div className="text-center py-16">
-                  <div className="w-24 h-24 mx-auto bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6">
-                    <Droplets className="w-12 h-12 text-gray-400 dark:text-gray-600" />
+              {/* Enhanced Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <span>
+                      Affichage de {((currentPage - 1) * pageSize) + 1} à {Math.min(currentPage * pageSize, totalUnits)} sur {totalUnits} unités
+                    </span>
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                    Aucune unité trouvée
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                    Aucune unité ne correspond à vos critères de recherche. Essayez de modifier vos filtres ou d'élargir votre recherche.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSearchTerm("")
-                      setSelectedBloodType("")
-                      setSelectedStatus("")
-                      setExpiringDays("")
-                    }}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Réinitialiser les filtres
-                  </Button>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1 || unitsLoading}
+                      className="flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Précédent
+                    </Button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const startPage = Math.max(1, Math.min(totalPages - 4, currentPage - 2))
+                        const pageNum = startPage + i
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={pageNum === currentPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(pageNum)}
+                            disabled={unitsLoading}
+                            className="w-10 h-10"
+                          >
+                            {pageNum}
+                          </Button>
+                        )
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages || unitsLoading}
+                      className="flex items-center gap-2"
+                    >
+                      Suivant
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
-
-            {/* Enhanced Pagination */}
-            {Math.ceil(filteredUnits.length / pageSize) > 1 && (
-              <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <span>
-                    Affichage de {((currentPage - 1) * pageSize) + 1} à {Math.min(currentPage * pageSize, filteredUnits.length)} sur {filteredUnits.length} unités
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="flex items-center gap-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Précédent
-                  </Button>
-
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, Math.ceil(filteredUnits.length / pageSize)) }, (_, i) => {
-                      const totalPages = Math.ceil(filteredUnits.length / pageSize)
-                      const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={pageNum === currentPage ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(pageNum)}
-                          className="w-10 h-10"
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.min(Math.ceil(filteredUnits.length / pageSize), currentPage + 1))}
-                    disabled={currentPage === Math.ceil(filteredUnits.length / pageSize)}
-                    className="flex items-center gap-2"
-                  >
-                    Suivant
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
