@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { useBloodUnits } from "@/lib/hooks/useApi";
 import {
   Select,
   SelectContent,
@@ -180,15 +181,15 @@ export default function EnhancedBloodInventory() {
   const statuses = ["Available", "Reserved", "Used", "Expired"]
 
   // Données calculées
-  const totalUnits = mockBloodUnits.length
-  const availableUnits = mockBloodUnits.filter(unit => unit.status === 'Available').length
-  const expiringUnits = mockBloodUnits.filter(unit => unit.days_until_expiry <= 7 && unit.days_until_expiry > 0).length
-  const expiredUnits = mockBloodUnits.filter(unit => unit.status === 'Expired').length
-  const utilizationRate = Math.round((mockBloodUnits.filter(unit => unit.status === 'Used').length / totalUnits) * 100)
+  const totalUnits = useBloodUnits().length
+  const availableUnits = useBloodUnits().filter(unit => unit.status === 'Available').length
+  const expiringUnits = useBloodUnits().filter(unit => unit.days_until_expiry <= 7 && unit.days_until_expiry > 0).length
+  const expiredUnits = useBloodUnits().filter(unit => unit.status === 'Expired').length
+  const utilizationRate = Math.round((useBloodUnits().filter(unit => unit.status === 'Used').length / totalUnits) * 100)
 
   // Filtres et recherche
   const filteredUnits = useMemo(() => {
-    return mockBloodUnits.filter(unit => {
+    return useBloodUnits().filter(unit => {
       const matchesSearch = searchTerm === "" ||
         unit.unit_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         unit.donor.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -205,7 +206,7 @@ export default function EnhancedBloodInventory() {
 
       return matchesSearch && matchesBloodType && matchesStatus && matchesExpiry
     })
-  }, [mockBloodUnits, searchTerm, selectedBloodType, selectedStatus, expiringDays])
+  }, [useBloodUnits(), searchTerm, selectedBloodType, selectedStatus, expiringDays])
 
   // Handlers
   const handleRefresh = async () => {
